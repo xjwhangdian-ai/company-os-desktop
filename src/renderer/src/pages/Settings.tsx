@@ -14,11 +14,12 @@ const PROVIDER_DOCS: Partial<Record<ProviderId, { label: string; url: string }>>
 }
 
 const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
-  deepseek:
-    '模型映射默认沿用 Anthropic 的模型名——DeepSeek 官方文档说明 claude-opus-* 系列会在服务端自动重映射到 deepseek-v4-pro，claude-sonnet-*/claude-haiku-* 重映射到 deepseek-v4-flash，一般不用改。',
-  'minimax-intl': 'MiniMax 当前对外模型名会变动，请打开右侧文档链接确认当前可用的模型名后再填，不要照抄旧文档里的名字。',
-  'minimax-cn': 'MiniMax 当前对外模型名会变动，请打开右侧文档链接确认当前可用的模型名后再填，不要照抄旧文档里的名字。',
-  qwen: 'Base URL 和模型名会随地区/套餐变化，务必以阿里云百炼当前文档为准——不要照抄网上找到的旧地址，可能已经失效。',
+  deepseek: 'DeepSeek 目前只有两档：deepseek-v4-pro（旗舰）/ deepseek-v4-flash（性价比档，sonnet 和 haiku 都用它）。旧别名 deepseek-chat/deepseek-reasoner 将于 2026-07-24 停用，不要用。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
+  'minimax-intl':
+    '已按 2026-07 官方文档预填：MiniMax-M3（旗舰，原生多模态，能看图/视频，适合 brand 这类要理解素材的分身）/ MiniMax-M2.7（主力档）/ MiniMax-M2（最便宜档）。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
+  'minimax-cn':
+    '已按 2026-07 官方文档预填：MiniMax-M3（旗舰，原生多模态）/ MiniMax-M2.7（主力档）/ MiniMax-M2（最便宜档）。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
+  qwen: '已按 2026-07 官方文档预填模型名：qwen3.7-max（旗舰）/ qwen3.7-plus（主力档）/ qwen3.6-flash（最便宜档）。Base URL 没有唯一默认值——阿里云这个端点按地区/套餐分裂成好几种，常见几种：国内 PAYG「https://dashscope.aliyuncs.com/apps/anthropic」、国际 PAYG「https://dashscope-intl.aliyuncs.com/apps/anthropic」、Coding Plan「https://coding-intl.dashscope.aliyuncs.com/apps/anthropic」——对着自己开通的套餐选，不确定就点右侧文档核实。',
   custom: '适用于任何自建/自托管的 Anthropic 协议兼容端点（比如自己起一个 claude-code-router）。'
 }
 
@@ -76,13 +77,18 @@ export function Settings(): React.JSX.Element {
   const hint = PROVIDER_HINTS[viewingId]
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 p-8">
-      <div className="flex items-start justify-between">
+    // 外层负责滚动：main 区域是 overflow-hidden，设置页内容超一屏时必须自己滚，
+    // 否则底部的"保存"按钮会被裁掉够不着
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-2xl space-y-8 p-8 pb-24">
+      <div className="app-drag flex items-start justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">设置</h1>
           <p className="mt-1 text-sm text-slate-400">配置数据目录、选择模型供应商并填好 API Key 后即可使用全部 9 个分身。</p>
         </div>
-        <HelpButton content={HELP_CONTENT.settings} />
+        <div className="app-no-drag">
+          <HelpButton content={HELP_CONTENT.settings} />
+        </div>
       </div>
 
       <section className="space-y-2">
@@ -246,6 +252,7 @@ export function Settings(): React.JSX.Element {
           {savedHint}
         </div>
       )}
+      </div>
     </div>
   )
 }

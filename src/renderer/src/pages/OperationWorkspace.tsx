@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { AgentDisplayMeta, ChatAttachment, OutputEntry } from '@shared/agent-types'
+import type { FileFilter } from '@shared/api-types'
 import { AgentChat } from '../components/AgentChat'
 import { FileDropzone } from '../components/FileDropzone'
 import { OutputsPanel } from '../components/OutputsPanel'
@@ -14,6 +15,20 @@ const PLATFORM_PROMPTS: Record<Platform, string> = {
     '生成一篇小红书笔记文案。风格要求：口语化、emoji 适度点缀、开头 3 秒抓人的钩子、正文分点或分段清晰、结尾带 3-8 个相关话题标签(#xxx)。主题/需求：〔请描述这次想推广什么产品/场景/卖点〕',
   微信公众号:
     '生成一篇公众号推文图文。按标准结构：标题(2-3个备选)+摘要 → 痛点引入 → 场景/方案 → 价值/数据(标来源) → 行动引导 → 配图建议。主题/需求：〔请描述这次想推广什么产品/场景/卖点〕'
+}
+
+const MEDIA_UPLOAD_KINDS: { key: string; buttonLabel: string; filters: FileFilter[] }[] = [
+  { key: 'image', buttonLabel: '🖼️ 图片', filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'] }] },
+  { key: 'video', buttonLabel: '🎬 视频', filters: [{ name: '视频', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] }] },
+  { key: 'doc', buttonLabel: '📄 其他文件', filters: [{ name: '文档', extensions: ['doc', 'docx', 'pdf', 'md'] }] }
+]
+
+function attachmentIcon(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext)) return '🖼️'
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return '🎬'
+  if (['doc', 'docx', 'pdf', 'md'].includes(ext)) return '📄'
+  return '📎'
 }
 
 export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
@@ -36,17 +51,28 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
     <div className="flex h-full">
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="border-b border-slate-200 bg-white px-5 py-3">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="app-drag mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-800">运营推广素材与生成</h2>
-            <HelpButton content={HELP_CONTENT.operation} />
+            <div className="app-no-drag">
+              <HelpButton content={HELP_CONTENT.operation} />
+            </div>
           </div>
 
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-xs text-slate-400">素材：</span>
-            <FileDropzone compact uploadFn={(p) => window.api.upload.generic(p)} onUploaded={(a) => setMediaAttachments((prev) => [...prev, ...a])} />
+            {MEDIA_UPLOAD_KINDS.map((kind) => (
+              <FileDropzone
+                key={kind.key}
+                compact
+                buttonLabel={kind.buttonLabel}
+                filters={kind.filters}
+                uploadFn={(p) => window.api.upload.generic('operation', p)}
+                onUploaded={(a) => setMediaAttachments((prev) => [...prev, ...a])}
+              />
+            ))}
             {mediaAttachments.map((a) => (
               <span key={a.path} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                📎 {a.fileName}
+                {attachmentIcon(a.fileName)} {a.fileName}
               </span>
             ))}
           </div>

@@ -79,16 +79,33 @@ export interface OutputEntry {
   children?: OutputEntry[]
 }
 
+/**
+ * 招投标项目 = inbox/03_招投标_bidding/{项目}/（招标原件）+ outputs/03_招投标_bidding/{项目}/（解析/质疑/投标产出）
+ * 同名文件夹配对；两侧任一存在即视为一个项目。
+ */
 export interface BiddingProject {
   folderName: string
-  path: string
   projectName: string
   date: string
+  /** inbox 侧项目文件夹绝对路径（可能还没有，比如手工只建了产出侧） */
+  inboxPath?: string
+  /** outputs 侧项目文件夹绝对路径 */
+  outputsPath?: string
   hasSourceFile: boolean
   hasParseReport: boolean
   hasChallengeLetter: boolean
   hasDraft: boolean
+  /** 两侧文件合并列表（relativePath 以 inbox/ 或 outputs/ 开头区分来源） */
   files: OutputEntry[]
+}
+
+export interface BiddingUploadResult {
+  absPath: string
+  relativePath: string
+  /** 项目文件夹名（YYYY-MM-DD_项目名，由文件名派生，两侧同名配对） */
+  projectFolder: string
+  /** 产出应写入的 outputs 侧目录（相对数据目录） */
+  outputsDirRelative: string
 }
 
 export interface MaterialLibraryCounts {
@@ -123,6 +140,133 @@ export interface TeamMember {
   id: string
   name: string
   hasPin: boolean
+}
+
+// ============ 销售工作台 ============
+// 产品库/客户库是 App 托管的规范化 JSON（销售/产品库/产品库.json、销售/客户库.json），
+// 字段名直接用中文——用户会直接打开这两个 JSON 看，也和上传的供应商资料表头对得上。
+// 采购侧敏感字段（供应商联系人/联系方式）只进产品库，绝不进对外报价文件。
+
+export interface ProductEntry {
+  id: string
+  产品名称: string
+  产品分类: string
+  技术参数: string
+  /** 供应商给我们的进货价——采购侧口径，严禁进对外产出 */
+  成本价: string
+  /** 对客户的常规建议售价，报价单默认取它 */
+  建议销售价: string
+  /** 投标场景用的报价口径，可从投标报价文件自动识别回填 */
+  投标报价: string
+  供应商名称: string
+  供应商联系人: string
+  供应商联系方式: string
+  /** 产品图片，相对数据目录路径（销售/产品库/图片库/xxx.png），由 App 托管 */
+  图片?: string
+  备注?: string
+  /** 这条记录最初从哪份上传资料提取而来 */
+  来源文件?: string
+  更新时间: number
+}
+
+/** 产品库可编辑字段（去掉 id/更新时间 这类 App 托管字段） */
+export type ProductFields = Omit<ProductEntry, 'id' | '更新时间'>
+
+export type CustomerStatus = '线索' | '跟进中' | '已报价' | '已成交' | '搁置'
+
+export const CUSTOMER_STATUSES: CustomerStatus[] = ['线索', '跟进中', '已报价', '已成交', '搁置']
+
+export type ContactRole = '经办人' | '决策人' | '干系人'
+
+export const CONTACT_ROLES: ContactRole[] = ['经办人', '决策人', '干系人']
+
+export interface CustomerContact {
+  角色: ContactRole
+  姓名: string
+  联系方式: string
+}
+
+export interface LinkedFile {
+  类型: '报价文件' | '合同文件'
+  /** 数据目录内的文件存相对路径（跨机器同步不失效），目录外的存绝对路径 */
+  路径: string
+  时间: number
+}
+
+export interface FollowUpRecord {
+  时间: number
+  内容: string
+}
+
+export interface CustomerEntry {
+  id: string
+  客户名称: string
+  项目名称: string
+  招采网址: string
+  状态: CustomerStatus
+  联系人列表: CustomerContact[]
+  /** 已报价→关联报价文件；已成交→关联合同文件（不强制，UI 只做提示） */
+  关联文件: LinkedFile[]
+  备注?: string
+  跟进记录: FollowUpRecord[]
+  更新时间: number
+}
+
+/** 客户可编辑字段（跟进记录/关联文件走各自的专用接口） */
+export type CustomerFields = Omit<CustomerEntry, 'id' | '跟进记录' | '关联文件' | '更新时间'>
+
+export interface QuotationTemplate {
+  fileName: string
+  path: string
+  relativePath: string
+  /** docx/xlsx 模板会有一个 App 预提取的纯文本伴生文件，agent 读它来模仿模板结构 */
+  companionRelativePath?: string
+}
+
+// ============ 解决方案工作台 ============
+
+export type SolutionFileKind = 'requirement' | 'productLib' | 'solutionLib' | 'template'
+
+export interface SolutionFile {
+  fileName: string
+  path: string
+  relativePath: string
+  size: number
+  mtimeMs: number
+  /** 音频文件（mp3/m4a/wav）→ 可转写 */
+  isAudio: boolean
+  /** 该音频已有对应的 _转写.md */
+  hasTranscript: boolean
+  /** docx/xlsx 的 App 预提取文本伴生文件 */
+  companionRelativePath?: string
+}
+
+export interface WhisperStatus {
+  found: boolean
+  /** 找到的 whisper 可执行文件路径 */
+  whisperPath?: string
+  ffmpegFound: boolean
+}
+
+export type TranscribeEvent =
+  | { jobId: string; type: 'progress'; text: string }
+  | { jobId: string; type: 'done'; outputRelativePath: string }
+  | { jobId: string; type: 'error'; message: string }
+
+/** 供应商资料上传后的解析预览：Excel 表头机械识别的结果（识别不出来就走 AI 解析） */
+export interface SupplierDocPreview {
+  relativePath: string
+  fileName: string
+  /** 提取出的伴生纯文本文件（docx/doc/xlsx 生成；pdf/文本类无需） */
+  companionRelativePath?: string
+  /** 仅 xlsx/csv：识别到的表头行 */
+  headers?: string[]
+  /** 仅 xlsx/csv：字段 → 命中的表头列序号（未命中的字段不出现） */
+  fieldMapping?: Partial<Record<keyof ProductFields, number>>
+  /** 仅 xlsx/csv：可导入的数据行数（表头行之后、产品名称非空的行） */
+  importableRows?: number
+  /** 仅 xlsx/csv：前几行数据预览 */
+  sampleRows?: string[][]
 }
 
 /**

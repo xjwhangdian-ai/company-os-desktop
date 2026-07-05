@@ -3,6 +3,15 @@ import { join } from 'node:path'
 import type { ContractCategory, ContractTemplate, LegalDoc } from '@shared/agent-types'
 import { CONTRACT_CATEGORIES } from '@shared/agent-types'
 
+// ============ 法务工作流（统一 inbox/outputs 约定）============
+//   待审队列：inbox/04_法务_legal/【类型】合同文件（平铺，一合同一文件）
+//   已处理：  inbox/04_法务_legal/已处理/（"标记已审"把原文件移进来）
+//   审核产出：outputs/04_法务_legal/{日期_合同名}/（意见书等，分身按项目文件夹写入）
+//   合同模板：法务/_模板/合同模板/{类型}/（跨项目库，不动）
+
+const PENDING_DIR_REL = join('inbox', '04_法务_legal')
+const DONE_DIR_REL = join('inbox', '04_法务_legal', '已处理')
+
 const IGNORE_NAMES = new Set(['.DS_Store', 'README.md'])
 
 /** 文件名前缀【销售合同】xxx.pdf 解析出分类；没有前缀（比如历史遗留文件）一律算"其他" */
@@ -30,15 +39,15 @@ function listDocsIn(dir: string, status: LegalDoc['status']): LegalDoc[] {
 }
 
 export function listLegalDocs(dataDir: string): { pending: LegalDoc[]; reviewed: LegalDoc[] } {
-  const pending = listDocsIn(join(dataDir, '法务', '待审'), 'pending')
-  const reviewed = listDocsIn(join(dataDir, '法务', '已审'), 'reviewed')
+  const pending = listDocsIn(join(dataDir, PENDING_DIR_REL), 'pending')
+  const reviewed = listDocsIn(join(dataDir, DONE_DIR_REL), 'reviewed')
   return { pending, reviewed }
 }
 
-/** 手动状态转移：待审→已审，纯文件系统 mv，不经过 Agent 工具调用 */
+/** 手动状态转移：待审 → 已处理/，纯文件系统 mv，不经过 Agent 工具调用 */
 export function markReviewed(dataDir: string, fileName: string): void {
-  const from = join(dataDir, '法务', '待审', fileName)
-  const toDir = join(dataDir, '法务', '已审')
+  const from = join(dataDir, PENDING_DIR_REL, fileName)
+  const toDir = join(dataDir, DONE_DIR_REL)
   mkdirSync(toDir, { recursive: true })
   let to = join(toDir, fileName)
   if (existsSync(to)) {

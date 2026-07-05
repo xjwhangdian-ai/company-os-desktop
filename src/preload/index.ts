@@ -1,8 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/ipc-channels'
-import type { CompanyOsApi, RunAgentRequest, UploadResult } from '@shared/api-types'
+import type { CompanyOsApi, FileFilter, RunAgentRequest, UploadResult } from '@shared/api-types'
 import type { AgentStreamEvent } from '@shared/stream-events'
-import type { AgentName, ContractCategory, ProviderConfig, ProviderId } from '@shared/agent-types'
+import type {
+  AgentName,
+  ContractCategory,
+  CustomerFields,
+  LinkedFile,
+  ProductFields,
+  ProviderConfig,
+  ProviderId,
+  SolutionFileKind,
+  TranscribeEvent
+} from '@shared/agent-types'
 
 const api: CompanyOsApi = {
   config: {
@@ -29,7 +39,7 @@ const api: CompanyOsApi = {
     }
   },
   dialog: {
-    pickFiles: () => ipcRenderer.invoke(IPC.dialogPickFiles)
+    pickFiles: (filters?: FileFilter[]) => ipcRenderer.invoke(IPC.dialogPickFiles, filters)
   },
   shell: {
     showItemInFolder: (path: string) => ipcRenderer.invoke(IPC.shellShowItemInFolder, path),
@@ -37,8 +47,9 @@ const api: CompanyOsApi = {
     openPath: (path: string) => ipcRenderer.invoke(IPC.shellOpenPath, path)
   },
   upload: {
-    generic: (sourcePath: string): Promise<UploadResult> => ipcRenderer.invoke(IPC.uploadGeneric, sourcePath),
-    biddingRoot: (sourcePath: string): Promise<UploadResult> => ipcRenderer.invoke(IPC.uploadBiddingRoot, sourcePath),
+    generic: (agentName: AgentName, sourcePath: string): Promise<UploadResult> =>
+      ipcRenderer.invoke(IPC.uploadGeneric, agentName, sourcePath),
+    biddingProject: (sourcePath: string) => ipcRenderer.invoke(IPC.uploadBiddingProject, sourcePath),
     biddingMaterial: (category: string, sourcePath: string): Promise<UploadResult> =>
       ipcRenderer.invoke(IPC.uploadBiddingMaterial, category, sourcePath),
     legalPending: (sourcePath: string, category: ContractCategory): Promise<UploadResult> =>
@@ -71,6 +82,41 @@ const api: CompanyOsApi = {
     add: (name: string, pin?: string) => ipcRenderer.invoke(IPC.identityAdd, name, pin),
     remove: (id: string) => ipcRenderer.invoke(IPC.identityRemove, id),
     verifyPin: (id: string, pin?: string) => ipcRenderer.invoke(IPC.identityVerifyPin, id, pin)
+  },
+  sales: {
+    listProducts: () => ipcRenderer.invoke(IPC.salesListProducts),
+    saveProduct: (fields: ProductFields, id?: string) => ipcRenderer.invoke(IPC.salesSaveProduct, fields, id),
+    removeProduct: (id: string) => ipcRenderer.invoke(IPC.salesRemoveProduct, id),
+    setProductImage: (id: string, sourcePath: string) => ipcRenderer.invoke(IPC.salesSetProductImage, id, sourcePath),
+    uploadSupplierDoc: (sourcePath: string) => ipcRenderer.invoke(IPC.salesUploadSupplierDoc, sourcePath),
+    importExcel: (relativePath: string) => ipcRenderer.invoke(IPC.salesImportExcel, relativePath),
+    exportQuoteImages: (productIds: string[], customerName: string) =>
+      ipcRenderer.invoke(IPC.salesExportQuoteImages, productIds, customerName),
+    listTemplates: () => ipcRenderer.invoke(IPC.salesListTemplates),
+    uploadTemplate: (sourcePath: string) => ipcRenderer.invoke(IPC.salesUploadTemplate, sourcePath),
+    listCustomers: () => ipcRenderer.invoke(IPC.salesListCustomers),
+    saveCustomer: (fields: CustomerFields, id?: string) => ipcRenderer.invoke(IPC.salesSaveCustomer, fields, id),
+    removeCustomer: (id: string) => ipcRenderer.invoke(IPC.salesRemoveCustomer, id),
+    addFollowUp: (customerId: string, content: string) => ipcRenderer.invoke(IPC.salesAddFollowUp, customerId, content),
+    linkCustomerFile: (customerId: string, 类型: LinkedFile['类型'], filePath: string) =>
+      ipcRenderer.invoke(IPC.salesLinkCustomerFile, customerId, 类型, filePath),
+    unlinkCustomerFile: (customerId: string, index: number) =>
+      ipcRenderer.invoke(IPC.salesUnlinkCustomerFile, customerId, index),
+    resolveLinkedPath: (stored: string) => ipcRenderer.invoke(IPC.salesResolveLinkedPath, stored)
+  },
+  solution: {
+    listFiles: () => ipcRenderer.invoke(IPC.solutionListFiles),
+    upload: (kind: SolutionFileKind, sourcePath: string) => ipcRenderer.invoke(IPC.solutionUpload, kind, sourcePath),
+    removeFile: (relativePath: string) => ipcRenderer.invoke(IPC.solutionRemoveFile, relativePath),
+    whisperStatus: () => ipcRenderer.invoke(IPC.solutionWhisperStatus),
+    transcribeStart: (jobId: string, audioRelativePath: string, model: string) =>
+      ipcRenderer.invoke(IPC.solutionTranscribeStart, jobId, audioRelativePath, model),
+    transcribeCancel: (jobId: string) => ipcRenderer.invoke(IPC.solutionTranscribeCancel, jobId),
+    onTranscribeEvent: (callback: (event: TranscribeEvent) => void) => {
+      const listener = (_e: unknown, event: TranscribeEvent): void => callback(event)
+      ipcRenderer.on(IPC.solutionTranscribeEvent, listener)
+      return () => ipcRenderer.removeListener(IPC.solutionTranscribeEvent, listener)
+    }
   }
 }
 

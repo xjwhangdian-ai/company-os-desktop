@@ -70,12 +70,12 @@ export function AgentChat({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3">
+      <div className="app-drag flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-800">{agent.displayName}</h2>
           <p className="text-xs text-slate-400">{agent.role}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="app-no-drag flex items-center gap-2">
           {isRunning && (
             <button
               onClick={() => cancelRun(agent.name as AgentName)}
@@ -112,7 +112,7 @@ export function AgentChat({
       <div className="flex items-end gap-2 border-t border-slate-200 bg-white p-4">
         <FileDropzone
           compact
-          uploadFn={uploadFn ?? ((p: string) => window.api.upload.generic(p))}
+          uploadFn={uploadFn ?? ((p: string) => window.api.upload.generic(agent.name, p))}
           onUploaded={(atts) => setPendingAttachments((prev) => [...prev, ...atts])}
         />
         <textarea

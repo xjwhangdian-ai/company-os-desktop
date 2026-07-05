@@ -14,10 +14,9 @@ import type { AppConfig, Company, ModelMapping, ProviderConfig, ProviderId, Team
 /**
  * 各供应商默认值。DeepSeek/MiniMax/Qwen 官方文档确认三家都提供原生兼容
  * Anthropic Messages API 协议的端点（非 OpenAI 协议、不需要转换代理）。
- * model 名称能确认的（DeepSeek 文档明确写"claude-opus-* 等名称服务端自动
- * 重映射到 deepseek 自己的模型"）给了默认值；MiniMax/Qwen 的具体模型名 /
- * Qwen 的端点地址会随地区、套餐变化，查证时没能定下唯一确定值，留空
- * 用 UI 占位提示用户去查官方文档当前值，不编造一个可能过时的字符串。
+ * 下面的具体模型名是 2026-07-03 对三家官方文档做实时核查后的结果（两轮独立
+ * 调研互相印证），但这几家模型迭代很快，本身就不该假设"设一次以后不用管"——
+ * 这也是把它做成用户可编辑设置项而不是硬编码进 .claude/agents/*.md 的原因。
  */
 const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
   anthropic: {
@@ -38,12 +37,14 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
     baseUrl: 'https://api.deepseek.com/anthropic',
     authEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     apiKey: null,
-    // DeepSeek 官方文档：claude-opus-* 系列名称服务端自动映射到 deepseek-v4-pro，
-    // sonnet/haiku 映射到 deepseek-v4-flash——沿用 Anthropic 的模型名即可透传生效。
+    // DeepSeek 目前只有两档（Pro/Flash，没有第三档），官方 Anthropic 接入文档明确列出
+    // 这两个模型名可以直接用；sonnet 和 haiku 都对应 flash（反正服务端把两者都映射到
+    // flash，直接写清楚更透明，不依赖 claude-opus-* 这种别名自动重映射的隐式行为）。
+    // 注意：deepseek-chat / deepseek-reasoner 这两个旧别名将在 2026-07-24 停用，不要用。
     modelMapping: {
-      opus: 'claude-opus-4-8',
-      sonnet: 'claude-sonnet-5',
-      haiku: 'claude-haiku-4-5-20251001'
+      opus: 'deepseek-v4-pro',
+      sonnet: 'deepseek-v4-flash',
+      haiku: 'deepseek-v4-flash'
     }
   },
   'minimax-intl': {
@@ -52,7 +53,9 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
     baseUrl: 'https://api.minimax.io/anthropic',
     authEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     apiKey: null,
-    modelMapping: { opus: '', sonnet: '', haiku: '' }
+    // M3 是最新旗舰（原生多模态，支持看图/视频，适合 brand 这类需要理解素材的场景）；
+    // M2.7 是主力档（纯文本+工具调用，性价比最好）；M2 是最便宜档。
+    modelMapping: { opus: 'MiniMax-M3', sonnet: 'MiniMax-M2.7', haiku: 'MiniMax-M2' }
   },
   'minimax-cn': {
     id: 'minimax-cn',
@@ -60,17 +63,20 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
     baseUrl: 'https://api.minimaxi.com/anthropic',
     authEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     apiKey: null,
-    modelMapping: { opus: '', sonnet: '', haiku: '' }
+    modelMapping: { opus: 'MiniMax-M3', sonnet: 'MiniMax-M2.7', haiku: 'MiniMax-M2' }
   },
   qwen: {
     id: 'qwen',
     label: 'Qwen 通义千问',
-    // 阿里云文档里这个端点地址会随地区/套餐变化，查证时没能定下一个稳定值，
-    // 留空强制用户去 Model Studio 当前文档核实，不编造一个可能已经过期的 URL。
+    // 阿里云这个端点地址按地区/套餐分裂成好几种（国内/国际/美区 PAYG、按 WorkspaceId
+    // 分的专属节点、Coding Plan/Token Plan 各自的域名），没有唯一默认值，留空强制用户
+    // 对着自己开通的那个套餐去查——设置页会给出这几种常见形态供参照，不要瞎填。
     baseUrl: '',
     authEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     apiKey: null,
-    modelMapping: { opus: '', sonnet: '', haiku: '' }
+    // qwen3.7-max 是当前旗舰（2026-05 上线，取代了 qwen3.5/qwen3.6 那一代）；
+    // qwen3.7-plus 是官方 Claude Code 接入示例里日常用的主力档；qwen3.6-flash 是最便宜档。
+    modelMapping: { opus: 'qwen3.7-max', sonnet: 'qwen3.7-plus', haiku: 'qwen3.6-flash' }
   },
   custom: {
     id: 'custom',
@@ -87,6 +93,15 @@ interface TeamMemberRecord {
   id: string
   name: string
   pinHash: string | null
+}
+
+interface StoreSchemaV4 {
+  version: 4
+  companies: Company[]
+  activeCompanyId: string | null
+  activeProviderId: ProviderId
+  providers: Record<ProviderId, ProviderConfig>
+  teamMembers: TeamMemberRecord[]
 }
 
 interface StoreSchemaV3 {
@@ -119,6 +134,10 @@ function isV1Schema(data: unknown): data is StoreSchemaV1 {
 
 function isV2Schema(data: unknown): data is StoreSchemaV2 {
   return Boolean(data) && typeof data === 'object' && (data as { version?: number }).version === 2
+}
+
+function isV3Schema(data: unknown): data is StoreSchemaV3 {
+  return Boolean(data) && typeof data === 'object' && (data as { version?: number }).version === 3
 }
 
 function migrateV1ToV2(v1: StoreSchemaV1): StoreSchemaV2 {
@@ -156,8 +175,24 @@ function migrateV2ToV3(v2: StoreSchemaV2): StoreSchemaV3 {
   }
 }
 
-const DEFAULTS: StoreSchemaV3 = {
-  version: 3,
+/**
+ * 一次性刷新非 Anthropic 供应商的默认模型名（2026-07-03 两轮独立联网调研核实过的结果）。
+ * 只覆盖 modelMapping，用户已经填的 apiKey/baseUrl 不动——如果用户已经手动改过模型映射，
+ * 这次刷新会覆盖掉那次手改，但考虑到这几个供应商是这次调研之前才刚支持、字段基本都是
+ * 空的默认值，直接刷新成最新推荐值比"假装用户可能手改过"更符合实际情况，改错了在设置页
+ * 改回来也就一分钟的事。
+ */
+function migrateV3ToV4(v3: StoreSchemaV3): StoreSchemaV4 {
+  const REFRESH_IDS: ProviderId[] = ['deepseek', 'minimax-intl', 'minimax-cn', 'qwen']
+  const providers = { ...v3.providers }
+  for (const id of REFRESH_IDS) {
+    providers[id] = { ...providers[id], modelMapping: DEFAULT_PROVIDERS[id].modelMapping }
+  }
+  return { ...v3, version: 4, providers }
+}
+
+const DEFAULTS: StoreSchemaV4 = {
+  version: 4,
   companies: [],
   activeCompanyId: null,
   activeProviderId: 'anthropic',
@@ -171,18 +206,23 @@ function getConfigPath(): string {
   return join(dir, 'company-os-desktop-config.json')
 }
 
-function readAll(): StoreSchemaV3 {
+function readAll(): StoreSchemaV4 {
   const path = getConfigPath()
   if (!existsSync(path)) return structuredClone(DEFAULTS)
   try {
     const raw = JSON.parse(readFileSync(path, 'utf-8'))
     if (isV1Schema(raw)) {
-      const migrated = migrateV2ToV3(migrateV1ToV2(raw))
+      const migrated = migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(raw)))
       writeAll(migrated)
       return migrated
     }
     if (isV2Schema(raw)) {
-      const migrated = migrateV2ToV3(raw)
+      const migrated = migrateV3ToV4(migrateV2ToV3(raw))
+      writeAll(migrated)
+      return migrated
+    }
+    if (isV3Schema(raw)) {
+      const migrated = migrateV3ToV4(raw)
       writeAll(migrated)
       return migrated
     }
@@ -194,7 +234,7 @@ function readAll(): StoreSchemaV3 {
   }
 }
 
-function writeAll(data: StoreSchemaV3): void {
+function writeAll(data: StoreSchemaV4): void {
   writeFileSync(getConfigPath(), JSON.stringify(data, null, 2), 'utf-8')
 }
 

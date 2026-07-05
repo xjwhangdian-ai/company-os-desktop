@@ -17,6 +17,29 @@ function Badge({ active, label }: { active: boolean; label: string }): React.JSX
   )
 }
 
+/** 项目的招标原件（inbox 侧文件），供提示词点名让分身读 */
+function sourceFilesOf(project: BiddingProject): string[] {
+  const flat = (entries: BiddingProject['files']): string[] =>
+    entries.flatMap((e) => (e.isDirectory ? flat(e.children ?? []) : [e.relativePath]))
+  return flat(project.files).filter((rel) => rel.startsWith('inbox/'))
+}
+
+function outputsDirOf(project: BiddingProject): string {
+  return `outputs/03_招投标_bidding/${project.folderName}`
+}
+
+/** 解析提示词：输入/输出路径全部由 App 点名，分身不用猜文件在哪、该写到哪 */
+function buildParsePrompt(project: BiddingProject): string {
+  const sources = sourceFilesOf(project)
+  return [
+    `解析招标文件（项目「${project.projectName}」）。`,
+    `招标原件：`,
+    ...sources.map((s) => `- ${s}`),
+    `按 bidding 分身的解析流程产出《招标解析报告》（评分拆解/资质缺口/标书目录框架/可质疑条款/可投标性）。`,
+    `产出路径：${outputsDirOf(project)}/${project.folderName}_招标解析.md`
+  ].join('\n')
+}
+
 export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const [projects, setProjects] = useState<BiddingProject[]>([])
   const [selected, setSelected] = useState<string | null>(null)
@@ -36,21 +59,33 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   async function handleNewProject(): Promise<void> {
     const paths = await window.api.dialog.pickFiles()
     if (paths.length === 0) return
-    await window.api.upload.biddingRoot(paths[0])
-    setSelected(null)
+    const r = await window.api.upload.biddingProject(paths[0])
+    await refresh()
+    setSelected(r.projectFolder)
     setShowMaterialLib(false)
-    setPendingPrompt('解析一下刚上传的招标文件')
+    setPendingPrompt(
+      [
+        `解析招标文件（项目「${r.projectFolder.slice(11)}」）。`,
+        `招标原件：${r.relativePath}`,
+        `按 bidding 分身的解析流程产出《招标解析报告》（评分拆解/资质缺口/标书目录框架/可质疑条款/可投标性）。`,
+        `产出路径：${r.outputsDirRelative}/${r.projectFolder}_招标解析.md`
+      ].join('\n')
+    )
   }
 
   const project = projects.find((p) => p.folderName === selected) ?? null
-  const draftFile = project?.files.find((f) => !f.isDirectory && f.name.endsWith('_投标文件初稿.md'))
+  const flatFiles = (entries: BiddingProject['files']): typeof entries =>
+    entries.flatMap((e) => (e.isDirectory ? flatFiles(e.children ?? []) : [e]))
+  const draftFile = project ? flatFiles(project.files).find((f) => f.name.endsWith('_投标文件初稿.md')) : undefined
 
   return (
     <div className="flex h-full">
       <div className="w-72 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="app-drag mb-2 flex items-center justify-between pt-1">
           <h2 className="text-xs font-semibold text-slate-500">招投标项目</h2>
-          <HelpButton content={HELP_CONTENT.bidding} />
+          <div className="app-no-drag">
+            <HelpButton content={HELP_CONTENT.bidding} />
+          </div>
         </div>
         <div className="mb-3 flex gap-2">
           <button
@@ -115,21 +150,34 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setPendingPrompt(`对项目「${project.projectName}」重新解析招标文件`)}
+                      onClick={() => setPendingPrompt(buildParsePrompt(project))}
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
                     >
                       解析
                     </button>
                     <button
                       disabled={!project.hasParseReport}
-                      onClick={() => setPendingPrompt(`对项目「${project.projectName}」写质疑函`)}
+                      onClick={() =>
+                        setPendingPrompt(
+                          `对项目「${project.projectName}」写质疑函：依据 ${outputsDirOf(project)}/ 下的招标解析报告里「可质疑条款」一节，质疑函写到 ${outputsDirOf(project)}/${project.folderName}_质疑函.md`
+                        )
+                      }
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-30"
                     >
                       写质疑函
                     </button>
                     <button
                       disabled={!project.hasParseReport}
-                      onClick={() => setPendingPrompt(`对项目「${project.projectName}」生成投标文件`)}
+                      onClick={() =>
+                        setPendingPrompt(
+                          [
+                            `对项目「${project.projectName}」生成投标文件初稿。`,
+                            `解析报告在 ${outputsDirOf(project)}/ 下；招标原件：${sourceFilesOf(project).join('、') || '（inbox 侧未找到，先确认）'}。`,
+                            `严格按解析报告的标书目录框架、调用 bidding/_素材库/ 与 knowledge/，遵守 bidding 分身的全部投标规则。`,
+                            `产出：${outputsDirOf(project)}/${project.folderName}_投标文件初稿.md（三册一级标题结构）`
+                          ].join('\n')
+                        )
+                      }
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-30"
                     >
                       生成投标文件
@@ -171,7 +219,6 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
             <div className="flex-1 overflow-hidden">
               <AgentChat
                 agent={agent}
-                uploadFn={(p) => window.api.upload.biddingRoot(p)}
                 pendingPrompt={pendingPrompt}
                 onPendingPromptConsumed={() => setPendingPrompt(null)}
               />

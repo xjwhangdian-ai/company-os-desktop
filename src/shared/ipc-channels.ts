@@ -19,7 +19,7 @@ export const IPC = {
   shellSaveAsCopy: 'shell:save-as-copy',
 
   uploadGeneric: 'upload:generic',
-  uploadBiddingRoot: 'upload:bidding-root',
+  uploadBiddingProject: 'upload:bidding-project',
   uploadBiddingMaterial: 'upload:bidding-material',
   uploadLegalPending: 'upload:legal-pending',
 
@@ -42,5 +42,30 @@ export const IPC = {
   identityList: 'identity:list',
   identityAdd: 'identity:add',
   identityRemove: 'identity:remove',
-  identityVerifyPin: 'identity:verify-pin'
+  identityVerifyPin: 'identity:verify-pin',
+
+  salesListProducts: 'sales:list-products',
+  salesSaveProduct: 'sales:save-product',
+  salesRemoveProduct: 'sales:remove-product',
+  salesSetProductImage: 'sales:set-product-image',
+  salesUploadSupplierDoc: 'sales:upload-supplier-doc',
+  salesImportExcel: 'sales:import-excel',
+  salesExportQuoteImages: 'sales:export-quote-images',
+  salesListTemplates: 'sales:list-templates',
+  salesUploadTemplate: 'sales:upload-template',
+  salesListCustomers: 'sales:list-customers',
+  salesSaveCustomer: 'sales:save-customer',
+  salesRemoveCustomer: 'sales:remove-customer',
+  salesAddFollowUp: 'sales:add-follow-up',
+  salesLinkCustomerFile: 'sales:link-customer-file',
+  salesUnlinkCustomerFile: 'sales:unlink-customer-file',
+  salesResolveLinkedPath: 'sales:resolve-linked-path',
+
+  solutionListFiles: 'solution:list-files',
+  solutionUpload: 'solution:upload',
+  solutionRemoveFile: 'solution:remove-file',
+  solutionWhisperStatus: 'solution:whisper-status',
+  solutionTranscribeStart: 'solution:transcribe-start',
+  solutionTranscribeCancel: 'solution:transcribe-cancel',
+  solutionTranscribeEvent: 'solution:transcribe-event'
 } as const

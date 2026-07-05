@@ -18,6 +18,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 无标题栏窗口的拖拽区：加在各页顶部标题条上；其内的按钮/输入框要标 no-drag 才能点 */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

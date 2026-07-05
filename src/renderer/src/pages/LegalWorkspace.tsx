@@ -6,6 +6,19 @@ import { FileDropzone } from '../components/FileDropzone'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
+/** 意见书的产出目录：outputs/04_法务_legal/{日期_合同名}/（统一"产出按项目建文件夹"约定） */
+function reviewOutputDir(fileName: string): string {
+  const d = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const stem = fileName
+    .replace(/^【.+?】/, '')
+    .replace(/\.[^.]+$/, '')
+    .replace(/\s+/g, '')
+    .slice(0, 50)
+  return `outputs/04_法务_legal/${date}_${stem}`
+}
+
 function CategoryBadge({ category }: { category: ContractCategory }): React.JSX.Element {
   const color =
     category === '销售合同' ? 'bg-blue-50 text-blue-600' : category === '工程合同' ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'
@@ -38,9 +51,9 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   return (
     <div className="flex h-full">
       <div className="w-80 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="app-drag mb-2 flex items-center justify-between pt-1">
           <h2 className="text-xs font-semibold text-slate-500">法务工作台</h2>
-          <div className="flex items-center gap-2">
+          <div className="app-no-drag flex items-center gap-2">
             <button
               onClick={() => setShowTemplates((v) => !v)}
               className={`rounded-md border px-2 py-1 text-xs font-medium ${
@@ -106,7 +119,11 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <button
-                      onClick={() => setPendingPrompt(`审一下这份合同：法务/待审/${doc.fileName}`)}
+                      onClick={() =>
+                        setPendingPrompt(
+                          `审一下这份合同：inbox/04_法务_legal/${doc.fileName}\n《合同审核意见书》写到 ${reviewOutputDir(doc.fileName)}/审核意见书.md`
+                        )
+                      }
                       className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
                     >
                       审核
@@ -115,7 +132,7 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       <button
                         onClick={() =>
                           setPendingPrompt(
-                            `对比一下这两份合同：法务/待审/${doc.fileName} 和模板 ${templateFor(doc.category)?.fileName}（法务/_模板/合同模板/${doc.category}/${templateFor(doc.category)?.fileName}），逐条列出差异，尤其标出对我方不利的改动，其余按你原有的《合同审核意见书》格式输出`
+                            `对比一下这两份合同：inbox/04_法务_legal/${doc.fileName} 和模板 ${templateFor(doc.category)?.fileName}（法务/_模板/合同模板/${doc.category}/${templateFor(doc.category)?.fileName}），逐条列出差异，尤其标出对我方不利的改动，其余按《合同审核意见书》格式输出，写到 ${reviewOutputDir(doc.fileName)}/模板对比意见书.md`
                           )
                         }
                         className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"

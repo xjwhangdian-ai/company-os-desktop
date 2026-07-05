@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AgentName } from '@shared/agent-types'
 import { useConfigStore } from './stores/useConfigStore'
 import { useAgentsStore } from './stores/useAgentsStore'
@@ -10,6 +10,8 @@ import { GenericAgentPage } from './pages/GenericAgentPage'
 import { BiddingWorkspace } from './pages/BiddingWorkspace'
 import { LegalWorkspace } from './pages/LegalWorkspace'
 import { OperationWorkspace } from './pages/OperationWorkspace'
+import { SalesWorkspace } from './pages/SalesWorkspace'
+import { SolutionWorkspace } from './pages/SolutionWorkspace'
 
 type View = 'settings' | { agent: AgentName }
 
@@ -20,6 +22,8 @@ export default function App(): React.JSX.Element {
   const logout = useIdentityStore((s) => s.logout)
   const [view, setView] = useState<View>('settings')
   const [gateKey, setGateKey] = useState(0)
+  /** "配置就绪后自动离开设置页"只在启动时做一次——否则配置好之后每次点「设置」都会被立刻弹回分身页 */
+  const autoLeftSettings = useRef(false)
 
   useEffect(() => {
     load()
@@ -36,10 +40,19 @@ export default function App(): React.JSX.Element {
   }, [activeCompany?.dataDir, loadAgents])
 
   useEffect(() => {
-    if (ready && loaded && list.length > 0 && view === 'settings') {
+    if (!autoLeftSettings.current && ready && loaded && list.length > 0 && view === 'settings') {
+      autoLeftSettings.current = true
       setView({ agent: list[0].name })
     }
   }, [ready, loaded, list, view])
+
+  // 当前公司没配好（比如刚切到还没选数据目录的瑾智安防）时，自动跳到设置页，
+  // 不让用户自己去找左下角的小设置按钮
+  useEffect(() => {
+    if (!loading && !ready && view !== 'settings') {
+      setView('settings')
+    }
+  }, [loading, ready, view])
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>
@@ -57,7 +70,8 @@ export default function App(): React.JSX.Element {
   return (
     <div className="flex h-screen bg-slate-100 text-slate-900">
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-100 p-3">
-        <div className="mb-4 px-2 pt-1">
+        {/* app-drag：无标题栏窗口靠这块区域拖动；pt-7 给 macOS 红绿灯让位，避免压住公司名 */}
+        <div className="app-drag mb-4 px-2 pb-1 pt-7">
           <h1 className="text-sm font-bold text-jushi-blue">{activeCompany?.name ?? '数字人分身工作台'}</h1>
           <p className="text-xs text-slate-400">数字人分身工作台</p>
         </div>
@@ -66,7 +80,7 @@ export default function App(): React.JSX.Element {
           <select
             value={config.activeCompanyId ?? ''}
             onChange={(e) => setActiveCompany(e.target.value)}
-            className="mb-3 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none focus:border-jushi-accent"
+            className="app-no-drag mb-3 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none focus:border-jushi-accent"
           >
             {config.companies.map((c) => (
               <option key={c.id} value={c.id}>
@@ -113,8 +127,14 @@ export default function App(): React.JSX.Element {
       <main className="flex-1 overflow-hidden bg-white">
         {view === 'settings' && <Settings />}
         {view !== 'settings' && !ready && (
-          <div className="flex h-full items-center justify-center text-sm text-slate-400">
-            请先在「设置」里配置 {activeCompany?.name ?? '当前公司'} 的数据目录和 API Key
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-400">
+            <p>请先配置 {activeCompany?.name ?? '当前公司'} 的数据目录和 API Key</p>
+            <button
+              onClick={() => setView('settings')}
+              className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white"
+            >
+              打开设置
+            </button>
           </div>
         )}
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'bidding' && (
@@ -126,10 +146,18 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'operation' && (
           <OperationWorkspace agent={activeAgent} />
         )}
+        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'sales' && (
+          <SalesWorkspace agent={activeAgent} />
+        )}
+        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'solution' && (
+          <SolutionWorkspace agent={activeAgent} />
+        )}
         {view !== 'settings' &&
           ready &&
           activeAgent &&
-          !['bidding', 'legal', 'operation'].includes(activeAgent.name) && <GenericAgentPage agent={activeAgent} />}
+          !['bidding', 'legal', 'operation', 'sales', 'solution'].includes(activeAgent.name) && (
+            <GenericAgentPage agent={activeAgent} />
+          )}
       </main>
     </div>
   )

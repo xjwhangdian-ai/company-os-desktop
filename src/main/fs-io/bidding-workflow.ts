@@ -2,7 +2,15 @@ import { readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import type { BiddingProject, MaterialLibraryCounts, OutputEntry } from '@shared/agent-types'
 
+// ============ 招投标项目 = inbox/outputs 两侧同名文件夹配对 ============
+//   inbox/03_招投标_bidding/{YYYY-MM-DD_项目}/    ← 招标原件（App 上传时机械建夹）
+//   outputs/03_招投标_bidding/{YYYY-MM-DD_项目}/  ← 解析报告/质疑函/投标文件（分身写入）
+// 跨项目共享的素材库仍在 bidding/_素材库/（它是库，不是某个项目的输入或产出）。
+
+const INBOX_ROOT_REL = join('inbox', '03_招投标_bidding')
+const OUTPUTS_ROOT_REL = join('outputs', '03_招投标_bidding')
 const PROJECT_FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_.+/
+
 const MATERIAL_CATEGORIES: Array<keyof MaterialLibraryCounts> = [
   '产品资料',
   '产品检测报告',
@@ -11,7 +19,8 @@ const MATERIAL_CATEGORIES: Array<keyof MaterialLibraryCounts> = [
   '类似项目合同'
 ]
 
-function listFilesRecursive(root: string, dir: string): OutputEntry[] {
+/** 递归列出目录下全部文件，relativePath 相对数据目录（inbox/... 或 outputs/... 开头，UI 靠它区分来源侧） */
+function listFilesRecursive(dataDir: string, dir: string): OutputEntry[] {
   let names: string[] = []
   try {
     names = readdirSync(dir)
@@ -27,15 +36,32 @@ function listFilesRecursive(root: string, dir: string): OutputEntry[] {
     entries.push({
       name,
       path: full,
-      relativePath: relative(root, full),
+      relativePath: relative(dataDir, full),
       isDirectory,
       size: st.size,
       mtimeMs: st.mtimeMs,
-      children: isDirectory ? listFilesRecursive(root, full) : undefined
+      children: isDirectory ? listFilesRecursive(dataDir, full) : undefined
     })
   }
   entries.sort((a, b) => (b.mtimeMs ?? 0) - (a.mtimeMs ?? 0))
   return entries
+}
+
+function listProjectFolders(root: string): string[] {
+  let names: string[] = []
+  try {
+    names = readdirSync(root)
+  } catch {
+    return []
+  }
+  return names.filter((n) => {
+    if (!PROJECT_FOLDER_PATTERN.test(n)) return false
+    try {
+      return statSync(join(root, n)).isDirectory()
+    } catch {
+      return false
+    }
+  })
 }
 
 function countFilesRecursive(dir: string): number {
@@ -56,38 +82,38 @@ function countFilesRecursive(dir: string): number {
   return count
 }
 
-/** 扫描 bidding/ 根目录下按项目建的文件夹，供项目列表页展示进度徽章 */
+/** 扫描 inbox/outputs 两侧的项目文件夹并按同名配对，供项目列表页展示进度徽章 */
 export function listBiddingProjects(dataDir: string): BiddingProject[] {
-  const biddingRoot = join(dataDir, 'bidding')
-  let names: string[] = []
-  try {
-    names = readdirSync(biddingRoot)
-  } catch {
-    return []
-  }
+  const inboxRoot = join(dataDir, INBOX_ROOT_REL)
+  const outputsRoot = join(dataDir, OUTPUTS_ROOT_REL)
+  const inboxFolders = new Set(listProjectFolders(inboxRoot))
+  const outputsFolders = new Set(listProjectFolders(outputsRoot))
+  const all = new Set([...inboxFolders, ...outputsFolders])
 
   const projects: BiddingProject[] = []
-  for (const name of names) {
-    if (!PROJECT_FOLDER_PATTERN.test(name)) continue
-    const full = join(biddingRoot, name)
-    if (!statSync(full).isDirectory()) continue
-
-    const files = listFilesRecursive(full, full)
-    const fileNames = files.filter((f) => !f.isDirectory).map((f) => f.name)
-    const date = name.slice(0, 10)
-    const projectName = name.slice(11)
+  for (const folderName of all) {
+    const inboxPath = inboxFolders.has(folderName) ? join(inboxRoot, folderName) : undefined
+    const outputsPath = outputsFolders.has(folderName) ? join(outputsRoot, folderName) : undefined
+    const files = [
+      ...(inboxPath ? listFilesRecursive(dataDir, inboxPath) : []),
+      ...(outputsPath ? listFilesRecursive(dataDir, outputsPath) : [])
+    ]
+    const flat = (entries: OutputEntry[]): OutputEntry[] =>
+      entries.flatMap((e) => (e.isDirectory ? flat(e.children ?? []) : [e]))
+    const fileNames = flat(files).map((f) => f.name)
 
     projects.push({
-      folderName: name,
-      path: full,
-      projectName,
-      date,
-      hasSourceFile: fileNames.some(
-        (f) => !f.includes('招标解析') && !f.includes('质疑函') && !f.includes('投标文件')
-      ),
+      folderName,
+      projectName: folderName.slice(11),
+      date: folderName.slice(0, 10),
+      inboxPath,
+      outputsPath,
+      hasSourceFile: inboxPath !== undefined && flat(listFilesRecursive(dataDir, inboxPath)).length > 0,
       hasParseReport: fileNames.some((f) => f.includes('招标解析')),
       hasChallengeLetter: fileNames.some((f) => f.includes('质疑函')),
-      hasDraft: fileNames.some((f) => f.includes('投标文件') || f.includes('资格证明文件') || f.includes('商务技术文件') || f.includes('报价文件')),
+      hasDraft: fileNames.some(
+        (f) => f.includes('投标文件') || f.includes('资格证明文件') || f.includes('商务技术文件') || f.includes('报价文件')
+      ),
       files
     })
   }

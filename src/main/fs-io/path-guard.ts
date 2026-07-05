@@ -1,4 +1,4 @@
-import { resolve, sep } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 
 /**
  * 等价复刻 company-os 仓库 .claude/settings.json 里的两条安全规则，
@@ -20,6 +20,15 @@ function isInsideKnowledge(dataDir: string, targetPath: string): boolean {
   return (resolved + (resolved.endsWith(sep) ? '' : sep)).startsWith(knowledgeRoot) || resolved === resolve(dataDir, 'knowledge')
 }
 
+// 销售工作台的两个规范化数据库由 App 托管（合并/去重/落盘都是 App 的机械逻辑），
+// 分身只允许写 _待入库/ 暂存文件——直接改库文件容易整库覆盖损坏，这里兜底拦截。
+const APP_OWNED_FILES = [join('销售', '产品库', '产品库.json'), join('销售', '客户库.json')]
+
+function isAppOwnedFile(dataDir: string, targetPath: string): boolean {
+  const resolved = resolve(dataDir, targetPath)
+  return APP_OWNED_FILES.some((rel) => resolved === resolve(dataDir, rel))
+}
+
 const FILE_MUTATING_TOOLS = new Set(['Write', 'Edit', 'NotebookEdit'])
 const FILE_PATH_INPUT_KEYS = ['file_path', 'path', 'notebook_path']
 
@@ -35,6 +44,12 @@ export function guardToolCall(
         return {
           allowed: false,
           reason: `已拦截：knowledge/ 为只读知识库，禁止分身写入或修改（${value}）`
+        }
+      }
+      if (typeof value === 'string' && isAppOwnedFile(dataDir, value)) {
+        return {
+          allowed: false,
+          reason: `已拦截：${value} 由桌面 App 托管，分身请把解析结果写到 销售/产品库/_待入库/ 暂存目录，由 App 校验合并`
         }
       }
     }

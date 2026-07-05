@@ -1,12 +1,16 @@
 import { useState, type DragEvent } from 'react'
 import type { ChatAttachment } from '@shared/agent-types'
-import type { UploadResult } from '@shared/api-types'
+import type { FileFilter, UploadResult } from '@shared/api-types'
 
 interface FileDropzoneProps {
   uploadFn: (sourcePath: string) => Promise<UploadResult>
   onUploaded: (attachments: ChatAttachment[]) => void
   label?: string
   compact?: boolean
+  /** compact 模式下按钮文字，默认"📎 上传" */
+  buttonLabel?: string
+  /** 限制系统选择框能选的文件类型，比如只给 word/pdf/md（拖拽上传不受此限制，只影响点击弹出的选择框） */
+  filters?: FileFilter[]
 }
 
 /** Electron 里被拖拽的 File 对象带有 .path（绝对路径），这是 Electron 对 Web File API 的扩展 */
@@ -14,7 +18,7 @@ interface ElectronFile extends File {
   path: string
 }
 
-export function FileDropzone({ uploadFn, onUploaded, label, compact }: FileDropzoneProps): React.JSX.Element {
+export function FileDropzone({ uploadFn, onUploaded, label, compact, buttonLabel, filters }: FileDropzoneProps): React.JSX.Element {
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -41,7 +45,7 @@ export function FileDropzone({ uploadFn, onUploaded, label, compact }: FileDropz
   }
 
   async function handleClick(): Promise<void> {
-    const paths = await window.api.dialog.pickFiles()
+    const paths = await window.api.dialog.pickFiles(filters)
     await handlePaths(paths)
   }
 
@@ -51,9 +55,9 @@ export function FileDropzone({ uploadFn, onUploaded, label, compact }: FileDropz
         onClick={handleClick}
         disabled={uploading}
         className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-        title="上传文件"
+        title={buttonLabel ?? '上传文件'}
       >
-        {uploading ? '上传中…' : '📎 上传'}
+        {uploading ? '上传中…' : (buttonLabel ?? '📎 上传')}
       </button>
     )
   }
