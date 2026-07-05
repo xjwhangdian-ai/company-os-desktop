@@ -2,6 +2,7 @@ import type {
   AgentDisplayMeta,
   AgentName,
   AppConfig,
+  BidProjectCard,
   BiddingProject,
   BiddingUploadResult,
   Company,
@@ -88,6 +89,12 @@ export interface CompanyOsApi {
   bidding: {
     listProjects(): Promise<BiddingProject[]>
     materialCounts(): Promise<MaterialLibraryCounts>
+    /** 保存项目卡（App 托管；人工录入优先，分身只能写回填暂存） */
+    saveCard(folderName: string, card: BidProjectCard): Promise<BidProjectCard>
+    /** 导出跨项目台账 CSV 到 outputs/03_招投标_bidding/招标项目台账.csv */
+    exportLedger(): Promise<{ path: string; count: number }>
+    /** 答疑/澄清文件上传到项目 inbox 侧的 答疑澄清/ 子文件夹 */
+    uploadClarification(projectFolder: string, sourcePath: string): Promise<UploadResult>
   }
   legal: {
     listDocs(): Promise<{ pending: LegalDoc[]; reviewed: LegalDoc[] }>

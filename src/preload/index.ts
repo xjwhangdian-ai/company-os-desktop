@@ -4,6 +4,7 @@ import type { CompanyOsApi, FileFilter, RunAgentRequest, UploadResult } from '@s
 import type { AgentStreamEvent } from '@shared/stream-events'
 import type {
   AgentName,
+  BidProjectCard,
   ContractCategory,
   CustomerFields,
   LinkedFile,
@@ -60,7 +61,11 @@ const api: CompanyOsApi = {
   },
   bidding: {
     listProjects: () => ipcRenderer.invoke(IPC.biddingListProjects),
-    materialCounts: () => ipcRenderer.invoke(IPC.biddingMaterialCounts)
+    materialCounts: () => ipcRenderer.invoke(IPC.biddingMaterialCounts),
+    saveCard: (folderName: string, card: BidProjectCard) => ipcRenderer.invoke(IPC.biddingSaveCard, folderName, card),
+    exportLedger: () => ipcRenderer.invoke(IPC.biddingExportLedger),
+    uploadClarification: (projectFolder: string, sourcePath: string) =>
+      ipcRenderer.invoke(IPC.uploadBiddingClarification, projectFolder, sourcePath)
   },
   legal: {
     listDocs: () => ipcRenderer.invoke(IPC.legalListDocs),

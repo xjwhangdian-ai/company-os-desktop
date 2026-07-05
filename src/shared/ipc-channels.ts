@@ -27,6 +27,9 @@ export const IPC = {
 
   biddingListProjects: 'bidding:list-projects',
   biddingMaterialCounts: 'bidding:material-counts',
+  biddingSaveCard: 'bidding:save-card',
+  biddingExportLedger: 'bidding:export-ledger',
+  uploadBiddingClarification: 'upload:bidding-clarification',
 
   legalListDocs: 'legal:list-docs',
   legalMarkReviewed: 'legal:mark-reviewed',

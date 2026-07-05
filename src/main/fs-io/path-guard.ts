@@ -26,7 +26,14 @@ const APP_OWNED_FILES = [join('销售', '产品库', '产品库.json'), join('�
 
 function isAppOwnedFile(dataDir: string, targetPath: string): boolean {
   const resolved = resolve(dataDir, targetPath)
-  return APP_OWNED_FILES.some((rel) => resolved === resolve(dataDir, rel))
+  if (APP_OWNED_FILES.some((rel) => resolved === resolve(dataDir, rel))) return true
+  // 招投标项目卡与台账同样是 App 托管：分身回填走 _项目卡回填.json 暂存
+  const biddingOutputsRoot = resolve(dataDir, join('outputs', '03_招投标_bidding')) + sep
+  if (resolved.startsWith(biddingOutputsRoot)) {
+    const base = resolved.slice(resolved.lastIndexOf(sep) + 1)
+    if (base === '项目卡.json' || base === '招标项目台账.csv') return true
+  }
+  return false
 }
 
 const FILE_MUTATING_TOOLS = new Set(['Write', 'Edit', 'NotebookEdit'])
@@ -49,7 +56,7 @@ export function guardToolCall(
       if (typeof value === 'string' && isAppOwnedFile(dataDir, value)) {
         return {
           allowed: false,
-          reason: `已拦截：${value} 由桌面 App 托管，分身请把解析结果写到 销售/产品库/_待入库/ 暂存目录，由 App 校验合并`
+          reason: `已拦截：${value} 由桌面 App 托管，分身请写对应的暂存文件（产品库→销售/产品库/_待入库/；项目卡→同目录 _项目卡回填.json），由 App 校验合并`
         }
       }
     }

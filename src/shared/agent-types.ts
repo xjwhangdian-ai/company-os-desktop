@@ -79,6 +79,29 @@ export interface OutputEntry {
   children?: OutputEntry[]
 }
 
+export type BidProjectStatus = '跟进中' | '已投标' | '已中标' | '未中标' | '已放弃'
+
+export const BID_PROJECT_STATUSES: BidProjectStatus[] = ['跟进中', '已投标', '已中标', '未中标', '已放弃']
+
+/**
+ * 项目卡：招投标项目的结构化商务信息（吸收自"投标项目管理"参考系统的项目信息卡+台账设计）。
+ * 存 outputs/03_招投标_bidding/{项目}/项目卡.json，App 托管——分身只能写 _项目卡回填.json 暂存，
+ * App 按"只填人没填过的空字段"合并，人工录入永远优先于 AI 回填。
+ */
+export interface BidProjectCard {
+  业主单位: string
+  招标编号: string
+  预算金额: string
+  我方报价: string
+  保证金: string
+  /** YYYY-MM-DD；台账视图按它做倒计时排序 */
+  投标截止日: string
+  开标日: string
+  状态: BidProjectStatus
+  备注: string
+  更新时间: number
+}
+
 /**
  * 招投标项目 = inbox/03_招投标_bidding/{项目}/（招标原件）+ outputs/03_招投标_bidding/{项目}/（解析/质疑/投标产出）
  * 同名文件夹配对；两侧任一存在即视为一个项目。
@@ -95,6 +118,8 @@ export interface BiddingProject {
   hasParseReport: boolean
   hasChallengeLetter: boolean
   hasDraft: boolean
+  /** 项目卡；还没建卡时为 null（UI 显示"未填"并可一键创建） */
+  card: BidProjectCard | null
   /** 两侧文件合并列表（relativePath 以 inbox/ 或 outputs/ 开头区分来源） */
   files: OutputEntry[]
 }

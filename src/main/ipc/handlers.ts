@@ -6,6 +6,7 @@ import type { FileFilter, RunAgentRequest } from '@shared/api-types'
 import type {
   AgentName,
   AppConfig,
+  BidProjectCard,
   CustomerFields,
   LinkedFile,
   ProductFields,
@@ -31,6 +32,7 @@ import {
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
 import {
+  uploadToBiddingClarification,
   uploadToBiddingProject,
   uploadToInbox,
   uploadToLegalPending,
@@ -40,7 +42,7 @@ import {
   uploadToSalesTemplate
 } from '../fs-io/upload-router'
 import { scanAgentOutputs } from '../fs-io/outputs-scanner'
-import { getMaterialLibraryCounts, listBiddingProjects } from '../fs-io/bidding-workflow'
+import { exportBiddingLedger, getMaterialLibraryCounts, listBiddingProjects, saveProjectCard } from '../fs-io/bidding-workflow'
 import { listLegalDocs, listLegalTemplates, markReviewed } from '../fs-io/legal-workflow'
 import {
   addFollowUp,
@@ -157,6 +159,13 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   ipcMain.handle(IPC.biddingListProjects, () => listBiddingProjects(getDataDir()))
   ipcMain.handle(IPC.biddingMaterialCounts, () => getMaterialLibraryCounts(getDataDir()))
+  ipcMain.handle(IPC.biddingSaveCard, (_e, folderName: string, card: BidProjectCard) =>
+    saveProjectCard(getDataDir(), folderName, card)
+  )
+  ipcMain.handle(IPC.biddingExportLedger, () => exportBiddingLedger(getDataDir()))
+  ipcMain.handle(IPC.uploadBiddingClarification, (_e, projectFolder: string, sourcePath: string) =>
+    uploadToBiddingClarification(getDataDir(), projectFolder, sourcePath)
+  )
 
   ipcMain.handle(IPC.legalListDocs, () => listLegalDocs(getDataDir()))
   ipcMain.handle(IPC.legalMarkReviewed, (_e, fileName: string) => markReviewed(getDataDir(), fileName))
