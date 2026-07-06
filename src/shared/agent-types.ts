@@ -160,11 +160,36 @@ export interface ContractTemplate {
   category: ContractCategory
 }
 
+/**
+ * 角色：管理员管"大脑与库"（设置页、成员管理、数据目录/供应商配置），普通员工用分身干活
+ * （上传 inbox、生成 outputs）。注意这是**轻量权限**（单机 App 的界面级区分），不是安全体系。
+ */
+export type MemberRole = 'admin' | 'member'
+
 /** 渲染进程展示用——只暴露"是否设了 PIN"，真实 PIN 哈希留在主进程 */
 export interface TeamMember {
   id: string
   name: string
   hasPin: boolean
+  role: MemberRole
+}
+
+// ============ 一键同步 ============
+
+export interface SyncStatus {
+  isRepo: boolean
+  hasRemote: boolean
+  branch: string
+  dirtyCount: number
+  ahead: number
+  behind: number
+}
+
+export interface SyncResult {
+  ok: boolean
+  committed?: boolean
+  conflict?: boolean
+  message: string
 }
 
 // ============ 销售工作台 ============

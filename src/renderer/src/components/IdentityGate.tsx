@@ -204,6 +204,60 @@ function MemberTile({
  * state（下拉框改变只更新这个，不直接落盘），登录动作统一先 await 把这个选择落盘
  * （commitCompany），再执行真正的登录，保证进主界面时公司一定是选中的那家。
  */
+/** 每天首次打开的同步提示：当前公司配了 git 远程且今天还没同步时，登录页顶部给横幅 */
+function DailySyncBanner({ activeCompanyId }: { activeCompanyId: string | null }): React.JSX.Element | null {
+  const [show, setShow] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [status, lastAt] = await Promise.all([window.api.sync.status(), window.api.sync.lastAt()])
+        if (cancelled) return
+        const now = new Date()
+        const last = lastAt !== null ? new Date(lastAt) : null
+        const syncedToday =
+          last !== null &&
+          last.getFullYear() === now.getFullYear() &&
+          last.getMonth() === now.getMonth() &&
+          last.getDate() === now.getDate()
+        setShow(status.isRepo && status.hasRemote && !syncedToday)
+      } catch {
+        /* 数据目录未配置等情况：不打扰 */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeCompanyId])
+
+  if (!show) return null
+  return (
+    <div className="app-no-drag mx-6 flex max-w-xl flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5">
+      <span className="text-xs text-amber-700">今天还没同步——建议先把最新的"大脑与库"同步下来再开工</span>
+      <button
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          try {
+            const r = await window.api.sync.now('登录前同步')
+            setMessage(r.message)
+            if (r.ok) setTimeout(() => setShow(false), 1500)
+          } finally {
+            setBusy(false)
+          }
+        }}
+        className="shrink-0 rounded-lg bg-jushi-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+      >
+        {busy ? '同步中…' : '☁️ 一键同步'}
+      </button>
+      {message && <span className="w-full text-xs text-slate-500">{message}</span>}
+    </div>
+  )
+}
+
 export function IdentityGate(): React.JSX.Element {
   const { members, loaded, loadMembers } = useIdentityStore()
   const { config, loading: configLoading, setActiveCompany } = useConfigStore()
@@ -239,6 +293,8 @@ export function IdentityGate(): React.JSX.Element {
         <h1 className="text-lg font-bold text-jushi-blue">数字人分身工作台</h1>
         <p className="mt-1 text-sm text-slate-400">选择公司和身份继续</p>
       </div>
+
+      <DailySyncBanner activeCompanyId={config?.activeCompanyId ?? null} />
 
       <CompanyPicker selectedCompanyId={selectedCompanyId} onSelect={setSelectedCompanyId} />
 

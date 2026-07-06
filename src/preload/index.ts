@@ -5,6 +5,7 @@ import type { AgentStreamEvent } from '@shared/stream-events'
 import type {
   AgentName,
   BidProjectCard,
+  MemberRole,
   ContractCategory,
   CustomerFields,
   LinkedFile,
@@ -86,7 +87,14 @@ const api: CompanyOsApi = {
     list: () => ipcRenderer.invoke(IPC.identityList),
     add: (name: string, pin?: string) => ipcRenderer.invoke(IPC.identityAdd, name, pin),
     remove: (id: string) => ipcRenderer.invoke(IPC.identityRemove, id),
-    verifyPin: (id: string, pin?: string) => ipcRenderer.invoke(IPC.identityVerifyPin, id, pin)
+    verifyPin: (id: string, pin?: string) => ipcRenderer.invoke(IPC.identityVerifyPin, id, pin),
+    setRole: (id: string, role: MemberRole) => ipcRenderer.invoke(IPC.identitySetRole, id, role),
+    notifyLogin: (name: string) => ipcRenderer.invoke(IPC.identityNotifyLogin, name)
+  },
+  sync: {
+    status: () => ipcRenderer.invoke(IPC.syncStatus),
+    now: (userName: string) => ipcRenderer.invoke(IPC.syncNow, userName),
+    lastAt: () => ipcRenderer.invoke(IPC.syncLastAt)
   },
   sales: {
     listProducts: () => ipcRenderer.invoke(IPC.salesListProducts),

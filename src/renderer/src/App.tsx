@@ -5,6 +5,7 @@ import { useAgentsStore } from './stores/useAgentsStore'
 import { useIdentityStore } from './stores/useIdentityStore'
 import { AgentPicker } from './components/AgentPicker'
 import { IdentityGate } from './components/IdentityGate'
+import { SyncButton } from './components/SyncButton'
 import { Settings } from './pages/Settings'
 import { GenericAgentPage } from './pages/GenericAgentPage'
 import { BiddingWorkspace } from './pages/BiddingWorkspace'
@@ -64,6 +65,7 @@ export default function App(): React.JSX.Element {
     return <IdentityGate key={gateKey} />
   }
 
+  const isAdmin = currentUser.role === 'admin'
   const activeAgentName = typeof view === 'object' ? view.agent : null
   const activeAgent = list.find((a) => a.name === activeAgentName) ?? null
 
@@ -114,18 +116,26 @@ export default function App(): React.JSX.Element {
           </button>
         </div>
 
-        <button
-          onClick={() => setView('settings')}
-          className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
-            view === 'settings' ? 'bg-white shadow-sm text-jushi-accent' : 'text-slate-500 hover:bg-white/60'
-          }`}
-        >
-          ⚙️ 设置
-        </button>
+        <SyncButton userName={currentUser.name} />
+        {isAdmin && (
+          <button
+            onClick={() => setView('settings')}
+            className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
+              view === 'settings' ? 'bg-white shadow-sm text-jushi-accent' : 'text-slate-500 hover:bg-white/60'
+            }`}
+          >
+            ⚙️ 设置
+          </button>
+        )}
       </aside>
 
       <main className="flex-1 overflow-hidden bg-white">
-        {view === 'settings' && <Settings />}
+        {view === 'settings' && isAdmin && <Settings />}
+        {view === 'settings' && !isAdmin && (
+          <div className="flex h-full items-center justify-center px-8 text-center text-sm text-slate-400">
+            设置页仅管理员可用——数据目录、模型供应商、成员权限由管理员统一配置；有需要请联系管理员。
+          </div>
+        )}
         {view !== 'settings' && !ready && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-400">
             <p>请先配置 {activeCompany?.name ?? '当前公司'} 的数据目录和 API Key</p>

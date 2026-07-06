@@ -7,6 +7,7 @@ import type {
   AgentName,
   AppConfig,
   BidProjectCard,
+  MemberRole,
   CustomerFields,
   LinkedFile,
   ProductFields,
@@ -15,6 +16,7 @@ import type {
   SolutionFileKind,
   SupplierDocPreview
 } from '@shared/agent-types'
+import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import {
   addCompany,
   addTeamMember,
@@ -26,8 +28,12 @@ import {
   setActiveCompany,
   setActiveProvider,
   setCompanyDataDir,
+  setMemberRole,
   setProviderConfig,
-  verifyPin
+  verifyPin,
+  getActiveCompany,
+  getLastSyncAt,
+  setLastSyncAt
 } from '../config/store'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
@@ -68,6 +74,12 @@ import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
 import { runGzhStyle } from '../fs-io/gzh-tool'
 
 const activeRuns = new Map<string, AbortController>()
+
+/** 当前登录用户名（渲染进程登录成功后上报）——关闭前自动同步的提交署名用 */
+let currentUserName = ''
+export function getCurrentUserName(): string {
+  return currentUserName
+}
 
 /** 只有一个入口注册全部 IPC handler，避免重启热重载时重复 registerHandler 报错 */
 export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
@@ -191,6 +203,25 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.identityAdd, (_e, name: string, pin?: string) => addTeamMember(name, pin))
   ipcMain.handle(IPC.identityRemove, (_e, id: string) => removeTeamMember(id))
   ipcMain.handle(IPC.identityVerifyPin, (_e, id: string, pin?: string) => verifyPin(id, pin))
+  ipcMain.handle(IPC.identitySetRole, (_e, id: string, role: MemberRole) => setMemberRole(id, role))
+  ipcMain.handle(IPC.identityNotifyLogin, (_e, name: string) => {
+    currentUserName = name
+  })
+
+  // ============ 一键同步 ============
+  ipcMain.handle(IPC.syncStatus, () => getSyncStatus(getDataDir()))
+  ipcMain.handle(IPC.syncNow, async (_e, userName: string) => {
+    const result = await syncNow(getDataDir(), userName)
+    if (result.ok) {
+      const company = getActiveCompany()
+      if (company) setLastSyncAt(company.id)
+    }
+    return result
+  })
+  ipcMain.handle(IPC.syncLastAt, () => {
+    const company = getActiveCompany()
+    return company ? getLastSyncAt(company.id) : null
+  })
 
   // ============ 销售工作台 ============
   ipcMain.handle(IPC.salesListProducts, () => listProducts(getDataDir()))

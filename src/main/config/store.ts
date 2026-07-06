@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AppConfig, Company, ModelMapping, ProviderConfig, ProviderId, TeamMember } from '@shared/agent-types'
+import type { AppConfig, Company, MemberRole, ModelMapping, ProviderConfig, ProviderId, TeamMember } from '@shared/agent-types'
 
 // 手写的极简本地 JSON 配置持久化，替代 electron-store：
 // 1) electron-store v10 依赖的 conf v14 是纯 exports-map 包，在本项目
@@ -88,11 +88,13 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
   }
 }
 
-/** PIN 只做"防止别人顺手冒充你"的轻量校验，不是真账号安全——纯本地 sha256，不加盐，跟这个威胁模型相称就够了 */
+/** PIN 只做"防止别人顺手冒充你"的轻量校验，不是真账号安全——纯本地 sha256，不加盐，跟这个威胁模型相称就够了。
+ *  role 同理是界面级权限（管理员/普通员工），不是安全边界。 */
 interface TeamMemberRecord {
   id: string
   name: string
   pinHash: string | null
+  role?: MemberRole
 }
 
 interface StoreSchemaV4 {
@@ -102,6 +104,8 @@ interface StoreSchemaV4 {
   activeProviderId: ProviderId
   providers: Record<ProviderId, ProviderConfig>
   teamMembers: TeamMemberRecord[]
+  /** 每公司最近一次成功同步的时间戳（驱动每日开/关同步提示）；老配置没有此字段 */
+  lastSyncAt?: Record<string, number>
 }
 
 interface StoreSchemaV3 {
@@ -305,17 +309,24 @@ function hashPin(pin: string): string {
   return createHash('sha256').update(pin).digest('hex')
 }
 
+/** 老配置里的成员没有 role 字段：一律视为管理员（现存成员都是装机人自己建的；界面级权限，从宽迁移） */
+function roleOf(m: TeamMemberRecord): MemberRole {
+  return m.role ?? 'admin'
+}
+
 function toPublicMember(m: TeamMemberRecord): TeamMember {
-  return { id: m.id, name: m.name, hasPin: m.pinHash !== null }
+  return { id: m.id, name: m.name, hasPin: m.pinHash !== null, role: roleOf(m) }
 }
 
 export function listTeamMembers(): TeamMember[] {
   return readAll().teamMembers.map(toPublicMember)
 }
 
+/** 第一个成员自动成为管理员（新装机器/新团队场景），之后自助注册的默认普通员工，由管理员在设置页调整 */
 export function addTeamMember(name: string, pin?: string): TeamMember {
-  const record: TeamMemberRecord = { id: randomUUID(), name, pinHash: pin ? hashPin(pin) : null }
   const all = readAll()
+  const role: MemberRole = all.teamMembers.length === 0 ? 'admin' : 'member'
+  const record: TeamMemberRecord = { id: randomUUID(), name, pinHash: pin ? hashPin(pin) : null, role }
   writeAll({ ...all, teamMembers: [...all.teamMembers, record] })
   return toPublicMember(record)
 }
@@ -325,10 +336,37 @@ export function removeTeamMember(id: string): void {
   writeAll({ ...all, teamMembers: all.teamMembers.filter((m) => m.id !== id) })
 }
 
+/** 改角色時兜底：不允许把最后一个管理员降级，防止把自己锁在设置页外面 */
+export function setMemberRole(id: string, role: MemberRole): { ok: boolean; message?: string } {
+  const all = readAll()
+  const target = all.teamMembers.find((m) => m.id === id)
+  if (!target) return { ok: false, message: '成员不存在' }
+  if (role === 'member') {
+    const adminCount = all.teamMembers.filter((m) => roleOf(m) === 'admin').length
+    if (roleOf(target) === 'admin' && adminCount <= 1) {
+      return { ok: false, message: '至少要保留一名管理员' }
+    }
+  }
+  target.role = role
+  writeAll(all)
+  return { ok: true }
+}
+
 /** 无 PIN 的成员：任何 pin 参数（含 undefined）都直接放行 */
 export function verifyPin(id: string, pin: string | undefined): boolean {
   const member = readAll().teamMembers.find((m) => m.id === id)
   if (!member) return false
   if (!member.pinHash) return true
   return Boolean(pin) && hashPin(pin as string) === member.pinHash
+}
+
+// ============ 每公司的最近同步时间（驱动"每日开/关同步提示"） ============
+
+export function getLastSyncAt(companyId: string): number | null {
+  return readAll().lastSyncAt?.[companyId] ?? null
+}
+
+export function setLastSyncAt(companyId: string): void {
+  const all = readAll()
+  writeAll({ ...all, lastSyncAt: { ...(all.lastSyncAt ?? {}), [companyId]: Date.now() } })
 }

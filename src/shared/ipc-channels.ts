@@ -46,6 +46,12 @@ export const IPC = {
   identityAdd: 'identity:add',
   identityRemove: 'identity:remove',
   identityVerifyPin: 'identity:verify-pin',
+  identitySetRole: 'identity:set-role',
+  identityNotifyLogin: 'identity:notify-login',
+
+  syncStatus: 'sync:status',
+  syncNow: 'sync:now',
+  syncLastAt: 'sync:last-at',
 
   salesListProducts: 'sales:list-products',
   salesSaveProduct: 'sales:save-product',

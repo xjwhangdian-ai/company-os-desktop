@@ -15,7 +15,9 @@ export const HELP_CONTENT = {
       { label: '数据目录', desc: '指向 company-os 仓库根目录（含 knowledge/、bidding/、outputs/、法务/、.claude/）。' },
       { label: '模型供应商', desc: '点一个标签即可切换，对全部 9 个分身生效；每个供应商的 API Key/Base URL/模型映射独立保存，来回切换不会互相覆盖。' },
       { label: 'API Key', desc: '只对当前正在查看的供应商生效，保存在本机，不会同步到 company-os 仓库或网络。' },
-      { label: '模型映射', desc: '.claude/agents/*.md 里写的 opus/sonnet/haiku 别名，在这里配置它们对应当前供应商的真实模型名。' }
+      { label: '模型映射', desc: '.claude/agents/*.md 里写的 opus/sonnet/haiku 别名，在这里配置它们对应当前供应商的真实模型名。' },
+      { label: '团队成员与角色', desc: '管理员可进设置页并管理成员角色；普通员工只用分身干活（上传/生成），看不到设置页。登录页自助注册的新成员默认普通员工。界面级权限，不是安全体系。' },
+      { label: '☁️ 一键同步', desc: '侧栏按钮：提交本地"大脑与库"改动 → 拉取远程 → 推送。inbox 上传原件和 outputs 产出不同步（留本机）。每天首次打开和关闭 App 时会自动提醒。管理员机器远程指 GitHub，成员机器可指内网仓库（无需访问外网）。' }
     ]
   },
   agentChat: {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useConfigStore } from '../stores/useConfigStore'
+import { useIdentityStore } from '../stores/useIdentityStore'
 import type { ModelMapping, ProviderId } from '@shared/agent-types'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -247,6 +248,8 @@ export function Settings(): React.JSX.Element {
         </div>
       </section>
 
+      <MemberSection onFlash={flashSaved} />
+
       {savedHint && (
         <div className="fixed bottom-6 right-6 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">
           {savedHint}
@@ -254,5 +257,61 @@ export function Settings(): React.JSX.Element {
       )}
       </div>
     </div>
+  )
+}
+
+/** 团队成员与角色管理（仅管理员看得到设置页）。轻量权限：界面级区分，不是安全体系。 */
+function MemberSection({ onFlash }: { onFlash: (text: string) => void }): React.JSX.Element {
+  const { members, loadMembers, removeMember, currentUser } = useIdentityStore()
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-sm font-medium text-slate-700">团队成员与角色</h3>
+      <p className="text-xs text-slate-400">
+        管理员：可进设置页（数据目录/供应商/成员管理）。普通员工：用分身干活（上传 inbox、生成
+        outputs），看不到设置页。登录页自助注册的新成员默认是普通员工。此为界面级权限，不是安全体系。
+      </p>
+      <div className="space-y-1.5">
+        {members.map((m) => (
+          <div key={m.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-400 text-xs font-semibold text-white">
+              {m.name.slice(0, 1)}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm text-slate-700">
+              {m.name}
+              {currentUser?.id === m.id && <span className="ml-1 text-xs text-slate-400">（我）</span>}
+              {!m.hasPin && m.role === 'admin' && (
+                <span className="ml-1 text-xs text-amber-600">未设 PIN，建议管理员设置</span>
+              )}
+            </span>
+            <select
+              value={m.role}
+              onChange={async (e) => {
+                const r = await window.api.identity.setRole(m.id, e.target.value as 'admin' | 'member')
+                if (!r.ok) onFlash(r.message ?? '修改失败')
+                else onFlash(`${m.name} 已设为${e.target.value === 'admin' ? '管理员' : '普通员工'}`)
+                await loadMembers()
+              }}
+              className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 outline-none"
+            >
+              <option value="admin">管理员</option>
+              <option value="member">普通员工</option>
+            </select>
+            <button
+              onClick={async () => {
+                await removeMember(m.id)
+                onFlash(`已移除 ${m.name}`)
+              }}
+              className="shrink-0 text-xs text-slate-300 hover:text-red-500"
+              disabled={currentUser?.id === m.id}
+              title={currentUser?.id === m.id ? '不能移除当前登录的自己' : '移除成员'}
+            >
+              移除
+            </button>
+          </div>
+        ))}
+        {members.length === 0 && <p className="py-2 text-center text-xs text-slate-400">暂无成员</p>}
+      </div>
+    </section>
   )
 }

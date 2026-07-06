@@ -13,6 +13,7 @@ import type {
   LegalDoc,
   LinkedFile,
   MaterialLibraryCounts,
+  MemberRole,
   OutputEntry,
   ProductEntry,
   ProductFields,
@@ -22,6 +23,8 @@ import type {
   SolutionFile,
   SolutionFileKind,
   SupplierDocPreview,
+  SyncResult,
+  SyncStatus,
   TeamMember,
   TranscribeEvent,
   WhisperStatus
@@ -116,6 +119,18 @@ export interface CompanyOsApi {
     add(name: string, pin?: string): Promise<TeamMember>
     remove(id: string): Promise<void>
     verifyPin(id: string, pin?: string): Promise<boolean>
+    /** 管理员改角色；不允许把最后一个管理员降级 */
+    setRole(id: string, role: MemberRole): Promise<{ ok: boolean; message?: string }>
+    /** 登录成功后告知主进程当前用户名（供关闭前同步的提交署名用） */
+    notifyLogin(name: string): Promise<void>
+  }
+  sync: {
+    /** 当前公司数据目录的 git 状态（不触网） */
+    status(): Promise<SyncStatus>
+    /** 一键同步：提交本地改动 → pull --rebase → push；冲突时恢复原状并报冲突文件 */
+    now(userName: string): Promise<SyncResult>
+    /** 当前公司最近一次成功同步的时间戳 */
+    lastAt(): Promise<number | null>
   }
   sales: {
     /** 读取产品库（会先自动合并 _待入库/ 里 agent 暂存的解析结果）；skipped=同名多供应商无法定位的更新条目数 */

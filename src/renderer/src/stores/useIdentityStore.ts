@@ -37,6 +37,8 @@ export const useIdentityStore = create<IdentityState>((set, get) => ({
     if (!ok) return false
     const member = get().members.find((m) => m.id === id) ?? null
     set({ currentUser: member })
+    // 告知主进程当前用户名——"关闭前同步"的提交署名用
+    if (member) window.api.identity.notifyLogin(member.name)
     return true
   },
   logout: () => set({ currentUser: null })
