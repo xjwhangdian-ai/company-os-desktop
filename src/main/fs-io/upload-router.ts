@@ -58,34 +58,49 @@ function deriveBiddingFolder(sourcePath: string): string {
   return `${todayStr()}_${stem || '未命名项目'}`
 }
 
+/** 项目内分桶（参考"投标项目管理"系统的分类结构，按输入/产出拆到 inbox/outputs 两侧） */
+export const BIDDING_INBOX_BUCKETS = ['01_招标文件', '02_答疑澄清', '03_供应商信息', '04_资质材料', '99_往来沟通'] as const
+export const BIDDING_OUTPUT_BUCKETS = ['01_招标解析', '02_报价文件', '03_技术方案', '04_投标文件成稿', '05_合同与履约'] as const
+
+/** 新建/补齐项目的两侧分桶骨架（人往里放文件不用自己记该建哪些文件夹） */
+export function ensureBiddingProjectSkeleton(dataDir: string, projectFolder: string): void {
+  for (const bucket of BIDDING_INBOX_BUCKETS) {
+    mkdirSync(join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, bucket), { recursive: true })
+  }
+  for (const bucket of BIDDING_OUTPUT_BUCKETS) {
+    mkdirSync(join(dataDir, 'outputs', '03_招投标_bidding', projectFolder, bucket), { recursive: true })
+  }
+}
+
 /**
- * bidding 专属：招标原文件落 inbox/03_招投标_bidding/{日期_项目}/，
- * 产出侧 outputs/03_招投标_bidding/{同名}/ 由分身写入时创建（两侧同名配对）。
+ * bidding 专属：招标原文件落 inbox/03_招投标_bidding/{日期_项目}/01_招标文件/，
+ * 并同时建好两侧完整分桶骨架（两侧同名配对）。
  * 同一天重复上传同名文件会进同一个项目文件夹（追加而不是另开项目）。
  */
 export function uploadToBiddingProject(dataDir: string, sourcePath: string): BiddingUploadResult {
   const projectFolder = deriveBiddingFolder(sourcePath)
-  const destDir = join(dataDir, 'inbox', '03_招投标_bidding', projectFolder)
+  ensureBiddingProjectSkeleton(dataDir, projectFolder)
+  const destDir = join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, '01_招标文件')
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
   return {
     absPath: dest,
-    relativePath: `inbox/03_招投标_bidding/${projectFolder}/${basename(dest)}`,
+    relativePath: `inbox/03_招投标_bidding/${projectFolder}/01_招标文件/${basename(dest)}`,
     projectFolder,
     outputsDirRelative: `outputs/03_招投标_bidding/${projectFolder}`
   }
 }
 
-/** bidding 专属：答疑/澄清/变更公告落到项目 inbox 侧的 答疑澄清/ 子文件夹（追加解析时分身要读） */
+/** bidding 专属：答疑/澄清/变更公告落到项目 inbox 侧的 02_答疑澄清/ 分桶（追加解析时分身要读） */
 export function uploadToBiddingClarification(
   dataDir: string,
   projectFolder: string,
   sourcePath: string
 ): { absPath: string; relativePath: string } {
-  const destDir = join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, '答疑澄清')
+  const destDir = join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, '02_答疑澄清')
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `inbox/03_招投标_bidding/${projectFolder}/答疑澄清/${basename(dest)}` }
+  return { absPath: dest, relativePath: `inbox/03_招投标_bidding/${projectFolder}/02_答疑澄清/${basename(dest)}` }
 }
 
 /** bidding 专属：素材库 5 分类各自的上传入口 */

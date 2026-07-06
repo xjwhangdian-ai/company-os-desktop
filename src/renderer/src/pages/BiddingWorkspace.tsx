@@ -73,7 +73,7 @@ function sourceFilesOf(project: BiddingProject): string[] {
 }
 
 function clarificationFilesOf(project: BiddingProject): string[] {
-  return sourceFilesOf(project).filter((rel) => rel.includes('/答疑澄清/'))
+  return sourceFilesOf(project).filter((rel) => rel.includes('/02_答疑澄清/'))
 }
 
 function outputsDirOf(project: BiddingProject): string {
@@ -87,7 +87,7 @@ function backfillInstruction(outputsDir: string): string {
 
 /** 解析提示词：输入/输出路径全部由 App 点名，分身不用猜文件在哪、该写到哪 */
 function buildParsePrompt(project: BiddingProject): string {
-  const sources = sourceFilesOf(project).filter((rel) => !rel.includes('/答疑澄清/'))
+  const sources = sourceFilesOf(project).filter((rel) => !rel.includes('/02_答疑澄清/'))
   const clarifications = clarificationFilesOf(project)
   return [
     `解析招标文件（项目「${project.projectName}」）。`,
@@ -97,7 +97,7 @@ function buildParsePrompt(project: BiddingProject): string {
       ? [`答疑/澄清文件（一并纳入解析，与原件冲突时以澄清为准并标注）：`, ...clarifications.map((s) => `- ${s}`)]
       : []),
     `按 bidding 分身的解析流程产出《招标解析报告》（评分拆解/资质缺口/标书目录框架/可质疑条款/可投标性）。`,
-    `产出路径：${outputsDirOf(project)}/${project.folderName}_招标解析.md`,
+    `产出路径：${outputsDirOf(project)}/01_招标解析/${project.folderName}_招标解析.md`,
     backfillInstruction(outputsDirOf(project))
   ].join('\n')
 }
@@ -249,7 +249,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         `解析招标文件（项目「${r.projectFolder.slice(11)}」）。`,
         `招标原件：${r.relativePath}`,
         `按 bidding 分身的解析流程产出《招标解析报告》（评分拆解/资质缺口/标书目录框架/可质疑条款/可投标性）。`,
-        `产出路径：${r.outputsDirRelative}/${r.projectFolder}_招标解析.md`,
+        `产出路径：${r.outputsDirRelative}/01_招标解析/${r.projectFolder}_招标解析.md`,
         backfillInstruction(r.outputsDirRelative)
       ].join('\n')
     )
@@ -386,7 +386,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                       disabled={!project.hasParseReport}
                       onClick={() =>
                         setPendingPrompt(
-                          `对项目「${project.projectName}」写质疑函：依据 ${outputsDirOf(project)}/ 下的招标解析报告里「可质疑条款」一节，质疑函写到 ${outputsDirOf(project)}/${project.folderName}_质疑函.md`
+                          `对项目「${project.projectName}」写质疑函：依据 ${outputsDirOf(project)}/01_招标解析/ 下的招标解析报告里「可质疑条款」一节，质疑函写到 ${outputsDirOf(project)}/04_投标文件成稿/${project.folderName}_质疑函.md`
                         )
                       }
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-30"
@@ -399,13 +399,13 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                         setPendingPrompt(
                           [
                             `对项目「${project.projectName}」生成投标文件初稿。`,
-                            `解析报告在 ${outputsDirOf(project)}/ 下；招标原件：${sourceFilesOf(project).filter((r) => !r.includes('/答疑澄清/')).join('、') || '（inbox 侧未找到，先确认）'}。`,
+                            `解析报告在 ${outputsDirOf(project)}/01_招标解析/ 下；招标原件：${sourceFilesOf(project).filter((r) => !r.includes('/02_答疑澄清/')).join('、') || '（inbox 侧未找到，先确认）'}。`,
                             ...(clarificationFilesOf(project).length > 0
                               ? [`答疑/澄清文件（响应内容以最新澄清为准）：${clarificationFilesOf(project).join('、')}`]
                               : []),
-                            `严格按解析报告的标书目录框架、调用 bidding/_素材库/ 与 knowledge/，遵守 bidding 分身的全部投标规则。`,
-                            `注意：${outputsDirOf(project)}/报价测算/ 下如有成本测算材料，只作内部参考，其内容严禁写入对外投标文件。`,
-                            `产出：${outputsDirOf(project)}/${project.folderName}_投标文件初稿.md（三册一级标题结构）`
+                            `严格按解析报告的标书目录框架、调用 bidding/_素材库/ 与 knowledge/，遵守 bidding 分身的全部投标规则；项目 inbox 侧 04_资质材料/ 如有本项目专用资质（如合作方资质），一并核对使用。`,
+                            `注意：${outputsDirOf(project)}/02_报价文件/ 下如有成本测算材料，只作内部参考，其内容严禁写入对外投标文件。`,
+                            `产出：${outputsDirOf(project)}/04_投标文件成稿/${project.folderName}_投标文件初稿.md（三册一级标题结构）`
                           ].join('\n')
                         )
                       }
@@ -446,7 +446,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                       }
                     }}
                     className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                    title="答疑、澄清、变更公告——存进项目 inbox 侧的 答疑澄清/，解析和投标时分身会读"
+                    title="答疑、澄清、变更公告——存进项目 inbox 侧的 02_答疑澄清/，解析和投标时分身会读"
                   >
                     ＋ 答疑澄清
                   </button>
