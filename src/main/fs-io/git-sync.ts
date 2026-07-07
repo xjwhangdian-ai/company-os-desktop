@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { delimiter } from 'node:path'
 import { promisify } from 'node:util'
 import type { SyncResult, SyncStatus } from '@shared/agent-types'
 
@@ -8,12 +9,17 @@ const execFileAsync = promisify(execFile)
 // 数据仓库的同步中枢是 git 远程（管理员机器指 GitHub，成员机器可指内网裸仓库）。
 // .gitignore 已把 inbox/outputs/knowledge-internal 排除在外——同步的只有"大脑与库"，
 // 上传原件与分身产出天然留在本机，这里不需要再做任何过滤。
-// 打包 App 从 Finder 启动时 PATH 不含 Homebrew，git/git-lfs 路径显式补上；
-// 代理环境变量（clash 等通过 launchd 注入的 HTTPS_PROXY）随 process.env 自然继承。
+// 打包 App 从桌面启动时 PATH 可能不含 git 安装目录，这里按平台显式补上；
+// 代理环境变量（如 HTTPS_PROXY）随 process.env 自然继承。
+
+const EXTRA_GIT_DIRS =
+  process.platform === 'win32'
+    ? ['C:\\Program Files\\Git\\cmd', 'C:\\Program Files\\Git\\bin', 'C:\\Program Files (x86)\\Git\\cmd']
+    : ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 
 const GIT_ENV = {
   ...process.env,
-  PATH: ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', process.env.PATH ?? ''].join(':')
+  PATH: [...EXTRA_GIT_DIRS, process.env.PATH ?? ''].join(delimiter)
 }
 
 async function git(dataDir: string, args: string[], timeoutMs = 30000): Promise<{ stdout: string; stderr: string }> {

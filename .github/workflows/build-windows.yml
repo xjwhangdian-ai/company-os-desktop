@@ -1,0 +1,54 @@
+name: Build Windows Installer
+
+# 在 GitHub 的 Windows 云机器上打 NSIS 安装包——绕开 arm64 Mac 本地打 Windows 包需要 wine 的坑。
+# 触发方式：
+#   - 手动：Actions 页面点 "Run workflow"（workflow_dispatch）
+#   - 打 tag：推送 v* 标签（如 v0.1.0）时自动构建并发到 Release
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer (NSIS)
+        run: npm run build:win
+        env:
+          # 未做代码签名——不触发签名流程，出未签名安装包
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+          if-no-files-found: error
+          retention-days: 30
+
+      # 打 v* 标签时，把安装包附到 GitHub Release，团队直接从 Release 下载
+      - name: Publish to Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.exe
+            dist/*.exe.blockmap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

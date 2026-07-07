@@ -1,34 +1,49 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, extname, join } from 'node:path'
+import { basename, delimiter, dirname, extname, join } from 'node:path'
 import type { TranscribeEvent, WhisperStatus } from '@shared/agent-types'
 
 // ============ 本地音频转写（whisper） ============
-// Claude 系模型不接受音频输入，转写必须在本地完成。用 openai-whisper 的 CLI
-// （brew install ffmpeg openai-whisper）：首次运行自动下载模型，全程离线、免 API 费。
-// 打包后的 App 从 Finder 启动时拿不到 Homebrew 的 PATH，这里显式补上常见安装路径。
+// Claude 系模型不接受音频输入，转写必须在本地完成。用 openai-whisper 的 CLI：
+//   mac：brew install ffmpeg openai-whisper；Windows：pip install openai-whisper + 装 ffmpeg 并加入 PATH。
+// 首次运行自动下载模型，全程离线、免 API 费。
+// 桌面启动的 App PATH 可能不含安装目录：mac 补 Homebrew 路径；两个平台都再用 which/where 兜底找 PATH 上的可执行文件。
 
-const AUGMENTED_PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH ?? ''].join(':')
+const isWin = process.platform === 'win32'
+const AUGMENTED_PATH = [...(isWin ? [] : ['/opt/homebrew/bin', '/usr/local/bin']), process.env.PATH ?? ''].join(delimiter)
 
-const WHISPER_CANDIDATES = [
-  '/opt/homebrew/bin/whisper',
-  '/usr/local/bin/whisper',
-  join(homedir(), '.local', 'bin', 'whisper') // pipx 安装位置
-]
-const FFMPEG_CANDIDATES = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg']
+const WHISPER_CANDIDATES = isWin
+  ? []
+  : ['/opt/homebrew/bin/whisper', '/usr/local/bin/whisper', join(homedir(), '.local', 'bin', 'whisper')]
+const FFMPEG_CANDIDATES = isWin ? [] : ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg']
 
 function findBinary(candidates: string[]): string | null {
   for (const p of candidates) if (existsSync(p)) return p
   return null
 }
 
+/** which/where 兜底：在 PATH 上查可执行文件（Windows 的 whisper.exe/ffmpeg.exe 装在 PATH 里，不在固定目录） */
+function resolveOnPath(name: string): string | null {
+  try {
+    const r = spawnSync(isWin ? 'where' : 'which', [name], { encoding: 'utf-8', env: { ...process.env, PATH: AUGMENTED_PATH } })
+    if (r.status === 0) {
+      const first = String(r.stdout).split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0]
+      if (first && existsSync(first)) return first
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 export function getWhisperStatus(): WhisperStatus {
-  const whisperPath = findBinary(WHISPER_CANDIDATES)
+  const whisperPath = findBinary(WHISPER_CANDIDATES) ?? resolveOnPath('whisper')
+  const ffmpegFound = findBinary(FFMPEG_CANDIDATES) !== null || resolveOnPath('ffmpeg') !== null
   return {
     found: whisperPath !== null,
     whisperPath: whisperPath ?? undefined,
-    ffmpegFound: findBinary(FFMPEG_CANDIDATES) !== null
+    ffmpegFound
   }
 }
 

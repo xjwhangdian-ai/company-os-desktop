@@ -16,6 +16,10 @@ export async function runGzhStyle(dataDir: string, inputMdPath: string): Promise
     throw new Error('未找到 tools/gzh/gzh_style.js，请确认数据目录是否是完整的 company-os 仓库')
   }
   const outputPath = inputMdPath.replace(/\.md$/i, '') + '_排版预览.html'
-  await execFileAsync('node', [scriptPath, inputMdPath, outputPath])
+  // 用 App 自带的 Electron 运行时充当 Node（ELECTRON_RUN_AS_NODE），
+  // Windows 成员机无需另装 Node.js 也能跑排版脚本；mac/win 通用。
+  await execFileAsync(process.execPath, [scriptPath, inputMdPath, outputPath], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+  })
   return outputPath
 }

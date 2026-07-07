@@ -11,6 +11,11 @@ import { extractZjgovParams, readTenderSource } from './intel-source'
 
 const INBOX_BIDDING_REL = join('inbox', '03_招投标_bidding')
 
+// 自动下载/探测依赖 Python(Selenium)+ 已登录调试 Chrome 的抓取栈，目前只在 Mac 管理员机就绪。
+// 非 macOS（如 Windows 成员机）直接给出手动下载指引，避免 spawn 不存在的可执行文件报错。
+const AUTO_DOWNLOAD_SUPPORTED = process.platform === 'darwin'
+const WIN_MANUAL_HINT = '当前系统不支持自动下载招标文件，请点项目名超链接在浏览器手动下载后，把文件拖进项目 inbox/01_招标文件/'
+
 /** Chrome 调试端口 9222 是否就绪；未就绪则拉起（独立 profile，需已登录政采会员） */
 function ensureChromeDebug(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -115,6 +120,9 @@ function runProbe(
  * 采购意向类公告的「无招标文件」判断在 UI 侧按 公告类型 拦截，不走这里。
  */
 export async function probeTenderFile(dataDir: string, folderName: string): Promise<TenderProbeResult> {
+  if (!AUTO_DOWNLOAD_SUPPORTED) {
+    return { ok: false, needsLogin: false, 附件: [], 说明: WIN_MANUAL_HINT }
+  }
   const src = readTenderSource(dataDir, folderName)
   if (!src || !src.公告链接) {
     return { ok: false, needsLogin: false, 附件: [], 说明: '本项目无公告链接，请手动拖入招标文件' }
@@ -146,6 +154,9 @@ export async function probeTenderFile(dataDir: string, folderName: string): Prom
  * 登录感知：脚本复用 Chrome 调试 profile 的登录态；若被反爬/未登录拦截，返回 needsLogin=true 让 UI 提示先登录。
  */
 export async function downloadTenderFile(dataDir: string, folderName: string): Promise<TenderDownloadResult> {
+  if (!AUTO_DOWNLOAD_SUPPORTED) {
+    return { ok: false, 已下载文件数: 0, needsLogin: false, 说明: WIN_MANUAL_HINT }
+  }
   const src = readTenderSource(dataDir, folderName)
   if (!src || !src.公告链接) {
     return { ok: false, 已下载文件数: 0, needsLogin: false, 说明: '本项目无公告链接（非情报推送来的项目），请手动拖入招标文件' }
