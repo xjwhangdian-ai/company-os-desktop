@@ -10,6 +10,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write # 打 v* 标签时创建 Release、上传安装包需要写权限
+
 jobs:
   build-win:
     runs-on: windows-latest
