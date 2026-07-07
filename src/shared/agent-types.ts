@@ -120,8 +120,83 @@ export interface BiddingProject {
   hasDraft: boolean
   /** 项目卡；还没建卡时为 null（UI 显示"未填"并可一键创建） */
   card: BidProjectCard | null
+  /** 情报推送来源（_情报来源.json）：公告链接 + 能否自动下载招标文件；手工建的项目为 null */
+  tenderSource: TenderSource | null
   /** 两侧文件合并列表（relativePath 以 inbox/ 或 outputs/ 开头区分来源） */
   files: OutputEntry[]
+}
+
+export const INTEL_FEED_TYPES = ['采购意向', '意见征询', '采购公告', '采购结果公告'] as const
+export type IntelFeedType = (typeof INTEL_FEED_TYPES)[number]
+
+/** intel 每日追踪的招投标信息条目：全量信息流（{日期}_信息流.json）合并分身相关度标注（{日期}_候选项目.json） */
+export interface IntelCandidate {
+  /** `${日期}|${项目名称}`——处理状态文件用它去重 */
+  key: string
+  日期: string
+  类型: IntelFeedType
+  项目名称: string
+  采购单位: string
+  /** 预算/金额原文（如 "¥500.0万"），项目卡回填时去掉货币符号 */
+  预算: string
+  中标单位: string
+  区县: string
+  标签: string
+  链接: string
+  平台: string
+  台州公安: boolean
+  /** intel 分身标注的相关度；未标注（纯信息流条目）为 null */
+  相关度: '高' | '中' | null
+  理由: string
+}
+
+export interface IntelConfirmResult {
+  ok: boolean
+  项目文件夹: string
+  说明: string
+}
+
+/** 招投标项目的招标文件下载来源信息（供 UI 判断按钮状态） */
+export interface TenderSource {
+  公告链接: string
+  来源平台: string
+  /** 是否支持自动下载（当前仅浙江政采源） */
+  可自动下载: boolean
+  /** 公告类型（来自 _情报来源.json）：采购意向无招标文件、意见征询/采购公告需人工确认后下载；手工项目为 '' */
+  公告类型: IntelFeedType | ''
+}
+
+/** 下载前探测：列出招标公告的附件清单，供 UI 弹「人工确认后再下载」提示 */
+export interface TenderProbeResult {
+  ok: boolean
+  /** true=招标网站需先登录/过验证 */
+  needsLogin: boolean
+  /** 探测到的附件（仅文件名，不下载） */
+  附件: { name: string }[]
+  说明: string
+}
+
+export interface TenderDownloadResult {
+  ok: boolean
+  已下载文件数: number
+  /** true=招标网站需先登录/过验证，UI 提示用户在调试 Chrome 登录后重试 */
+  needsLogin: boolean
+  说明: string
+}
+
+export const INTEL_REPORT_TYPES = ['行业趋势', '政策文件'] as const
+export type IntelReportType = (typeof INTEL_REPORT_TYPES)[number]
+
+/** sgpjbg.com 研报情报条目：行业趋势 / 政策文件，链接指向报告下载页 */
+export interface IntelReport {
+  分类: IntelReportType
+  关键词: string
+  标题: string
+  链接: string
+  页数: number
+  发布日期: string
+  VIP: boolean
+  抓取日期: string
 }
 
 export interface BiddingUploadResult {

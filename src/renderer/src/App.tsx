@@ -12,6 +12,7 @@ import { BiddingWorkspace } from './pages/BiddingWorkspace'
 import { LegalWorkspace } from './pages/LegalWorkspace'
 import { OperationWorkspace } from './pages/OperationWorkspace'
 import { SalesWorkspace } from './pages/SalesWorkspace'
+import { IntelWorkspace } from './pages/IntelWorkspace'
 import { SolutionWorkspace } from './pages/SolutionWorkspace'
 
 type View = 'settings' | { agent: AgentName }
@@ -162,10 +163,13 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'solution' && (
           <SolutionWorkspace agent={activeAgent} />
         )}
+        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'intel' && (
+          <IntelWorkspace agent={activeAgent} />
+        )}
         {view !== 'settings' &&
           ready &&
           activeAgent &&
-          !['bidding', 'legal', 'operation', 'sales', 'solution'].includes(activeAgent.name) && (
+          !['bidding', 'legal', 'operation', 'sales', 'solution', 'intel'].includes(activeAgent.name) && (
             <GenericAgentPage agent={activeAgent} />
           )}
       </main>

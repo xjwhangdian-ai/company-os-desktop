@@ -48,7 +48,17 @@ import {
   uploadToSalesTemplate
 } from '../fs-io/upload-router'
 import { scanAgentOutputs } from '../fs-io/outputs-scanner'
-import { exportBiddingLedger, getMaterialLibraryCounts, listBiddingProjects, saveProjectCard } from '../fs-io/bidding-workflow'
+import {
+  exportBiddingLedger,
+  getMaterialLibraryCounts,
+  listBiddingProjects,
+  resolveBiddingProjectPaths,
+  saveProjectCard
+} from '../fs-io/bidding-workflow'
+import { confirmIntelCandidate, ignoreIntelCandidate, listIntelCandidates } from '../fs-io/intel-candidates'
+import { listIntelReports } from '../fs-io/intel-reports'
+import { downloadTenderFile, probeTenderFile } from '../fs-io/tender-download'
+import { purgeStaleIntelData } from '../fs-io/intel-purge'
 import { listLegalDocs, listLegalTemplates, markReviewed } from '../fs-io/legal-workflow'
 import {
   addFollowUp,
@@ -178,6 +188,23 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.uploadBiddingClarification, (_e, projectFolder: string, sourcePath: string) =>
     uploadToBiddingClarification(getDataDir(), projectFolder, sourcePath)
   )
+  ipcMain.handle(IPC.biddingListCandidates, () => listIntelCandidates(getDataDir()))
+  ipcMain.handle(IPC.biddingConfirmCandidate, (_e, key: string) => confirmIntelCandidate(getDataDir(), key))
+  ipcMain.handle(IPC.biddingIgnoreCandidate, (_e, key: string) => ignoreIntelCandidate(getDataDir(), key))
+  ipcMain.handle(IPC.biddingDownloadTender, (_e, folderName: string) => downloadTenderFile(getDataDir(), folderName))
+  ipcMain.handle(IPC.biddingProbeTender, (_e, folderName: string) => probeTenderFile(getDataDir(), folderName))
+  ipcMain.handle(IPC.biddingDeleteProject, async (_e, folderName: string) => {
+    const paths = resolveBiddingProjectPaths(getDataDir(), folderName)
+    if (paths.length === 0) return { ok: false, 说明: '项目文件夹不存在（可能已删除），请刷新' }
+    try {
+      for (const p of paths) await shell.trashItem(p)
+      return { ok: true, 说明: `已把「${folderName.slice(11)}」移入废纸篓（可从废纸篓恢复）` }
+    } catch (err) {
+      return { ok: false, 说明: `删除失败：${String(err)}` }
+    }
+  })
+  ipcMain.handle(IPC.intelListReports, () => listIntelReports(getDataDir()))
+  ipcMain.handle(IPC.intelPurgeStale, () => purgeStaleIntelData(getDataDir()))
 
   ipcMain.handle(IPC.legalListDocs, () => listLegalDocs(getDataDir()))
   ipcMain.handle(IPC.legalMarkReviewed, (_e, fileName: string) => markReviewed(getDataDir(), fileName))

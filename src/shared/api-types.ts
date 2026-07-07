@@ -10,6 +10,11 @@ import type {
   ContractTemplate,
   CustomerEntry,
   CustomerFields,
+  IntelCandidate,
+  IntelConfirmResult,
+  IntelReport,
+  TenderDownloadResult,
+  TenderProbeResult,
   LegalDoc,
   LinkedFile,
   MaterialLibraryCounts,
@@ -98,6 +103,23 @@ export interface CompanyOsApi {
     exportLedger(): Promise<{ path: string; count: number }>
     /** 答疑/澄清文件上传到项目 inbox 侧的 答疑澄清/ 子文件夹 */
     uploadClarification(projectFolder: string, sourcePath: string): Promise<UploadResult>
+    /** intel 每日追踪推送的待确认候选项目（已确认/已忽略的不再返回） */
+    listCandidates(): Promise<IntelCandidate[]>
+    /** 人工确认跟进：建项目档+项目卡（自动填业主单位/预算金额）+ 写机读溯源 sidecar；不下载招标文件 */
+    confirmCandidate(key: string): Promise<IntelConfirmResult>
+    ignoreCandidate(key: string): Promise<void>
+    /** 下载某项目的招标文件（浙江政采源，登录感知）→ inbox 01_招标文件/，并回填招标编号 */
+    downloadTender(folderName: string): Promise<TenderDownloadResult>
+    /** 下载前探测招标公告附件清单（不下载），供 UI 弹「人工确认后再下载」提示 */
+    probeTender(folderName: string): Promise<TenderProbeResult>
+    /** 忽略/删除项目：inbox+outputs 两侧文件夹移入系统废纸篓（可从废纸篓恢复） */
+    deleteProject(folderName: string): Promise<{ ok: boolean; 说明: string }>
+  }
+  intel: {
+    /** sgpjbg.com 研报情报（行业趋势 + 政策文件），取最新一天信息流 */
+    listReports(): Promise<IntelReport[]>
+    /** 清除超过三天的旧情报机读数据（信息流/候选/研报 JSON + inbox 原始抓取），保留日报 */
+    purgeStale(): Promise<{ purged: string[] }>
   }
   legal: {
     listDocs(): Promise<{ pending: LegalDoc[]; reviewed: LegalDoc[] }>

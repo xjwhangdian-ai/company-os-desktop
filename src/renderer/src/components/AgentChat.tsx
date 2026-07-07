@@ -9,6 +9,8 @@ import { HELP_CONTENT } from '../lib/help-content'
 
 interface AgentChatProps {
   agent: AgentDisplayMeta
+  /** 会话分桶键：默认按分身名共用一个对话；招投标按项目传 `bidding::{项目文件夹}`，每个项目独立对话 */
+  sessionKey?: string
   /** 上传文件落哪个目录：默认 inbox/，bidding 场景可传 biddingRoot */
   uploadFn?: (sourcePath: string) => ReturnType<typeof window.api.upload.generic>
   /** 外部注入待发送草稿（如工作台的快捷动作按钮），填入输入框后清空，不自动发送 */
@@ -21,17 +23,19 @@ interface AgentChatProps {
 
 export function AgentChat({
   agent,
+  sessionKey: sessionKeyProp,
   uploadFn,
   pendingPrompt,
   onPendingPromptConsumed,
   pendingAttachments: injectedAttachments,
   onPendingAttachmentsConsumed
 }: AgentChatProps): React.JSX.Element {
+  const sessionKey = sessionKeyProp ?? agent.name
   const [input, setInput] = useState('')
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const session = useChatStore((s) => s.sessions[agent.name])
+  const session = useChatStore((s) => s.sessions[sessionKey])
   const sendMessage = useChatStore((s) => s.sendMessage)
   const cancelRun = useChatStore((s) => s.cancelRun)
   const initListener = useChatStore((s) => s.initListener)
@@ -63,7 +67,7 @@ export function AgentChat({
   function handleSend(): void {
     const text = input.trim()
     if (!text || isRunning) return
-    sendMessage(agent.name as AgentName, text, pendingAttachments.length > 0 ? pendingAttachments : undefined)
+    sendMessage(agent.name as AgentName, sessionKey, text, pendingAttachments.length > 0 ? pendingAttachments : undefined)
     setInput('')
     setPendingAttachments([])
   }
@@ -78,7 +82,7 @@ export function AgentChat({
         <div className="app-no-drag flex items-center gap-2">
           {isRunning && (
             <button
-              onClick={() => cancelRun(agent.name as AgentName)}
+              onClick={() => cancelRun(sessionKey)}
               className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-500 hover:bg-red-50"
             >
               停止

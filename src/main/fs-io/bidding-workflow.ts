@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync,
 import { join, relative } from 'node:path'
 import type { BidProjectCard, BiddingProject, MaterialLibraryCounts, OutputEntry } from '@shared/agent-types'
 import { BID_PROJECT_STATUSES } from '@shared/agent-types'
+import { readTenderSource } from './intel-source'
 
 // ============ 招投标项目 = inbox/outputs 两侧同名文件夹配对 ============
 //   inbox/03_招投标_bidding/{YYYY-MM-DD_项目}/    ← 招标原件（App 上传时机械建夹）
@@ -107,7 +108,7 @@ function cardPath(dataDir: string, folderName: string): string {
   return join(dataDir, OUTPUTS_ROOT_REL, folderName, CARD_FILE)
 }
 
-function readProjectCard(dataDir: string, folderName: string): BidProjectCard | null {
+export function readProjectCard(dataDir: string, folderName: string): BidProjectCard | null {
   const p = cardPath(dataDir, folderName)
   if (!existsSync(p)) return null
   try {
@@ -225,6 +226,7 @@ export function listBiddingProjects(dataDir: string): BiddingProject[] {
       inboxPath,
       outputsPath,
       card: readProjectCard(dataDir, folderName),
+      tenderSource: readTenderSource(dataDir, folderName),
       hasSourceFile: inboxPath !== undefined && flat(listFilesRecursive(dataDir, inboxPath)).length > 0,
       hasParseReport: fileNames.some((f) => f.includes('招标解析')),
       hasChallengeLetter: fileNames.some((f) => f.includes('质疑函')),
@@ -237,6 +239,17 @@ export function listBiddingProjects(dataDir: string): BiddingProject[] {
 
   projects.sort((a, b) => (a.date < b.date ? 1 : -1))
   return projects
+}
+
+/** 返回项目 inbox/outputs 两侧文件夹的绝对路径（仅返回磁盘上确实存在的一侧）。删除项目时用它拿到要清理的路径。 */
+export function resolveBiddingProjectPaths(dataDir: string, folderName: string): string[] {
+  if (!PROJECT_FOLDER_PATTERN.test(folderName)) return []
+  const paths: string[] = []
+  for (const rel of [INBOX_ROOT_REL, OUTPUTS_ROOT_REL]) {
+    const p = join(dataDir, rel, folderName)
+    if (existsSync(p)) paths.push(p)
+  }
+  return paths
 }
 
 /** 素材库五分类的文件数量粗判——只做数量统计，不做语义匹配（精确判断留给分身在生成时做） */

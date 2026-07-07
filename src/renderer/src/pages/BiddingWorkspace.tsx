@@ -18,6 +18,16 @@ function Badge({ active, label }: { active: boolean; label: string }): React.JSX
   )
 }
 
+/** 招投标台账按公告类型分组：采购意向/意见征询/采购公告 + 手工或旧项目归「其他」 */
+const BID_CATEGORIES = ['采购意向', '意见征询', '采购公告', '其他'] as const
+type BidCategory = (typeof BID_CATEGORIES)[number]
+const CATEGORY_EMOJI: Record<BidCategory, string> = { 采购意向: '📌', 意见征询: '📋', 采购公告: '📢', 其他: '📁' }
+
+function categoryOf(p: BiddingProject): BidCategory {
+  const t = p.tenderSource?.公告类型
+  return t === '采购意向' || t === '意见征询' || t === '采购公告' ? t : '其他'
+}
+
 const STATUS_STYLE: Record<BidProjectStatus, string> = {
   跟进中: 'bg-blue-50 text-blue-600',
   已投标: 'bg-amber-50 text-amber-600',
@@ -223,10 +233,72 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
+  const [downloadingTender, setDownloadingTender] = useState(false)
+  const [openCat, setOpenCat] = useState<Record<BidCategory, boolean>>({
+    采购意向: true,
+    意见征询: true,
+    采购公告: true,
+    其他: true
+  })
 
   function flash(text: string): void {
     setNotice(text)
-    setTimeout(() => setNotice(null), 4000)
+    setTimeout(() => setNotice(null), 6000)
+  }
+
+  async function handleDownloadTender(p: BiddingProject): Promise<void> {
+    // 采购意向公告没有正式招标文件，直接提示、不走下载
+    if (p.tenderSource?.公告类型 === '采购意向') {
+      flash('采购意向公告无正式招标文件，无需下载；如需了解详情点项目名超链接查看公告原文')
+      return
+    }
+    if (!p.tenderSource?.可自动下载) {
+      flash('该来源不支持自动下载，请点项目名超链接手动下载后拖入项目')
+      return
+    }
+    // 意见征询 / 采购公告：先探测附件清单，人工确认后再下载
+    setDownloadingTender(true)
+    flash('正在探测招标公告附件…')
+    let probe
+    try {
+      probe = await window.api.bidding.probeTender(p.folderName)
+    } finally {
+      setDownloadingTender(false)
+    }
+    if (!probe.ok || probe.附件.length === 0) {
+      flash(probe.说明)
+      return
+    }
+    const names = probe.附件.map((a, i) => `${i + 1}. ${a.name}`).join('\n')
+    const confirmed = window.confirm(
+      `该招标公告共 ${probe.附件.length} 个附件：\n\n${names}\n\n确认下载到项目 inbox/01_招标文件/ 吗？`
+    )
+    if (!confirmed) {
+      flash('已取消下载')
+      return
+    }
+    setDownloadingTender(true)
+    flash('正在下载招标文件（首次会拉起浏览器，约需十几秒）…')
+    try {
+      const r = await window.api.bidding.downloadTender(p.folderName)
+      flash(r.说明)
+      if (r.ok) await refresh()
+    } finally {
+      setDownloadingTender(false)
+    }
+  }
+
+  async function handleDeleteProject(p: BiddingProject): Promise<void> {
+    const confirmed = window.confirm(
+      `确定忽略并删除项目「${p.projectName}」吗？\n\n将把该项目 inbox 与 outputs 两侧文件夹移入系统废纸篓（可从废纸篓恢复）。`
+    )
+    if (!confirmed) return
+    const r = await window.api.bidding.deleteProject(p.folderName)
+    flash(r.说明)
+    if (r.ok) {
+      if (selected === p.folderName) setSelected(null)
+      await refresh()
+    }
   }
 
   async function refresh(): Promise<void> {
@@ -263,6 +335,12 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
 
   const sorted = useMemo(() => ledgerSort(projects), [projects])
   const filtered = sorted.filter((p) => statusFilter === '全部' || (p.card?.状态 ?? '跟进中') === statusFilter)
+  const grouped = useMemo(() => {
+    const g = new Map<BidCategory, BiddingProject[]>()
+    for (const c of BID_CATEGORIES) g.set(c, [])
+    for (const p of filtered) g.get(categoryOf(p))?.push(p)
+    return g
+  }, [filtered])
 
   const project = projects.find((p) => p.folderName === selected) ?? null
   const flatFiles = (entries: BiddingProject['files']): typeof entries =>
@@ -320,32 +398,56 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
           </div>
         </div>
 
-        <div className="flex-1 space-y-1.5 overflow-y-auto p-3 pt-0">
-          {filtered.map((p) => {
-            const status = p.card?.状态 ?? '跟进中'
+        <div className="flex-1 space-y-2 overflow-y-auto p-3 pt-0">
+          {BID_CATEGORIES.map((cat) => {
+            const items = grouped.get(cat) ?? []
+            if (items.length === 0) return null
+            const open = openCat[cat]
             return (
-              <button
-                key={p.folderName}
-                onClick={() => {
-                  setSelected(p.folderName)
-                  setShowMaterialLib(false)
-                  setShowProjectUpload(false)
-                }}
-                className={`block w-full rounded-lg border px-3 py-2 text-left text-xs ${
-                  selected === p.folderName ? 'border-jushi-accent bg-white shadow-sm' : 'border-transparent bg-white hover:border-slate-200'
-                }`}
-              >
-                <div className="truncate font-medium text-slate-700">{p.projectName}</div>
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span className={`rounded-full px-1.5 py-0.5 ${STATUS_STYLE[status]}`}>{status}</span>
-                  <DeadlineTag card={p.card} />
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  <Badge active={p.hasParseReport} label="解析" />
-                  <Badge active={p.hasChallengeLetter} label="质疑" />
-                  <Badge active={p.hasDraft} label="投标" />
-                </div>
-              </button>
+              <div key={cat} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <button
+                  onClick={() => setOpenCat((s) => ({ ...s, [cat]: !s[cat] }))}
+                  className="flex w-full items-center justify-between bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600"
+                >
+                  <span>
+                    {CATEGORY_EMOJI[cat]} {cat}（{items.length}）
+                  </span>
+                  <span>{open ? '▾' : '▸'}</span>
+                </button>
+                {open && (
+                  <div className="space-y-1.5 bg-slate-50 p-2">
+                    {items.map((p) => {
+                      const status = p.card?.状态 ?? '跟进中'
+                      return (
+                        <button
+                          key={p.folderName}
+                          onClick={() => {
+                            setSelected(p.folderName)
+                            setShowMaterialLib(false)
+                            setShowProjectUpload(false)
+                          }}
+                          className={`block w-full rounded-lg border px-3 py-2 text-left text-xs ${
+                            selected === p.folderName
+                              ? 'border-jushi-accent bg-white shadow-sm'
+                              : 'border-transparent bg-white hover:border-slate-200'
+                          }`}
+                        >
+                          <div className="truncate font-medium text-slate-700">{p.projectName}</div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className={`rounded-full px-1.5 py-0.5 ${STATUS_STYLE[status]}`}>{status}</span>
+                            <DeadlineTag card={p.card} />
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            <Badge active={p.hasParseReport} label="解析" />
+                            <Badge active={p.hasChallengeLetter} label="质疑" />
+                            <Badge active={p.hasDraft} label="投标" />
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             )
           })}
           {filtered.length === 0 && (
@@ -369,13 +471,40 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
               <div className="max-h-[55%] overflow-y-auto border-b border-slate-200 bg-white px-5 py-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-800">{project.projectName}</h2>
+                    {project.tenderSource?.公告链接 ? (
+                      <a
+                        href={project.tenderSource.公告链接}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="打开招标公告原文"
+                        className="text-sm font-semibold text-jushi-accent underline-offset-2 hover:underline"
+                      >
+                        {project.projectName}
+                        <span className="ml-0.5 text-[10px]">↗</span>
+                      </a>
+                    ) : (
+                      <h2 className="text-sm font-semibold text-slate-800">{project.projectName}</h2>
+                    )}
                     <p className="text-xs text-slate-400">
                       {project.folderName}
                       {project.card?.业主单位 && <> · {project.card.业主单位}</>}
                     </p>
                   </div>
                   <div className="flex gap-2">
+                    {project.tenderSource && (
+                      <button
+                        disabled={downloadingTender}
+                        onClick={() => handleDownloadTender(project)}
+                        title={
+                          project.tenderSource.可自动下载
+                            ? '从浙江政采自动下载招标文件（复用已登录的浏览器会话）'
+                            : '该来源不支持自动下载，点项目名超链接手动下载'
+                        }
+                        className="rounded-md border border-jushi-accent px-3 py-1.5 text-xs font-medium text-jushi-accent hover:bg-jushi-accent/5 disabled:opacity-50"
+                      >
+                        {downloadingTender ? '下载中…' : '⬇ 下载招标文件'}
+                      </button>
+                    )}
                     <button
                       onClick={() => setPendingPrompt(buildParsePrompt(project))}
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
@@ -424,6 +553,13 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                         导出三册 Word
                       </button>
                     )}
+                    <button
+                      onClick={() => handleDeleteProject(project)}
+                      title="忽略此项目：移入系统废纸篓（可恢复）"
+                      className="rounded-md border border-rose-300 px-3 py-1.5 text-xs text-rose-500 hover:bg-rose-50"
+                    >
+                      忽略
+                    </button>
                   </div>
                 </div>
 
@@ -477,7 +613,9 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
             )}
             <div className="flex-1 overflow-hidden">
               <AgentChat
+                key={project ? project.folderName : '__no_project__'}
                 agent={agent}
+                sessionKey={project ? `bidding::${project.folderName}` : 'bidding'}
                 pendingPrompt={pendingPrompt}
                 onPendingPromptConsumed={() => setPendingPrompt(null)}
               />

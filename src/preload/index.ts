@@ -66,7 +66,17 @@ const api: CompanyOsApi = {
     saveCard: (folderName: string, card: BidProjectCard) => ipcRenderer.invoke(IPC.biddingSaveCard, folderName, card),
     exportLedger: () => ipcRenderer.invoke(IPC.biddingExportLedger),
     uploadClarification: (projectFolder: string, sourcePath: string) =>
-      ipcRenderer.invoke(IPC.uploadBiddingClarification, projectFolder, sourcePath)
+      ipcRenderer.invoke(IPC.uploadBiddingClarification, projectFolder, sourcePath),
+    listCandidates: () => ipcRenderer.invoke(IPC.biddingListCandidates),
+    confirmCandidate: (key: string) => ipcRenderer.invoke(IPC.biddingConfirmCandidate, key),
+    ignoreCandidate: (key: string) => ipcRenderer.invoke(IPC.biddingIgnoreCandidate, key),
+    downloadTender: (folderName: string) => ipcRenderer.invoke(IPC.biddingDownloadTender, folderName),
+    probeTender: (folderName: string) => ipcRenderer.invoke(IPC.biddingProbeTender, folderName),
+    deleteProject: (folderName: string) => ipcRenderer.invoke(IPC.biddingDeleteProject, folderName)
+  },
+  intel: {
+    listReports: () => ipcRenderer.invoke(IPC.intelListReports),
+    purgeStale: () => ipcRenderer.invoke(IPC.intelPurgeStale)
   },
   legal: {
     listDocs: () => ipcRenderer.invoke(IPC.legalListDocs),

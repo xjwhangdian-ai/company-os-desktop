@@ -12,12 +12,18 @@ interface ChatSession {
 }
 
 interface ChatState {
-  sessions: Partial<Record<AgentName, ChatSession>>
+  /** 会话按 sessionKey 分桶：默认等于分身名；招投标等场景传 `bidding::{项目文件夹}` 让每个项目各有独立对话 */
+  sessions: Record<string, ChatSession>
   listenerInitialized: boolean
-  runIdToAgent: Record<string, AgentName>
+  runIdToSessionKey: Record<string, string>
   initListener: () => void
-  sendMessage: (agentName: AgentName, text: string, attachments?: ChatAttachment[]) => Promise<void>
-  cancelRun: (agentName: AgentName) => Promise<void>
+  sendMessage: (
+    agentName: AgentName,
+    sessionKey: string,
+    text: string,
+    attachments?: ChatAttachment[]
+  ) => Promise<void>
+  cancelRun: (sessionKey: string) => Promise<void>
 }
 
 function emptySession(): ChatSession {
@@ -57,22 +63,22 @@ function updateToolUse(
 export const useChatStore = create<ChatState>((set, get) => ({
   sessions: {},
   listenerInitialized: false,
-  runIdToAgent: {},
+  runIdToSessionKey: {},
 
   initListener: () => {
     if (get().listenerInitialized) return
     set({ listenerInitialized: true })
 
     window.api.agentRun.onEvent((runId: string, event: AgentStreamEvent) => {
-      const agentName = get().runIdToAgent[runId]
-      if (!agentName) return
+      const sessionKey = get().runIdToSessionKey[runId]
+      if (!sessionKey) return
 
       set((state) => {
-        const session = state.sessions[agentName]
+        const session = state.sessions[sessionKey]
         if (!session) return state
 
         const replaceSession = (patch: Partial<ChatSession>): Partial<ChatState> => ({
-          sessions: { ...state.sessions, [agentName]: { ...session, ...patch } }
+          sessions: { ...state.sessions, [sessionKey]: { ...session, ...patch } }
         })
 
         switch (event.type) {
@@ -144,9 +150,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })
   },
 
-  sendMessage: async (agentName, text, attachments) => {
+  sendMessage: async (agentName, sessionKey, text, attachments) => {
     const runId = uuid()
-    const session = get().sessions[agentName] ?? emptySession()
+    const session = get().sessions[sessionKey] ?? emptySession()
 
     const userMsg: ChatMessage = {
       id: uuid(),
@@ -167,14 +173,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       sessions: {
         ...state.sessions,
-        [agentName]: {
+        [sessionKey]: {
           ...session,
           isRunning: true,
           runId,
           messages: [...session.messages, userMsg, assistantPlaceholder]
         }
       },
-      runIdToAgent: { ...state.runIdToAgent, [runId]: agentName }
+      runIdToSessionKey: { ...state.runIdToSessionKey, [runId]: sessionKey }
     }))
 
     let prompt = text
@@ -188,12 +194,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await window.api.agentRun.start({ runId, agentName, prompt, resumeSessionId: session.sdkSessionId, userName })
     } catch (err) {
       set((state) => {
-        const s = state.sessions[agentName]
+        const s = state.sessions[sessionKey]
         if (!s) return state
         return {
           sessions: {
             ...state.sessions,
-            [agentName]: {
+            [sessionKey]: {
               ...s,
               isRunning: false,
               messages: updateLastAssistantMessage(s.messages, (m) => ({
@@ -208,8 +214,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  cancelRun: async (agentName) => {
-    const session = get().sessions[agentName]
+  cancelRun: async (sessionKey) => {
+    const session = get().sessions[sessionKey]
     if (session?.runId) {
       await window.api.agentRun.cancel(session.runId)
     }
