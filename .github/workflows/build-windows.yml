@@ -27,7 +27,9 @@ jobs:
         run: npm ci
 
       - name: Build Windows installer (NSIS)
-        run: npm run build:win
+        # --publish never：CI 下 electron-builder 会自动尝试发布（需 GH_TOKEN），这里关掉，
+        # 分发交给下面的 upload-artifact / Release 步骤
+        run: npm run build:win -- --publish never
         env:
           # 未做代码签名——不触发签名流程，出未签名安装包
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
