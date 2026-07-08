@@ -82,8 +82,10 @@ export const IPC = {
   solutionListFiles: 'solution:list-files',
   solutionUpload: 'solution:upload',
   solutionRemoveFile: 'solution:remove-file',
-  solutionWhisperStatus: 'solution:whisper-status',
-  solutionTranscribeStart: 'solution:transcribe-start',
-  solutionTranscribeCancel: 'solution:transcribe-cancel',
-  solutionTranscribeEvent: 'solution:transcribe-event'
+
+  financeOverview: 'finance:overview',
+  financeToggleTask: 'finance:toggle-task',
+  financeSaveEmployees: 'finance:save-employees',
+  financeUploadReceipt: 'finance:upload-receipt',
+  financeListReceipts: 'finance:list-receipts'
 } as const

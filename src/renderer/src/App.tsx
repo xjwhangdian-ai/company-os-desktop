@@ -14,6 +14,7 @@ import { OperationWorkspace } from './pages/OperationWorkspace'
 import { SalesWorkspace } from './pages/SalesWorkspace'
 import { IntelWorkspace } from './pages/IntelWorkspace'
 import { SolutionWorkspace } from './pages/SolutionWorkspace'
+import { FinanceWorkspace } from './pages/FinanceWorkspace'
 
 type View = 'settings' | { agent: AgentName }
 
@@ -55,6 +56,23 @@ export default function App(): React.JSX.Element {
       setView('settings')
     }
   }, [loading, ready, view])
+
+  // 发薪日提醒（默认每月10号）：打开 App 时检查，一天只提醒一次；打开财务工作台可看详情
+  useEffect(() => {
+    if (!ready || !currentUser) return
+    window.api.finance
+      .overview()
+      .then((o) => {
+        if (!o.今天是发薪日) return
+        const stamp = `payday-notified-${o.月份}-${o.发薪日}`
+        if (localStorage.getItem(stamp)) return
+        localStorage.setItem(stamp, '1')
+        new Notification('💰 今天是发工资日', {
+          body: `每月${o.发薪日}号发放工资——打开「财务」工作台可生成本月工资表（${o.员工.filter((e) => e.参保).length} 人参保）`
+        })
+      })
+      .catch(() => null)
+  }, [ready, currentUser])
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>
@@ -166,10 +184,13 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'intel' && (
           <IntelWorkspace agent={activeAgent} />
         )}
+        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'finance' && (
+          <FinanceWorkspace agent={activeAgent} />
+        )}
         {view !== 'settings' &&
           ready &&
           activeAgent &&
-          !['bidding', 'legal', 'operation', 'sales', 'solution', 'intel'].includes(activeAgent.name) && (
+          !['bidding', 'legal', 'operation', 'sales', 'solution', 'intel', 'finance'].includes(activeAgent.name) && (
             <GenericAgentPage agent={activeAgent} />
           )}
       </main>

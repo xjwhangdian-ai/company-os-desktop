@@ -4,6 +4,7 @@ import type { CompanyOsApi, FileFilter, RunAgentRequest, UploadResult } from '@s
 import type { AgentStreamEvent } from '@shared/stream-events'
 import type {
   AgentName,
+  FinanceEmployee,
   BidProjectCard,
   MemberRole,
   ContractCategory,
@@ -13,7 +14,6 @@ import type {
   ProviderConfig,
   ProviderId,
   SolutionFileKind,
-  TranscribeEvent
 } from '@shared/agent-types'
 
 const api: CompanyOsApi = {
@@ -131,16 +131,14 @@ const api: CompanyOsApi = {
   solution: {
     listFiles: () => ipcRenderer.invoke(IPC.solutionListFiles),
     upload: (kind: SolutionFileKind, sourcePath: string) => ipcRenderer.invoke(IPC.solutionUpload, kind, sourcePath),
-    removeFile: (relativePath: string) => ipcRenderer.invoke(IPC.solutionRemoveFile, relativePath),
-    whisperStatus: () => ipcRenderer.invoke(IPC.solutionWhisperStatus),
-    transcribeStart: (jobId: string, audioRelativePath: string, model: string) =>
-      ipcRenderer.invoke(IPC.solutionTranscribeStart, jobId, audioRelativePath, model),
-    transcribeCancel: (jobId: string) => ipcRenderer.invoke(IPC.solutionTranscribeCancel, jobId),
-    onTranscribeEvent: (callback: (event: TranscribeEvent) => void) => {
-      const listener = (_e: unknown, event: TranscribeEvent): void => callback(event)
-      ipcRenderer.on(IPC.solutionTranscribeEvent, listener)
-      return () => ipcRenderer.removeListener(IPC.solutionTranscribeEvent, listener)
-    }
+    removeFile: (relativePath: string) => ipcRenderer.invoke(IPC.solutionRemoveFile, relativePath)
+  },
+  finance: {
+    overview: (ym?: string) => ipcRenderer.invoke(IPC.financeOverview, ym),
+    toggleTask: (ym: string, taskKey: string, done: boolean) => ipcRenderer.invoke(IPC.financeToggleTask, ym, taskKey, done),
+    saveEmployees: (员工: FinanceEmployee[], 发薪日: number) => ipcRenderer.invoke(IPC.financeSaveEmployees, 员工, 发薪日),
+    uploadReceipt: (ym: string, sourcePath: string) => ipcRenderer.invoke(IPC.financeUploadReceipt, ym, sourcePath),
+    listReceipts: (ym: string) => ipcRenderer.invoke(IPC.financeListReceipts, ym)
   }
 }
 

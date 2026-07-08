@@ -5,6 +5,7 @@ import { IPC } from '@shared/ipc-channels'
 import type { FileFilter, RunAgentRequest } from '@shared/api-types'
 import type {
   AgentName,
+  FinanceEmployee,
   AppConfig,
   BidProjectCard,
   MemberRole,
@@ -79,7 +80,7 @@ import {
 } from '../fs-io/sales-workflow'
 import { detectHeader, extractCompanion, readWorkbookRows } from '../fs-io/doc-extract'
 import { listSolutionFiles, removeSolutionFile, uploadSolutionFile } from '../fs-io/solution-workflow'
-import { cancelTranscribe, getWhisperStatus, startTranscribe } from '../fs-io/transcriber'
+import { getOverview, listReceipts, saveEmployees, toggleTask, uploadReceipt } from '../fs-io/finance-workflow'
 import { exportMarkdownToDocx } from '../docgen/docx-export'
 import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
 import { runGzhStyle } from '../fs-io/gzh-tool'
@@ -319,11 +320,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     uploadSolutionFile(getDataDir(), kind, sourcePath)
   )
   ipcMain.handle(IPC.solutionRemoveFile, (_e, relativePath: string) => removeSolutionFile(getDataDir(), relativePath))
-  ipcMain.handle(IPC.solutionWhisperStatus, () => getWhisperStatus())
-  ipcMain.handle(IPC.solutionTranscribeStart, (event, jobId: string, audioRelativePath: string, model: string) => {
-    startTranscribe(jobId, getDataDir(), audioRelativePath, model, (e) => {
-      event.sender.send(IPC.solutionTranscribeEvent, e)
-    })
-  })
-  ipcMain.handle(IPC.solutionTranscribeCancel, (_e, jobId: string) => cancelTranscribe(jobId))
+
+  ipcMain.handle(IPC.financeOverview, (_e, ym?: string) => getOverview(getDataDir(), ym))
+  ipcMain.handle(IPC.financeToggleTask, (_e, ym: string, taskKey: string, done: boolean) => toggleTask(getDataDir(), ym, taskKey, done))
+  ipcMain.handle(IPC.financeSaveEmployees, (_e, emp: FinanceEmployee[], payday: number) => saveEmployees(getDataDir(), emp, payday))
+  ipcMain.handle(IPC.financeUploadReceipt, (_e, ym: string, sourcePath: string) => uploadReceipt(getDataDir(), ym, sourcePath))
+  ipcMain.handle(IPC.financeListReceipts, (_e, ym: string) => listReceipts(getDataDir(), ym))
 }

@@ -22,7 +22,12 @@ function isInsideKnowledge(dataDir: string, targetPath: string): boolean {
 
 // 销售工作台的两个规范化数据库由 App 托管（合并/去重/落盘都是 App 的机械逻辑），
 // 分身只允许写 _待入库/ 暂存文件——直接改库文件容易整库覆盖损坏，这里兜底拦截。
-const APP_OWNED_FILES = [join('销售', '产品库', '产品库.json'), join('销售', '客户库.json')]
+const APP_OWNED_FILES = [
+  join('销售', '产品库', '产品库.json'),
+  join('销售', '客户库.json'),
+  // 财务工作台：员工/发薪日/月度任务勾选由 App 托管，分身产出一律进 outputs/08_财务_finance/
+  join('财务', '财税台账.json')
+]
 
 function isAppOwnedFile(dataDir: string, targetPath: string): boolean {
   const resolved = resolve(dataDir, targetPath)

@@ -366,18 +366,6 @@ export interface SolutionFile {
   companionRelativePath?: string
 }
 
-export interface WhisperStatus {
-  found: boolean
-  /** 找到的 whisper 可执行文件路径 */
-  whisperPath?: string
-  ffmpegFound: boolean
-}
-
-export type TranscribeEvent =
-  | { jobId: string; type: 'progress'; text: string }
-  | { jobId: string; type: 'done'; outputRelativePath: string }
-  | { jobId: string; type: 'error'; message: string }
-
 /** 供应商资料上传后的解析预览：Excel 表头机械识别的结果（识别不出来就走 AI 解析） */
 export interface SupplierDocPreview {
   relativePath: string
@@ -434,4 +422,45 @@ export interface AppConfig {
   activeCompanyId: string | null
   activeProviderId: ProviderId
   providers: Record<ProviderId, ProviderConfig>
+}
+
+// ============ 财务工作台（记账/报税/工资社保） ============
+
+export interface FinanceEmployee {
+  id: string
+  姓名: string
+  /** 法定代表人 / 员工 */
+  角色: string
+  /** 月工资（元，字符串存储便于留空） */
+  月工资: string
+  /** 是否参加社保/医保 */
+  参保: boolean
+}
+
+/** 财务/财税台账.json —— App 托管（path-guard 拦分身直写） */
+export interface FinanceLedger {
+  version: 1
+  /** 发薪日（1-28） */
+  发薪日: number
+  员工: FinanceEmployee[]
+  /** { "YYYY-MM": { taskKey: true } } */
+  月度勾选: Record<string, Record<string, boolean>>
+}
+
+export interface FinanceTask {
+  key: string
+  名称: string
+  /** YYYY-MM-DD（通行口径，遇节假日顺延以电子税务局公告为准） */
+  截止: string
+  说明: string
+  done?: boolean
+}
+
+export interface FinanceOverview {
+  月份: string
+  任务: FinanceTask[]
+  员工: FinanceEmployee[]
+  发薪日: number
+  今天是发薪日: boolean
+  本月票据数: number
 }

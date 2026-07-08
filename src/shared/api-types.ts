@@ -10,6 +10,9 @@ import type {
   ContractTemplate,
   CustomerEntry,
   CustomerFields,
+  FinanceEmployee,
+  FinanceLedger,
+  FinanceOverview,
   IntelCandidate,
   IntelConfirmResult,
   IntelReport,
@@ -30,9 +33,7 @@ import type {
   SupplierDocPreview,
   SyncResult,
   SyncStatus,
-  TeamMember,
-  TranscribeEvent,
-  WhisperStatus
+  TeamMember
 } from './agent-types'
 import type { AgentStreamEvent } from './stream-events'
 
@@ -185,12 +186,16 @@ export interface CompanyOsApi {
     listFiles(): Promise<Record<SolutionFileKind, SolutionFile[]>>
     upload(kind: SolutionFileKind, sourcePath: string): Promise<{ relativePath: string }>
     removeFile(relativePath: string): Promise<void>
-    /** 检测本地 whisper/ffmpeg 是否可用 */
-    whisperStatus(): Promise<WhisperStatus>
-    /** 启动本地转写（异步，进度经 onTranscribeEvent 回传） */
-    transcribeStart(jobId: string, audioRelativePath: string, model: string): Promise<void>
-    transcribeCancel(jobId: string): Promise<void>
-    onTranscribeEvent(callback: (event: TranscribeEvent) => void): () => void
+  }
+  finance: {
+    /** 某月（缺省=本月）财税任务清单+员工配置+发薪日提醒+票据数 */
+    overview(ym?: string): Promise<FinanceOverview>
+    toggleTask(ym: string, taskKey: string, done: boolean): Promise<void>
+    /** 保存员工配置与发薪日（财务/财税台账.json，App 托管） */
+    saveEmployees(员工: FinanceEmployee[], 发薪日: number): Promise<FinanceLedger>
+    /** 票据上传 → inbox/08_财务_finance/票据/{YYYY-MM}/ */
+    uploadReceipt(ym: string, sourcePath: string): Promise<{ relativePath: string }>
+    listReceipts(ym: string): Promise<OutputEntry[]>
   }
 }
 

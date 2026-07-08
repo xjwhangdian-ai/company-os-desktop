@@ -1,25 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { v4 as uuid } from 'uuid'
-import type { AgentDisplayMeta, OutputEntry, SolutionFile, SolutionFileKind, WhisperStatus } from '@shared/agent-types'
+import { useMemo, useState } from 'react'
+import type { AgentDisplayMeta, OutputEntry, SolutionFile, SolutionFileKind } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
+import { useEffect } from 'react'
 
 type SolutionTab = '需求文件' | '资料库' | '生成方案'
 
-const REQUIREMENT_FILTERS = [
-  { name: '需求文件（录音/文档）', extensions: ['mp3', 'm4a', 'wav', 'md', 'docx', 'doc', 'pdf', 'txt'] }
-]
+// v0.1.2：需求文件不再收录音（本地转写引擎模块已移除），只收文档类
+const REQUIREMENT_FILTERS = [{ name: '需求文件（文档）', extensions: ['md', 'docx', 'doc', 'pdf', 'txt'] }]
 const LIB_FILTERS = [{ name: '资料文档', extensions: ['md', 'docx', 'doc', 'pdf', 'txt', 'xlsx', 'pptx'] }]
 const TEMPLATE_FILTERS = [{ name: '方案模板', extensions: ['docx', 'pdf', 'md', 'txt'] }]
-
-const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium'] as const
-
-interface TranscribeState {
-  jobId: string
-  progress: string
-}
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`
@@ -81,10 +73,6 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
     solutionLib: [],
     template: []
   })
-  const [whisper, setWhisper] = useState<WhisperStatus | null>(null)
-  const [whisperModel, setWhisperModel] = useState<string>('small')
-  const [transcribing, setTranscribing] = useState<Record<string, TranscribeState>>({})
-  const jobToFile = useRef<Record<string, string>>({})
   const [notice, setNotice] = useState<string | null>(null)
 
   const [selectedReqs, setSelectedReqs] = useState<Set<string>>(new Set())
@@ -105,33 +93,6 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
 
   useEffect(() => {
     refresh()
-    window.api.solution.whisperStatus().then(setWhisper)
-    const off = window.api.solution.onTranscribeEvent((event) => {
-      const fileRel = jobToFile.current[event.jobId]
-      if (!fileRel) return
-      if (event.type === 'progress') {
-        setTranscribing((prev) => ({ ...prev, [fileRel]: { jobId: event.jobId, progress: event.text } }))
-      } else if (event.type === 'done') {
-        delete jobToFile.current[event.jobId]
-        setTranscribing((prev) => {
-          const next = { ...prev }
-          delete next[fileRel]
-          return next
-        })
-        flash(`转写完成：${event.outputRelativePath.split('/').pop()}`)
-        refresh()
-      } else {
-        delete jobToFile.current[event.jobId]
-        setTranscribing((prev) => {
-          const next = { ...prev }
-          delete next[fileRel]
-          return next
-        })
-        flash(`转写失败：${event.message}`)
-      }
-    })
-    return off
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleUpload(kind: SolutionFileKind, filters: { name: string; extensions: string[] }[]): Promise<void> {
@@ -139,19 +100,13 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
     for (const p of paths) {
       await window.api.solution.upload(kind, p)
     }
-    if (paths.length > 0) await refresh()
+    if (paths.length > 0) {
+      flash(`已上传 ${paths.length} 份文件`)
+      await refresh()
+    }
   }
 
-  async function handleTranscribe(file: SolutionFile): Promise<void> {
-    const status = await window.api.solution.whisperStatus()
-    setWhisper(status)
-    if (!status.found || !status.ffmpegFound) return
-    const jobId = uuid()
-    jobToFile.current[jobId] = file.relativePath
-    setTranscribing((prev) => ({ ...prev, [file.relativePath]: { jobId, progress: '启动转写引擎…（首次使用会先下载模型，请耐心等待）' } }))
-    await window.api.solution.transcribeStart(jobId, file.relativePath, whisperModel)
-  }
-
+  // 旧的录音文件（历史遗留）不可选作需求输入；已转写出的 _转写.md 是普通文档可选
   const selectableReqs = useMemo(() => files.requirement.filter((f) => !f.isAudio), [files.requirement])
   const selectedTemplateFile = files.template.find((t) => t.fileName === selectedTemplate) ?? null
 
@@ -167,8 +122,6 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
       buildSolutionPrompt(projectName, reqs, { productLib: files.productLib.length, solutionLib: files.solutionLib.length }, selectedTemplateFile)
     )
   }
-
-  const whisperReady = whisper?.found && whisper?.ffmpegFound
 
   return (
     <div className="flex h-full">
@@ -200,120 +153,59 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
           {/* ============ 需求文件 ============ */}
           {tab === '需求文件' && (
             <>
-              {whisper && !whisperReady && (
-                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-slate-600">
-                  <p className="font-medium text-amber-700">⚠️ 本地转写引擎未就绪（mp3 自动转写需要）</p>
-                  <p className="mt-1">
-                    转写在本机离线完成，不消耗 AI 额度。打开「终端」执行以下命令安装（一次即可）：
-                  </p>
-                  <pre className="mt-1.5 rounded bg-slate-800 px-2.5 py-1.5 text-emerald-300">brew install ffmpeg openai-whisper</pre>
-                  <p className="mt-1.5 text-slate-400">
-                    {whisper.found ? '✓ whisper 已装' : '✗ whisper 未装'} ·{' '}
-                    {whisper.ffmpegFound ? '✓ ffmpeg 已装' : '✗ ffmpeg 未装'}
-                    ；装好后点
-                    <button
-                      onClick={() => window.api.solution.whisperStatus().then(setWhisper)}
-                      className="mx-1 text-jushi-accent underline"
-                    >
-                      重新检测
-                    </button>
-                    。首次转写会自动下载模型（small 约 460MB）。
-                  </p>
-                </div>
-              )}
-
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => handleUpload('requirement', REQUIREMENT_FILTERS)}
                   className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
                 >
-                  📎 上传需求文件（钉钉录音 mp3 / 纪要 md 等）
+                  📎 上传需求文件（纪要 md / docx / pdf）
                 </button>
-                {whisperReady && (
-                  <label className="flex items-center gap-1.5 text-xs text-slate-400">
-                    转写模型：
-                    <select
-                      value={whisperModel}
-                      onChange={(e) => setWhisperModel(e.target.value)}
-                      className="rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs outline-none"
-                    >
-                      {WHISPER_MODELS.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                          {m === 'small' ? '（推荐）' : m === 'medium' ? '（更准更慢）' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
+                <span className="text-xs text-slate-400">会议录音请先在外部转成文字纪要再上传</span>
               </div>
 
               <div className="space-y-1.5">
-                {files.requirement.map((f) => {
-                  const job = transcribing[f.relativePath]
-                  return (
-                    <div key={f.relativePath} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400">{f.isAudio ? '🎙️' : '📄'}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{f.fileName}</span>
-                        {f.isAudio && f.hasTranscript && (
-                          <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-600">已转写</span>
-                        )}
-                        <span className="shrink-0 text-xs text-slate-300">
-                          {fmtSize(f.size)} · {fmtDate(f.mtimeMs)}
+                {files.requirement.map((f) => (
+                  <div key={f.relativePath} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400">{f.isAudio ? '🎙️' : '📄'}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{f.fileName}</span>
+                      {f.isAudio && (
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-400" title="转写模块已移除，历史录音仅存档">
+                          历史录音
                         </span>
-                        {f.isAudio && !job && (
-                          <button
-                            onClick={() => handleTranscribe(f)}
-                            className="shrink-0 rounded-md bg-jushi-accent px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
-                            disabled={!whisperReady}
-                            title={whisperReady ? '本地 whisper 转写为文字（离线，不消耗 AI 额度）' : '先安装转写引擎（见上方提示）'}
-                          >
-                            {f.hasTranscript ? '重新转写' : '自动转写'}
-                          </button>
-                        )}
-                        {!f.isAudio && (
-                          <button
-                            onClick={() => jumpToGenerate(f)}
-                            className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
-                          >
-                            用它生成方案 →
-                          </button>
-                        )}
-                        <button
-                          onClick={() => window.api.shell.showItemInFolder(f.path)}
-                          className="shrink-0 text-xs text-slate-400 hover:text-jushi-accent"
-                        >
-                          定位
-                        </button>
-                        <button
-                          onClick={async () => {
-                            await window.api.solution.removeFile(f.relativePath)
-                            await refresh()
-                          }}
-                          className="shrink-0 text-xs text-slate-300 hover:text-red-500"
-                        >
-                          删除
-                        </button>
-                      </div>
-                      {job && (
-                        <div className="mt-1.5 flex items-center gap-2 rounded bg-slate-50 px-2 py-1.5">
-                          <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400" />
-                          <span className="min-w-0 flex-1 truncate text-xs text-slate-500">{job.progress}</span>
-                          <button
-                            onClick={() => window.api.solution.transcribeCancel(job.jobId)}
-                            className="shrink-0 text-xs text-red-400 hover:text-red-600"
-                          >
-                            取消
-                          </button>
-                        </div>
                       )}
+                      <span className="shrink-0 text-xs text-slate-300">
+                        {fmtSize(f.size)} · {fmtDate(f.mtimeMs)}
+                      </span>
+                      {!f.isAudio && (
+                        <button
+                          onClick={() => jumpToGenerate(f)}
+                          className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
+                        >
+                          用它生成方案 →
+                        </button>
+                      )}
+                      <button
+                        onClick={() => window.api.shell.showItemInFolder(f.path)}
+                        className="shrink-0 text-xs text-slate-400 hover:text-jushi-accent"
+                      >
+                        定位
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await window.api.solution.removeFile(f.relativePath)
+                          await refresh()
+                        }}
+                        className="shrink-0 text-xs text-slate-300 hover:text-red-500"
+                      >
+                        删除
+                      </button>
                     </div>
-                  )
-                })}
+                  </div>
+                ))}
                 {files.requirement.length === 0 && (
                   <p className="py-8 text-center text-xs text-slate-400">
-                    还没有需求文件——把钉钉会议导出的录音（mp3）或需求纪要（md/docx）传上来
+                    还没有需求文件——把需求纪要（md/docx/pdf）传上来
                   </p>
                 )}
               </div>
@@ -440,7 +332,7 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
                 ))}
                 {selectableReqs.length === 0 && (
                   <p className="py-4 text-center text-xs text-slate-400">
-                    没有可选的需求文件——去「需求文件」页签上传 md/docx，或先把录音转写成文字
+                    没有可选的需求文件——去「需求文件」页签上传 md/docx/pdf
                   </p>
                 )}
               </div>
