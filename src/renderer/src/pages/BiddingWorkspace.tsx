@@ -28,6 +28,11 @@ function categoryOf(p: BiddingProject): BidCategory {
   return t === '采购意向' || t === '意见征询' || t === '采购公告' ? t : '其他'
 }
 
+/** 待处理 = 行业情报「确认跟进」推过来、还没做过解析、仍在跟进中的项目——提醒接手 */
+function isPending(p: BiddingProject): boolean {
+  return p.tenderSource !== null && !p.hasParseReport && (p.card?.状态 ?? '跟进中') === '跟进中'
+}
+
 const STATUS_STYLE: Record<BidProjectStatus, string> = {
   跟进中: 'bg-blue-50 text-blue-600',
   已投标: 'bg-amber-50 text-amber-600',
@@ -226,7 +231,7 @@ function ProjectCardEditor({
 export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const [projects, setProjects] = useState<BiddingProject[]>([])
   const [selected, setSelected] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<'全部' | BidProjectStatus>('全部')
+  const [statusFilter, setStatusFilter] = useState<'全部' | '待处理' | BidProjectStatus>('全部')
   const [showMaterialLib, setShowMaterialLib] = useState(false)
   const [showProjectUpload, setShowProjectUpload] = useState(false)
   const [showCard, setShowCard] = useState(true)
@@ -334,7 +339,12 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   }
 
   const sorted = useMemo(() => ledgerSort(projects), [projects])
-  const filtered = sorted.filter((p) => statusFilter === '全部' || (p.card?.状态 ?? '跟进中') === statusFilter)
+  const filtered = sorted.filter((p) => {
+    if (statusFilter === '全部') return true
+    if (statusFilter === '待处理') return isPending(p)
+    return (p.card?.状态 ?? '跟进中') === statusFilter
+  })
+  const pendingCount = useMemo(() => projects.filter(isPending).length, [projects])
   const grouped = useMemo(() => {
     const g = new Map<BidCategory, BiddingProject[]>()
     for (const c of BID_CATEGORIES) g.set(c, [])
@@ -384,15 +394,19 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
             </button>
           </div>
           <div className="mb-2 flex flex-wrap gap-1">
-            {(['全部', ...BID_PROJECT_STATUSES] as const).map((s) => (
+            {(['全部', '待处理', ...BID_PROJECT_STATUSES] as const).map((s) => (
               <button
                 key={s}
-                onClick={() => setStatusFilter(s as '全部' | BidProjectStatus)}
+                onClick={() => setStatusFilter(s as typeof statusFilter)}
                 className={`rounded-full border px-2 py-0.5 text-xs ${
-                  statusFilter === s ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
+                  statusFilter === s
+                    ? 'border-jushi-accent bg-jushi-accent text-white'
+                    : s === '待处理' && pendingCount > 0
+                      ? 'border-amber-400 bg-amber-50 text-amber-600'
+                      : 'border-slate-300 text-slate-500'
                 }`}
               >
-                {s}
+                {s === '待处理' && pendingCount > 0 ? `待处理 ${pendingCount}` : s}
               </button>
             ))}
           </div>
@@ -434,6 +448,9 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                         >
                           <div className="truncate font-medium text-slate-700">{p.projectName}</div>
                           <div className="mt-1 flex items-center gap-1.5">
+                            {isPending(p) && (
+                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">🆕 待处理</span>
+                            )}
                             <span className={`rounded-full px-1.5 py-0.5 ${STATUS_STYLE[status]}`}>{status}</span>
                             <DeadlineTag card={p.card} />
                           </div>

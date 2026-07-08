@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 /**
- * ☁️ 一键同步：提交本地改动 → 拉取远程 → 推送。管理员机器远程指 GitHub（走代理），
- * 团队成员机器指内网仓库（不需要访问外网）——按钮本身不关心远程在哪。
+ * ☁️ 一键同步：提交本地改动 → 拉取远程 → 推送。仅管理员的开发机需要（数据目录是 git 仓库且配了远程）。
+ * 团队成员机器数据不走 git（git 只管应用程序更新，数据由 App 内置抓取/本机生成），
+ * 数据目录不是 git 仓库或没配远程时按钮整体隐藏，不再弹"同步失败"。
  */
 export function SyncButton({
   userName,
@@ -12,9 +13,17 @@ export function SyncButton({
   userName: string
   compact?: boolean
   onDone?: (ok: boolean) => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const [busy, setBusy] = useState(false)
+  const [available, setAvailable] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  useEffect(() => {
+    window.api.sync
+      .status()
+      .then((s) => setAvailable(s.isRepo && s.hasRemote))
+      .catch(() => setAvailable(false))
+  }, [])
 
   async function handleSync(): Promise<void> {
     setBusy(true)
@@ -30,6 +39,8 @@ export function SyncButton({
       setBusy(false)
     }
   }
+
+  if (!available) return null
 
   return (
     <div className={compact ? '' : 'w-full'}>

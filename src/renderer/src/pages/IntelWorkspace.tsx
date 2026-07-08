@@ -97,6 +97,7 @@ function CandidateRow({
 function BiddingFeedPanel({ onNotice, reloadKey }: { onNotice: (t: string) => void; reloadKey: number }): React.JSX.Element {
   const [candidates, setCandidates] = useState<IntelCandidate[]>([])
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
+  const [fetching, setFetching] = useState(false)
   const [onlyRelevant, setOnlyRelevant] = useState(false)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     采购意向: true,
@@ -153,10 +154,23 @@ function BiddingFeedPanel({ onNotice, reloadKey }: { onNotice: (t: string) => vo
               只看相关
             </button>
             <button
-              onClick={refresh}
-              className="rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 hover:border-jushi-accent hover:text-jushi-accent"
+              disabled={fetching}
+              onClick={async () => {
+                setFetching(true)
+                try {
+                  const r = await window.api.intel.fetchNow(true)
+                  onNotice(r.说明 + (r.平台结果.length > 0 ? `（${r.平台结果.join('、')}）` : ''))
+                } catch {
+                  onNotice('抓取失败（网络问题），稍后重试')
+                } finally {
+                  setFetching(false)
+                }
+                await refresh()
+              }}
+              className="rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50"
+              title="立即从三平台抓取最新公告并刷新列表"
             >
-              刷新
+              {fetching ? '抓取中…' : '刷新'}
             </button>
           </div>
         </div>
@@ -309,12 +323,24 @@ export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     setTimeout(() => setNotice(null), 6000)
   }
 
-  // 打开情报分身即自动清理超过三天的旧机读数据（信息流/候选/研报 JSON + inbox 原始抓取），保留日报
+  // 打开情报分身：①清理超过三天的旧机读数据 ②App 内置抓取最新招投标信息（30分钟内不重复抓）。
+  // 数据不走 git 同步——任何装了 App 的电脑（mac/Windows）都自己拉，乐采云/研报仍来自管理员机管线。
   useEffect(() => {
-    window.api.intel.purgeStale().then((r) => {
-      if (r.purged.length > 0) flash(`已自动清理超过三天的旧情报数据（${r.purged.length} 项）`)
+    ;(async () => {
+      const purged = await window.api.intel.purgeStale()
       setReloadKey((k) => k + 1)
-    })
+      flash('正在抓取最新招投标信息（浙江政采/台州工程/台州阳光采购）…')
+      try {
+        const r = await window.api.intel.fetchNow()
+        flash(
+          [r.说明, r.平台结果.length > 0 ? `（${r.平台结果.join('、')}）` : '', purged.purged.length > 0 ? `；已清理 ${purged.purged.length} 项过期数据` : '']
+            .join('')
+        )
+      } catch {
+        flash('抓取失败（网络问题），点「刷新」重试')
+      }
+      setReloadKey((k) => k + 1)
+    })()
   }, [])
 
   return (

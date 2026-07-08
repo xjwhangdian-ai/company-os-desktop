@@ -59,6 +59,7 @@ import { confirmIntelCandidate, ignoreIntelCandidate, listIntelCandidates } from
 import { listIntelReports } from '../fs-io/intel-reports'
 import { downloadTenderFile, probeTenderFile } from '../fs-io/tender-download'
 import { purgeStaleIntelData } from '../fs-io/intel-purge'
+import { fetchIntelNow } from '../fs-io/intel-fetch'
 import { listLegalDocs, listLegalTemplates, markReviewed } from '../fs-io/legal-workflow'
 import {
   addFollowUp,
@@ -205,6 +206,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
   ipcMain.handle(IPC.intelListReports, () => listIntelReports(getDataDir()))
   ipcMain.handle(IPC.intelPurgeStale, () => purgeStaleIntelData(getDataDir()))
+  ipcMain.handle(IPC.intelFetchNow, (_e, force: boolean) => fetchIntelNow(getDataDir(), force))
 
   ipcMain.handle(IPC.legalListDocs, () => listLegalDocs(getDataDir()))
   ipcMain.handle(IPC.legalMarkReviewed, (_e, fileName: string) => markReviewed(getDataDir(), fileName))

@@ -38,6 +38,7 @@ export const IPC = {
   biddingDeleteProject: 'bidding:delete-project',
   intelListReports: 'intel:list-reports',
   intelPurgeStale: 'intel:purge-stale',
+  intelFetchNow: 'intel:fetch-now',
 
   legalListDocs: 'legal:list-docs',
   legalMarkReviewed: 'legal:mark-reviewed',

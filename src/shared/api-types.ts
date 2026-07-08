@@ -120,6 +120,8 @@ export interface CompanyOsApi {
     listReports(): Promise<IntelReport[]>
     /** 清除超过三天的旧情报机读数据（信息流/候选/研报 JSON + inbox 原始抓取），保留日报 */
     purgeStale(): Promise<{ purged: string[] }>
+    /** App 内置抓取最近三天招投标信息（浙江政采/台州工程/台州阳光采购，跨平台可用，不依赖 git 同步） */
+    fetchNow(force?: boolean): Promise<{ ok: boolean; 新增条数: number; 平台结果: string[]; 说明: string }>
   }
   legal: {
     listDocs(): Promise<{ pending: LegalDoc[]; reviewed: LegalDoc[] }>
