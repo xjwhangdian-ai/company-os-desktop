@@ -30,6 +30,7 @@ export const IPC = {
   biddingSaveCard: 'bidding:save-card',
   biddingExportLedger: 'bidding:export-ledger',
   uploadBiddingClarification: 'upload:bidding-clarification',
+  uploadBiddingTenderFile: 'upload:bidding-tender-file',
   biddingListCandidates: 'bidding:list-candidates',
   biddingConfirmCandidate: 'bidding:confirm-candidate',
   biddingIgnoreCandidate: 'bidding:ignore-candidate',
@@ -39,6 +40,7 @@ export const IPC = {
   intelListReports: 'intel:list-reports',
   intelPurgeStale: 'intel:purge-stale',
   intelFetchNow: 'intel:fetch-now',
+  intelSaveReportToSolution: 'intel:save-report-to-solution',
 
   legalListDocs: 'legal:list-docs',
   legalMarkReviewed: 'legal:mark-reviewed',

@@ -104,6 +104,8 @@ export interface CompanyOsApi {
     exportLedger(): Promise<{ path: string; count: number }>
     /** 答疑/澄清文件上传到项目 inbox 侧的 答疑澄清/ 子文件夹 */
     uploadClarification(projectFolder: string, sourcePath: string): Promise<UploadResult>
+    /** 人工下载的招标文件导入项目 inbox 侧 01_招标文件/（网站需登录验证，自动下载已改人工） */
+    uploadTenderFile(projectFolder: string, sourcePath: string): Promise<UploadResult>
     /** intel 每日追踪推送的待确认候选项目（已确认/已忽略的不再返回） */
     listCandidates(): Promise<IntelCandidate[]>
     /** 人工确认跟进：建项目档+项目卡（自动填业主单位/预算金额）+ 写机读溯源 sidecar；不下载招标文件 */
@@ -123,6 +125,8 @@ export interface CompanyOsApi {
     purgeStale(): Promise<{ purged: string[] }>
     /** App 内置抓取最近三天招投标信息（浙江政采/台州工程/台州阳光采购，跨平台可用，不依赖 git 同步） */
     fetchNow(force?: boolean): Promise<{ ok: boolean; 新增条数: number; 平台结果: string[]; 说明: string }>
+    /** 研报条目一键转存进解决方案资料库（政策文件库/行业趋势库），存成情报线索卡 md */
+    saveReportToSolution(report: IntelReport): Promise<{ ok: boolean; relativePath: string; existed: boolean }>
   }
   legal: {
     listDocs(): Promise<{ pending: LegalDoc[]; reviewed: LegalDoc[] }>

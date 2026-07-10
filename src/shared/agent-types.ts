@@ -350,7 +350,7 @@ export interface QuotationTemplate {
 
 // ============ 解决方案工作台 ============
 
-export type SolutionFileKind = 'requirement' | 'productLib' | 'solutionLib' | 'template'
+export type SolutionFileKind = 'requirement' | 'productLib' | 'solutionLib' | 'policyLib' | 'trendLib' | 'template'
 
 export interface SolutionFile {
   fileName: string

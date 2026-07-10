@@ -218,7 +218,8 @@ function BiddingFeedPanel({ onNotice, reloadKey }: { onNotice: (t: string) => vo
 }
 
 // ── 研报面板（行业趋势 / 政策文件，按关键词分组）─────────────
-function ReportRow({ r }: { r: IntelReport }): React.JSX.Element {
+function ReportRow({ r, onNotice }: { r: IntelReport; onNotice: (t: string) => void }): React.JSX.Element {
+  const [saving, setSaving] = useState(false)
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-2.5">
       <a
@@ -235,12 +236,32 @@ function ReportRow({ r }: { r: IntelReport }): React.JSX.Element {
         {r.页数 > 0 && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{r.页数}页</span>}
         {r.VIP && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">皮匠出品</span>}
         {r.发布日期 && <span className="text-[10px] text-slate-400">{r.发布日期}</span>}
+        <button
+          disabled={saving}
+          onClick={async () => {
+            setSaving(true)
+            try {
+              const res = await window.api.intel.saveReportToSolution(r)
+              onNotice(
+                res.existed
+                  ? '这份已经在方案资料库里了'
+                  : `已存入解决方案${r.分类 === '政策文件' ? '政策文件库' : '行业趋势库'}（线索卡含下载链接）`
+              )
+            } finally {
+              setSaving(false)
+            }
+          }}
+          title="一键转存到解决方案分身的资料库（政策文件库/行业趋势库），生成含下载链接的线索卡"
+          className="ml-auto shrink-0 rounded border border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50"
+        >
+          {saving ? '存入中…' : '→ 存入方案资料库'}
+        </button>
       </div>
     </div>
   )
 }
 
-function ReportsPanel({ type, reloadKey }: { type: IntelReportType; reloadKey: number }): React.JSX.Element {
+function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; reloadKey: number; onNotice: (t: string) => void }): React.JSX.Element {
   const [reports, setReports] = useState<IntelReport[]>([])
   const [loaded, setLoaded] = useState(false)
 
@@ -298,7 +319,7 @@ function ReportsPanel({ type, reloadKey }: { type: IntelReportType; reloadKey: n
             </div>
             <div className="space-y-1.5 bg-slate-50 p-2">
               {items.map((r) => (
-                <ReportRow key={r.链接} r={r} />
+                <ReportRow key={r.链接} r={r} onNotice={onNotice} />
               ))}
             </div>
           </div>
@@ -361,8 +382,8 @@ export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
         </div>
 
         {tab === '招投标信息' && <BiddingFeedPanel onNotice={flash} reloadKey={reloadKey} />}
-        {tab === '行业趋势' && <ReportsPanel type="行业趋势" reloadKey={reloadKey} />}
-        {tab === '政策文件' && <ReportsPanel type="政策文件" reloadKey={reloadKey} />}
+        {tab === '行业趋势' && <ReportsPanel type="行业趋势" reloadKey={reloadKey} onNotice={flash} />}
+        {tab === '政策文件' && <ReportsPanel type="政策文件" reloadKey={reloadKey} onNotice={flash} />}
 
         {notice && (
           <div className="border-t border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] leading-snug text-emerald-700">

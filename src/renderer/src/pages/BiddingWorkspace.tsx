@@ -238,7 +238,6 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
-  const [downloadingTender, setDownloadingTender] = useState(false)
   const [openCat, setOpenCat] = useState<Record<BidCategory, boolean>>({
     采购意向: true,
     意见征询: true,
@@ -251,55 +250,19 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     setTimeout(() => setNotice(null), 6000)
   }
 
-  async function handleDownloadTender(p: BiddingProject): Promise<void> {
-    // 采购意向公告没有正式招标文件，直接提示、不走下载
-    if (p.tenderSource?.公告类型 === '采购意向') {
-      flash('采购意向公告无正式招标文件，无需下载；如需了解详情点项目名超链接查看公告原文')
-      return
-    }
-    if (!p.tenderSource?.可自动下载) {
-      flash('该来源不支持自动下载，请点项目名超链接手动下载后拖入项目')
-      return
-    }
-    // 意见征询 / 采购公告：先探测附件清单，人工确认后再下载
-    setDownloadingTender(true)
-    flash('正在探测招标公告附件…')
-    let probe
-    try {
-      probe = await window.api.bidding.probeTender(p.folderName)
-    } finally {
-      setDownloadingTender(false)
-    }
-    if (!probe.ok || probe.附件.length === 0) {
-      flash(probe.说明)
-      return
-    }
-    const names = probe.附件.map((a, i) => `${i + 1}. ${a.name}`).join('\n')
-    const confirmed = window.confirm(
-      `该招标公告共 ${probe.附件.length} 个附件：\n\n${names}\n\n确认下载到项目 inbox/01_招标文件/ 吗？`
-    )
-    if (!confirmed) {
-      flash('已取消下载')
-      return
-    }
-    setDownloadingTender(true)
-    flash('正在下载招标文件（首次会拉起浏览器，约需十几秒）…')
-    try {
-      const r = await window.api.bidding.downloadTender(p.folderName)
-      flash(r.说明)
-      if (r.ok) await refresh()
-    } finally {
-      setDownloadingTender(false)
-    }
+  /** 人工下载招标文件后导入项目：招标网站需登录验证，自动下载已改为"打开公告页自己下 + 这里导入" */
+  async function handleImportTenderFiles(p: BiddingProject): Promise<void> {
+    const paths = await window.api.dialog.pickFiles()
+    if (paths.length === 0) return
+    for (const path of paths) await window.api.bidding.uploadTenderFile(p.folderName, path)
+    flash(`已导入 ${paths.length} 份招标文件到项目 01_招标文件/，可以点「解析」了`)
+    await refresh()
   }
 
+  /** 忽略项目（与行业情报页的「忽略」同款交互）：两侧文件夹移入系统废纸篓，可恢复 */
   async function handleDeleteProject(p: BiddingProject): Promise<void> {
-    const confirmed = window.confirm(
-      `确定忽略并删除项目「${p.projectName}」吗？\n\n将把该项目 inbox 与 outputs 两侧文件夹移入系统废纸篓（可从废纸篓恢复）。`
-    )
-    if (!confirmed) return
     const r = await window.api.bidding.deleteProject(p.folderName)
-    flash(r.说明)
+    flash(r.ok ? `已忽略「${p.projectName}」——移入废纸篓（误删可从废纸篓恢复）` : r.说明)
     if (r.ok) {
       if (selected === p.folderName) setSelected(null)
       await refresh()
@@ -433,14 +396,16 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                     {items.map((p) => {
                       const status = p.card?.状态 ?? '跟进中'
                       return (
-                        <button
+                        <div
                           key={p.folderName}
+                          role="button"
+                          tabIndex={0}
                           onClick={() => {
                             setSelected(p.folderName)
                             setShowMaterialLib(false)
                             setShowProjectUpload(false)
                           }}
-                          className={`block w-full rounded-lg border px-3 py-2 text-left text-xs ${
+                          className={`block w-full cursor-pointer rounded-lg border px-3 py-2 text-left text-xs ${
                             selected === p.folderName
                               ? 'border-jushi-accent bg-white shadow-sm'
                               : 'border-transparent bg-white hover:border-slate-200'
@@ -453,13 +418,23 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                             )}
                             <span className={`rounded-full px-1.5 py-0.5 ${STATUS_STYLE[status]}`}>{status}</span>
                             <DeadlineTag card={p.card} />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteProject(p)
+                              }}
+                              title="忽略此项目：两侧文件夹移入系统废纸篓（可恢复）"
+                              className="ml-auto shrink-0 rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-500 hover:border-rose-300 hover:text-rose-500"
+                            >
+                              忽略
+                            </button>
                           </div>
                           <div className="mt-1.5 flex flex-wrap gap-1">
                             <Badge active={p.hasParseReport} label="解析" />
                             <Badge active={p.hasChallengeLetter} label="质疑" />
                             <Badge active={p.hasDraft} label="投标" />
                           </div>
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -508,20 +483,13 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    {project.tenderSource && (
-                      <button
-                        disabled={downloadingTender}
-                        onClick={() => handleDownloadTender(project)}
-                        title={
-                          project.tenderSource.可自动下载
-                            ? '从浙江政采自动下载招标文件（复用已登录的浏览器会话）'
-                            : '该来源不支持自动下载，点项目名超链接手动下载'
-                        }
-                        className="rounded-md border border-jushi-accent px-3 py-1.5 text-xs font-medium text-jushi-accent hover:bg-jushi-accent/5 disabled:opacity-50"
-                      >
-                        {downloadingTender ? '下载中…' : '⬇ 下载招标文件'}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleImportTenderFiles(project)}
+                      title="招标网站需登录验证，请点项目名超链接打开公告页人工下载，然后在这里选中下载好的文件导入项目 01_招标文件/"
+                      className="rounded-md border border-jushi-accent px-3 py-1.5 text-xs font-medium text-jushi-accent hover:bg-jushi-accent/5"
+                    >
+                      📥 导入招标文件
+                    </button>
                     <button
                       onClick={() => setPendingPrompt(buildParsePrompt(project))}
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"

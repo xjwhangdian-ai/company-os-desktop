@@ -91,6 +91,19 @@ export function uploadToBiddingProject(dataDir: string, sourcePath: string): Bid
   }
 }
 
+/** bidding 专属：人工下载的招标文件导入既有项目 inbox 侧的 01_招标文件/（网站需登录验证，自动下载已改人工） */
+export function uploadToBiddingTenderFile(
+  dataDir: string,
+  projectFolder: string,
+  sourcePath: string
+): { absPath: string; relativePath: string } {
+  const destDir = join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, '01_招标文件')
+  mkdirSync(destDir, { recursive: true })
+  const dest = uniqueDestPath(destDir, basename(sourcePath))
+  copyFileSync(sourcePath, dest)
+  return { absPath: dest, relativePath: `inbox/03_招投标_bidding/${projectFolder}/01_招标文件/${basename(dest)}` }
+}
+
 /** bidding 专属：答疑/澄清/变更公告落到项目 inbox 侧的 02_答疑澄清/ 分桶（追加解析时分身要读） */
 export function uploadToBiddingClarification(
   dataDir: string,

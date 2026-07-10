@@ -17,6 +17,8 @@ const KIND_DIRS: Record<SolutionFileKind, string> = {
   requirement: join('inbox', '02_解决方案_solution', '需求文件'),
   productLib: join('解决方案', '基础产品库'),
   solutionLib: join('解决方案', '基础解决方案库'),
+  policyLib: join('解决方案', '政策文件库'),
+  trendLib: join('解决方案', '行业趋势库'),
   template: join('解决方案', '_模板', '解决方案模板')
 }
 
@@ -36,6 +38,8 @@ export function ensureSolutionDirs(dataDir: string): void {
 
 - \`基础产品库/\` — 基础产品资料（补充材料；产品名称/参数的统一口径仍以 knowledge/products/ 为准）
 - \`基础解决方案库/\` — 历史方案与行业方案，生成新方案时取结构与打法参考
+- \`政策文件库/\` — 政策文件与解读（可手动上传，也可在「行业情报」工作台一键转存情报线索）
+- \`行业趋势库/\` — 行业趋势报告与研报线索（同上，与行业情报分身打通）
 - \`_模板/解决方案模板/\` — 方案文档模板
 
 输入与产出走统一约定：需求文件（钉钉录音/纪要及其转写稿）在 \`inbox/02_解决方案_solution/需求文件/\`；
@@ -118,8 +122,48 @@ export function listSolutionFiles(dataDir: string): Record<SolutionFileKind, Sol
     requirement: listDir(dataDir, 'requirement'),
     productLib: listDir(dataDir, 'productLib'),
     solutionLib: listDir(dataDir, 'solutionLib'),
+    policyLib: listDir(dataDir, 'policyLib'),
+    trendLib: listDir(dataDir, 'trendLib'),
     template: listDir(dataDir, 'template')
   }
+}
+
+/**
+ * 行业情报的研报条目一键转存进方案资料库（政策文件→政策文件库，行业趋势→行业趋势库）。
+ * 研报管线只有元数据+下载页链接（不下 PDF），所以存成"情报线索卡"md：
+ * 标题/链接/关键词/日期齐全，方案取材时分身可引用线索、人工可点链接补真身 PDF。
+ */
+export function saveReportToSolutionLib(
+  dataDir: string,
+  report: { 分类: string; 关键词: string; 标题: string; 链接: string; 页数: number; 发布日期: string; 抓取日期: string }
+): { ok: boolean; relativePath: string; existed: boolean } {
+  ensureSolutionDirs(dataDir)
+  const kind: SolutionFileKind = report.分类 === '政策文件' ? 'policyLib' : 'trendLib'
+  const safeTitle = report.标题.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '').slice(0, 60) || '未命名报告'
+  const fileName = `${report.抓取日期 || report.发布日期 || '未知日期'}_${safeTitle}.md`
+  const destDir = join(dataDir, KIND_DIRS[kind])
+  mkdirSync(destDir, { recursive: true })
+  const dest = join(destDir, fileName)
+  const relativePath = `${KIND_DIRS[kind].replace(/\\/g, '/')}/${fileName}`
+  if (existsSync(dest)) return { ok: true, relativePath, existed: true }
+  writeFileSync(
+    dest,
+    [
+      `# ${report.标题}`,
+      '',
+      `> 来源：行业情报工作台一键转存（sgpjbg.com 研报线索，未下载 PDF 原文）`,
+      '',
+      `- 分类：${report.分类}｜关键词：${report.关键词 || '—'}`,
+      `- 发布日期：${report.发布日期 || '待确认'}｜抓取日期：${report.抓取日期 || '—'}${report.页数 > 0 ? `｜页数：${report.页数}` : ''}`,
+      `- 下载页链接：${report.链接}`,
+      '',
+      `**使用说明**：本文件是情报线索卡。方案引用其中观点前，请先点上面链接下载报告原文核实；`,
+      `需要原文 PDF 时人工下载后传进本库替换/补充。`,
+      ''
+    ].join('\n'),
+    'utf-8'
+  )
+  return { ok: true, relativePath, existed: false }
 }
 
 export function removeSolutionFile(dataDir: string, relativePath: string): void {

@@ -5,6 +5,7 @@ import type { AgentStreamEvent } from '@shared/stream-events'
 import type {
   AgentName,
   FinanceEmployee,
+  IntelReport,
   BidProjectCard,
   MemberRole,
   ContractCategory,
@@ -67,6 +68,8 @@ const api: CompanyOsApi = {
     exportLedger: () => ipcRenderer.invoke(IPC.biddingExportLedger),
     uploadClarification: (projectFolder: string, sourcePath: string) =>
       ipcRenderer.invoke(IPC.uploadBiddingClarification, projectFolder, sourcePath),
+    uploadTenderFile: (projectFolder: string, sourcePath: string) =>
+      ipcRenderer.invoke(IPC.uploadBiddingTenderFile, projectFolder, sourcePath),
     listCandidates: () => ipcRenderer.invoke(IPC.biddingListCandidates),
     confirmCandidate: (key: string) => ipcRenderer.invoke(IPC.biddingConfirmCandidate, key),
     ignoreCandidate: (key: string) => ipcRenderer.invoke(IPC.biddingIgnoreCandidate, key),
@@ -77,7 +80,8 @@ const api: CompanyOsApi = {
   intel: {
     listReports: () => ipcRenderer.invoke(IPC.intelListReports),
     purgeStale: () => ipcRenderer.invoke(IPC.intelPurgeStale),
-    fetchNow: (force?: boolean) => ipcRenderer.invoke(IPC.intelFetchNow, force ?? false)
+    fetchNow: (force?: boolean) => ipcRenderer.invoke(IPC.intelFetchNow, force ?? false),
+    saveReportToSolution: (report: IntelReport) => ipcRenderer.invoke(IPC.intelSaveReportToSolution, report)
   },
   legal: {
     listDocs: () => ipcRenderer.invoke(IPC.legalListDocs),

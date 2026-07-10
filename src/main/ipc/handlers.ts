@@ -6,6 +6,7 @@ import type { FileFilter, RunAgentRequest } from '@shared/api-types'
 import type {
   AgentName,
   FinanceEmployee,
+  IntelReport,
   AppConfig,
   BidProjectCard,
   MemberRole,
@@ -40,6 +41,7 @@ import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
 import {
   uploadToBiddingClarification,
+  uploadToBiddingTenderFile,
   uploadToBiddingProject,
   uploadToInbox,
   uploadToLegalPending,
@@ -79,7 +81,7 @@ import {
   unlinkCustomerFile
 } from '../fs-io/sales-workflow'
 import { detectHeader, extractCompanion, readWorkbookRows } from '../fs-io/doc-extract'
-import { listSolutionFiles, removeSolutionFile, uploadSolutionFile } from '../fs-io/solution-workflow'
+import { listSolutionFiles, removeSolutionFile, saveReportToSolutionLib, uploadSolutionFile } from '../fs-io/solution-workflow'
 import { getOverview, listReceipts, saveEmployees, toggleTask, uploadReceipt } from '../fs-io/finance-workflow'
 import { exportMarkdownToDocx } from '../docgen/docx-export'
 import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
@@ -190,6 +192,9 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.uploadBiddingClarification, (_e, projectFolder: string, sourcePath: string) =>
     uploadToBiddingClarification(getDataDir(), projectFolder, sourcePath)
   )
+  ipcMain.handle(IPC.uploadBiddingTenderFile, (_e, projectFolder: string, sourcePath: string) =>
+    uploadToBiddingTenderFile(getDataDir(), projectFolder, sourcePath)
+  )
   ipcMain.handle(IPC.biddingListCandidates, () => listIntelCandidates(getDataDir()))
   ipcMain.handle(IPC.biddingConfirmCandidate, (_e, key: string) => confirmIntelCandidate(getDataDir(), key))
   ipcMain.handle(IPC.biddingIgnoreCandidate, (_e, key: string) => ignoreIntelCandidate(getDataDir(), key))
@@ -208,6 +213,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.intelListReports, () => listIntelReports(getDataDir()))
   ipcMain.handle(IPC.intelPurgeStale, () => purgeStaleIntelData(getDataDir()))
   ipcMain.handle(IPC.intelFetchNow, (_e, force: boolean) => fetchIntelNow(getDataDir(), force))
+  ipcMain.handle(IPC.intelSaveReportToSolution, (_e, report: IntelReport) => saveReportToSolutionLib(getDataDir(), report))
 
   ipcMain.handle(IPC.legalListDocs, () => listLegalDocs(getDataDir()))
   ipcMain.handle(IPC.legalMarkReviewed, (_e, fileName: string) => markReviewed(getDataDir(), fileName))

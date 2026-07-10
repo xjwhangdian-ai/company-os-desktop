@@ -33,7 +33,7 @@ function today(): string {
 function buildSolutionPrompt(
   projectName: string,
   requirements: SolutionFile[],
-  libs: { productLib: number; solutionLib: number },
+  libs: { productLib: number; solutionLib: number; policyLib: number; trendLib: number },
   template: SolutionFile | null
 ): string {
   const project = projectName.trim() || '未命名项目'
@@ -56,6 +56,8 @@ function buildSolutionPrompt(
     `资料库（按需检索取材，不要整篇照搬）：`,
     `- 基础产品库：解决方案/基础产品库/（共 ${libs.productLib} 份，用 Glob 列出后按相关性选读）`,
     `- 基础解决方案库：解决方案/基础解决方案库/（共 ${libs.solutionLib} 份，找同类场景方案参考结构与打法）`,
+    `- 政策文件库：解决方案/政策文件库/（共 ${libs.policyLib} 份，方案涉及政策背景/合规依据时引用；情报线索卡只有链接没有原文，引用观点须注明"据线索，待核原文"）`,
+    `- 行业趋势库：解决方案/行业趋势库/（共 ${libs.trendLib} 份，写行业背景/市场趋势章节时取材，同样注意线索卡与原文的区别）`,
     `- 产品统一口径：knowledge/products/（产品名称/参数以此为准，与上述资料冲突时以 knowledge 为准）`,
     ``,
     templatePart,
@@ -71,6 +73,8 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
     requirement: [],
     productLib: [],
     solutionLib: [],
+    policyLib: [],
+    trendLib: [],
     template: []
   })
   const [notice, setNotice] = useState<string | null>(null)
@@ -119,7 +123,17 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
     const reqs = selectableReqs.filter((f) => selectedReqs.has(f.relativePath))
     if (reqs.length === 0) return
     setPendingPrompt(
-      buildSolutionPrompt(projectName, reqs, { productLib: files.productLib.length, solutionLib: files.solutionLib.length }, selectedTemplateFile)
+      buildSolutionPrompt(
+        projectName,
+        reqs,
+        {
+          productLib: files.productLib.length,
+          solutionLib: files.solutionLib.length,
+          policyLib: files.policyLib.length,
+          trendLib: files.trendLib.length
+        },
+        selectedTemplateFile
+      )
     )
   }
 
@@ -226,6 +240,16 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
                     kind: 'solutionLib' as SolutionFileKind,
                     title: '基础解决方案库',
                     hint: '历史方案 / 行业通用方案，生成新方案时供分身参考结构与打法。'
+                  },
+                  {
+                    kind: 'policyLib' as SolutionFileKind,
+                    title: '政策文件库',
+                    hint: '政策文件与解读。可手动上传原文，也可在「行业情报」工作台对感兴趣的政策一键转存线索卡（含下载链接）。'
+                  },
+                  {
+                    kind: 'trendLib' as SolutionFileKind,
+                    title: '行业趋势库',
+                    hint: '行业趋势/研报资料。与行业情报分身打通：情报页「→ 存入方案资料库」一键转入。'
                   }
                 ] as const
               ).map(({ kind, title, hint }) => (
@@ -339,7 +363,7 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
 
               <div className="mt-4 flex items-center justify-between">
                 <span className="text-xs text-slate-400">
-                  取材范围：基础产品库 {files.productLib.length} 份 · 基础解决方案库 {files.solutionLib.length} 份 · knowledge/products/（口径基准）
+                  取材范围：产品库 {files.productLib.length} · 方案库 {files.solutionLib.length} · 政策 {files.policyLib.length} · 趋势 {files.trendLib.length} · knowledge/products/（口径基准）
                 </span>
                 <button
                   disabled={selectedReqs.size === 0}
