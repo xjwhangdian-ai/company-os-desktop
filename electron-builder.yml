@@ -1,5 +1,5 @@
 appId: com.jushi.company-os-desktop
-productName: 炬视数字人分身工作台
+productName: Agent工作台
 directories:
   buildResources: build
 files:

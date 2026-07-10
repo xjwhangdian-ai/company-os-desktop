@@ -28,9 +28,14 @@ function categoryOf(p: BiddingProject): BidCategory {
   return t === '采购意向' || t === '意见征询' || t === '采购公告' ? t : '其他'
 }
 
-/** 待处理 = 行业情报「确认跟进」推过来、还没做过解析、仍在跟进中的项目——提醒接手 */
+/** 待处理 = 情报推来、还没解析、人工也没动过项目卡的项目；人工保存过项目卡（改过状态）就按实际状态显示 */
 function isPending(p: BiddingProject): boolean {
-  return p.tenderSource !== null && !p.hasParseReport && (p.card?.状态 ?? '跟进中') === '跟进中'
+  return (
+    p.tenderSource !== null &&
+    !p.hasParseReport &&
+    !p.card?.人工确认 &&
+    (p.card?.状态 ?? '跟进中') === '跟进中'
+  )
 }
 
 const STATUS_STYLE: Record<BidProjectStatus, string> = {
@@ -252,20 +257,28 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
 
   /** 人工下载招标文件后导入项目：招标网站需登录验证，自动下载已改为"打开公告页自己下 + 这里导入" */
   async function handleImportTenderFiles(p: BiddingProject): Promise<void> {
-    const paths = await window.api.dialog.pickFiles()
-    if (paths.length === 0) return
-    for (const path of paths) await window.api.bidding.uploadTenderFile(p.folderName, path)
-    flash(`已导入 ${paths.length} 份招标文件到项目 01_招标文件/，可以点「解析」了`)
-    await refresh()
+    try {
+      const paths = await window.api.dialog.pickFiles()
+      if (paths.length === 0) return
+      for (const path of paths) await window.api.bidding.uploadTenderFile(p.folderName, path)
+      flash(`已导入 ${paths.length} 份招标文件到项目 01_招标文件/，可以点「解析」了`)
+      await refresh()
+    } catch (err) {
+      flash(`导入失败：${err instanceof Error ? err.message : String(err)}——如果刚更新过程序，请完全退出后重新打开再试`)
+    }
   }
 
   /** 忽略项目（与行业情报页的「忽略」同款交互）：两侧文件夹移入系统废纸篓，可恢复 */
   async function handleDeleteProject(p: BiddingProject): Promise<void> {
-    const r = await window.api.bidding.deleteProject(p.folderName)
-    flash(r.ok ? `已忽略「${p.projectName}」——移入废纸篓（误删可从废纸篓恢复）` : r.说明)
-    if (r.ok) {
-      if (selected === p.folderName) setSelected(null)
-      await refresh()
+    try {
+      const r = await window.api.bidding.deleteProject(p.folderName)
+      flash(r.ok ? `已忽略「${p.projectName}」——移入系统废纸篓（macOS 废纸篓/Windows 回收站，误删可恢复）` : r.说明)
+      if (r.ok) {
+        if (selected === p.folderName) setSelected(null)
+        await refresh()
+      }
+    } catch (err) {
+      flash(`忽略失败：${err instanceof Error ? err.message : String(err)}——如果刚更新过程序，请完全退出后重新打开再试`)
     }
   }
 

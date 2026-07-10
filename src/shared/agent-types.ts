@@ -100,6 +100,8 @@ export interface BidProjectCard {
   状态: BidProjectStatus
   备注: string
   更新时间: number
+  /** 人工在项目卡编辑器里保存过（触达过状态）→ 台账不再显示「待处理」；情报确认/分身回填不设此标 */
+  人工确认?: boolean
 }
 
 /**
@@ -463,4 +465,18 @@ export interface FinanceOverview {
   发薪日: number
   今天是发薪日: boolean
   本月票据数: number
+}
+
+// ============ 行政人力工作台（制度文件四状态） ============
+
+export const OPS_DOC_STATES = ['未审核', '初审', '终审', '定稿'] as const
+export type OpsDocState = (typeof OPS_DOC_STATES)[number]
+
+export interface OpsPolicyDoc {
+  name: string
+  path: string
+  relativePath: string
+  state: OpsDocState
+  size: number
+  mtimeMs: number
 }

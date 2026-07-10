@@ -22,6 +22,8 @@ import type {
   LinkedFile,
   MaterialLibraryCounts,
   MemberRole,
+  OpsDocState,
+  OpsPolicyDoc,
   OutputEntry,
   ProductEntry,
   ProductFields,
@@ -200,6 +202,14 @@ export interface CompanyOsApi {
     /** 票据上传 → inbox/08_财务_finance/票据/{YYYY-MM}/ */
     uploadReceipt(ym: string, sourcePath: string): Promise<{ relativePath: string }>
     listReceipts(ym: string): Promise<OutputEntry[]>
+  }
+  ops: {
+    /** 制度文件（四状态文件夹：未审核/初审/终审/定稿） */
+    listPolicyDocs(): Promise<OpsPolicyDoc[]>
+    /** 改状态 = 移动到目标状态文件夹 */
+    setPolicyDocState(relativePath: string, target: OpsDocState): Promise<OpsPolicyDoc>
+    /** 公司章程等治理文件直达（扫 outputs/04_法务_legal/ 文件名含 章程/代持/股权） */
+    listGovernanceDocs(): Promise<OutputEntry[]>
   }
 }
 

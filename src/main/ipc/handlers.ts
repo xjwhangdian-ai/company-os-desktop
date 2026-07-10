@@ -6,6 +6,7 @@ import type { FileFilter, RunAgentRequest } from '@shared/api-types'
 import type {
   AgentName,
   FinanceEmployee,
+  OpsDocState,
   IntelReport,
   AppConfig,
   BidProjectCard,
@@ -83,6 +84,7 @@ import {
 import { detectHeader, extractCompanion, readWorkbookRows } from '../fs-io/doc-extract'
 import { listSolutionFiles, removeSolutionFile, saveReportToSolutionLib, uploadSolutionFile } from '../fs-io/solution-workflow'
 import { getOverview, listReceipts, saveEmployees, toggleTask, uploadReceipt } from '../fs-io/finance-workflow'
+import { listGovernanceDocs, listPolicyDocs, setPolicyDocState } from '../fs-io/ops-workflow'
 import { exportMarkdownToDocx } from '../docgen/docx-export'
 import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
 import { runGzhStyle } from '../fs-io/gzh-tool'
@@ -186,7 +188,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.biddingListProjects, () => listBiddingProjects(getDataDir()))
   ipcMain.handle(IPC.biddingMaterialCounts, () => getMaterialLibraryCounts(getDataDir()))
   ipcMain.handle(IPC.biddingSaveCard, (_e, folderName: string, card: BidProjectCard) =>
-    saveProjectCard(getDataDir(), folderName, card)
+    // 人工在编辑器里保存过 → 打人工确认标，台账「待处理」随之消失（情报确认/分身回填不走这里，不打标）
+    saveProjectCard(getDataDir(), folderName, { ...card, 人工确认: true })
   )
   ipcMain.handle(IPC.biddingExportLedger, () => exportBiddingLedger(getDataDir()))
   ipcMain.handle(IPC.uploadBiddingClarification, (_e, projectFolder: string, sourcePath: string) =>
@@ -332,4 +335,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.financeSaveEmployees, (_e, emp: FinanceEmployee[], payday: number) => saveEmployees(getDataDir(), emp, payday))
   ipcMain.handle(IPC.financeUploadReceipt, (_e, ym: string, sourcePath: string) => uploadReceipt(getDataDir(), ym, sourcePath))
   ipcMain.handle(IPC.financeListReceipts, (_e, ym: string) => listReceipts(getDataDir(), ym))
+
+  ipcMain.handle(IPC.opsListPolicyDocs, () => listPolicyDocs(getDataDir()))
+  ipcMain.handle(IPC.opsSetPolicyDocState, (_e, relativePath: string, target: OpsDocState) =>
+    setPolicyDocState(getDataDir(), relativePath, target)
+  )
+  ipcMain.handle(IPC.opsListGovernanceDocs, () => listGovernanceDocs(getDataDir()))
 }

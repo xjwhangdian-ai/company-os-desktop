@@ -6,6 +6,7 @@ import type {
   AgentName,
   FinanceEmployee,
   IntelReport,
+  OpsDocState,
   BidProjectCard,
   MemberRole,
   ContractCategory,
@@ -143,6 +144,12 @@ const api: CompanyOsApi = {
     saveEmployees: (员工: FinanceEmployee[], 发薪日: number) => ipcRenderer.invoke(IPC.financeSaveEmployees, 员工, 发薪日),
     uploadReceipt: (ym: string, sourcePath: string) => ipcRenderer.invoke(IPC.financeUploadReceipt, ym, sourcePath),
     listReceipts: (ym: string) => ipcRenderer.invoke(IPC.financeListReceipts, ym)
+  },
+  ops: {
+    listPolicyDocs: () => ipcRenderer.invoke(IPC.opsListPolicyDocs),
+    setPolicyDocState: (relativePath: string, target: OpsDocState) =>
+      ipcRenderer.invoke(IPC.opsSetPolicyDocState, relativePath, target),
+    listGovernanceDocs: () => ipcRenderer.invoke(IPC.opsListGovernanceDocs)
   }
 }
 

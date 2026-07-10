@@ -89,5 +89,9 @@ export const IPC = {
   financeToggleTask: 'finance:toggle-task',
   financeSaveEmployees: 'finance:save-employees',
   financeUploadReceipt: 'finance:upload-receipt',
-  financeListReceipts: 'finance:list-receipts'
+  financeListReceipts: 'finance:list-receipts',
+
+  opsListPolicyDocs: 'ops:list-policy-docs',
+  opsSetPolicyDocState: 'ops:set-policy-doc-state',
+  opsListGovernanceDocs: 'ops:list-governance-docs'
 } as const

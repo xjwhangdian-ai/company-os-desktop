@@ -7,6 +7,18 @@ function asFeedType(v: string): IntelFeedType | '' {
   return (INTEL_FEED_TYPES as readonly string[]).includes(v) ? (v as IntelFeedType) : ''
 }
 
+/** 从 00_情报来源.md 的「- 公告类型：采购公告（2026-07-08）」行解析类型 */
+function readTypeFromNote(dir: string): IntelFeedType | '' {
+  const mdPath = join(dir, '00_情报来源.md')
+  if (!existsSync(mdPath)) return ''
+  try {
+    const md = readFileSync(mdPath, 'utf-8')
+    return asFeedType((md.match(/公告类型[：:]\s*([^（(\s]+)/)?.[1] ?? '').trim())
+  } catch {
+    return ''
+  }
+}
+
 // ============ 项目情报来源读取（无其它 fs-io 依赖，避免循环引用）============
 // 情报推送来的项目在 outputs 侧存：
 //   _情报来源.json（机读，新版确认写）—— {公告链接, 来源平台, articleId, categoryCode}
@@ -32,11 +44,14 @@ export function readTenderSource(dataDir: string, folderName: string): TenderSou
     try {
       const s = JSON.parse(readFileSync(jsonPath, 'utf-8'))
       const link = String(s?.公告链接 ?? '')
+      let 公告类型 = asFeedType(String(s?.公告类型 ?? ''))
+      // 旧版确认写的 sidecar 没有公告类型字段——退回人读版 00_情报来源.md 里解析，老项目也能正确分类
+      if (!公告类型) 公告类型 = readTypeFromNote(dir)
       return {
         公告链接: link,
         来源平台: String(s?.来源平台 ?? ''),
         可自动下载: extractZjgovParams(link) !== null,
-        公告类型: asFeedType(String(s?.公告类型 ?? ''))
+        公告类型
       }
     } catch {
       // 落到 md 兜底

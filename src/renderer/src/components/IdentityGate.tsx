@@ -290,7 +290,7 @@ export function IdentityGate(): React.JSX.Element {
       <div className="app-drag fixed inset-x-0 top-0 h-10" />
       <div className="flex min-h-full flex-col items-center justify-center gap-6 py-12">
       <div className="text-center">
-        <h1 className="text-lg font-bold text-jushi-blue">数字人分身工作台</h1>
+        <h1 className="text-lg font-bold text-jushi-blue">Agent 工作台</h1>
         <p className="mt-1 text-sm text-slate-400">选择公司和身份继续</p>
       </div>
 

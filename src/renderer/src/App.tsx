@@ -15,6 +15,7 @@ import { SalesWorkspace } from './pages/SalesWorkspace'
 import { IntelWorkspace } from './pages/IntelWorkspace'
 import { SolutionWorkspace } from './pages/SolutionWorkspace'
 import { FinanceWorkspace } from './pages/FinanceWorkspace'
+import { OpsPolicyWorkspace } from './pages/OpsPolicyWorkspace'
 
 type View = 'settings' | { agent: AgentName }
 
@@ -92,9 +93,21 @@ export default function App(): React.JSX.Element {
     <div className="flex h-screen bg-slate-100 text-slate-900">
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-100 p-3">
         {/* app-drag：无标题栏窗口靠这块区域拖动；pt-7 给 macOS 红绿灯让位，避免压住公司名 */}
-        <div className="app-drag mb-4 px-2 pb-1 pt-7">
-          <h1 className="text-sm font-bold text-jushi-blue">{activeCompany?.name ?? '数字人分身工作台'}</h1>
-          <p className="text-xs text-slate-400">数字人分身工作台</p>
+        <div className="app-drag mb-4 flex items-center gap-2.5 px-2 pb-1 pt-7">
+          {/* 品牌 logo（知行之眼，来自公司 VI 头像） */}
+          <svg width="30" height="30" viewBox="0 0 800 800" className="shrink-0 rounded-lg" aria-label="炬视 logo">
+            <rect width="800" height="800" rx="176" fill="#1D5AF1" />
+            <g transform="translate(181,181) scale(4.38)">
+              <path d="M 72 33.9 A 28 28 0 1 0 78 50" fill="none" stroke="#fff" strokeWidth="12" strokeLinecap="round" />
+              <line x1="57" y1="50" x2="78" y2="50" stroke="#fff" strokeWidth="12" strokeLinecap="round" />
+              <circle cx="47" cy="50" r="10" fill="#fff" />
+              <circle cx="43" cy="46" r="3.4" fill="#1D5AF1" />
+            </g>
+          </svg>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-bold text-jushi-blue">{activeCompany?.name ?? 'Agent 工作台'}</h1>
+            <p className="text-xs text-slate-400">Agent 工作台</p>
+          </div>
         </div>
 
         {config && config.companies.length > 1 && (
@@ -187,10 +200,13 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'finance' && (
           <FinanceWorkspace agent={activeAgent} />
         )}
+        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'ops-policy' && (
+          <OpsPolicyWorkspace agent={activeAgent} />
+        )}
         {view !== 'settings' &&
           ready &&
           activeAgent &&
-          !['bidding', 'legal', 'operation', 'sales', 'solution', 'intel', 'finance'].includes(activeAgent.name) && (
+          !['bidding', 'legal', 'operation', 'sales', 'solution', 'intel', 'finance', 'ops-policy'].includes(activeAgent.name) && (
             <GenericAgentPage agent={activeAgent} />
           )}
       </main>
