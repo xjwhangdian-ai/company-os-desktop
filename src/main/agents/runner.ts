@@ -1,5 +1,8 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { CanUseTool } from '@anthropic-ai/claude-agent-sdk'
+import { app } from 'electron'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { AgentName } from '@shared/agent-types'
 import type { AgentStreamEvent } from '@shared/stream-events'
 import { guardToolCall } from '../fs-io/path-guard'
@@ -21,6 +24,27 @@ export interface RunAgentParams {
 }
 
 export type { AgentStreamEvent }
+
+/**
+ * 打包版修复（spawn ENOTDIR）：SDK 默认按自身模块目录找原生 claude 可执行文件，
+ * 打包后该目录在 app.asar **归档文件内部**，操作系统无法从归档里 spawn 子进程 → ENOTDIR。
+ * electron-builder 已把二进制解包到 app.asar.unpacked，这里显式把 SDK 指过去。
+ * 开发模式返回 undefined 走 SDK 默认解析（node_modules 是真实目录，没问题）。
+ */
+function resolveClaudeExecutable(): string | undefined {
+  if (!app.isPackaged) return undefined
+  const bin = process.platform === 'win32' ? 'claude.exe' : 'claude'
+  const p = join(
+    process.resourcesPath,
+    'app.asar.unpacked',
+    'node_modules',
+    '@anthropic-ai/claude-agent-sdk',
+    'node_modules',
+    `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`,
+    bin
+  )
+  return existsSync(p) ? p : undefined
+}
 
 function summarizeToolResult(content: unknown): string {
   if (typeof content === 'string') return content.slice(0, 300)
@@ -114,7 +138,8 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentStr
         abortController,
         includePartialMessages: true,
         canUseTool,
-        env
+        env,
+        pathToClaudeCodeExecutable: resolveClaudeExecutable()
       }
     })
   } catch (err) {

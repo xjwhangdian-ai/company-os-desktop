@@ -2,6 +2,9 @@ appId: com.jushi.company-os-desktop
 productName: Agent工作台
 directories:
   buildResources: build
+# Agent SDK 的原生 claude 可执行文件必须在 asar 外（归档内无法 spawn，见 runner.resolveClaudeExecutable）
+asarUnpack:
+  - node_modules/@anthropic-ai/claude-agent-sdk/node_modules/**
 files:
   - '!**/.vscode/*'
   - '!src/*'
