@@ -435,6 +435,8 @@ export interface FinanceEmployee {
   角色: string
   /** 月工资（元，字符串存储便于留空） */
   月工资: string
+  /** 社保核定基数（元；工资低于最低基数按最低基数缴，留空=按工资与最低基数取高） */
+  社保基数?: string
   /** 是否参加社保/医保 */
   参保: boolean
 }

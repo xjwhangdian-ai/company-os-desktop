@@ -63,7 +63,7 @@ function buildSalaryPrompt(ym: string, employees: FinanceEmployee[], payday: num
   const 参保 = employees.filter((e) => e.参保)
   return [
     `为 ${ym} 月做工资表与社保核对（发薪日：每月${payday}号）。员工配置（来自 财务/财税台账.json）：`,
-    ...employees.map((e) => `- ${e.姓名}（${e.角色}）月工资 ${e.月工资 || '【未填，先问我】'} 元，${e.参保 ? '参保' : '不参保'}`),
+    ...employees.map((e) => `- ${e.姓名}（${e.角色}）月工资 ${e.月工资 || '【未填，先问我】'} 元，社保基数 ${e.社保基数 || '【未填：按工资与最低基数4986取高】'} 元，${e.参保 ? '参保' : '不参保'}`),
     ``,
     `产出 outputs/08_财务_finance/${ym}_工资社保/${ym}_工资表.md：`,
     `1. 工资表：应发 → 社保医保公积金个人部分 → 累计预扣个税 → 实发（每人一行）`,
@@ -271,7 +271,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
               </div>
               <div className="space-y-1.5">
                 {employees.map((emp, i) => (
-                  <div key={emp.id} className="grid grid-cols-[1fr_120px_120px_60px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <div key={emp.id} className="grid grid-cols-[1fr_96px_92px_92px_60px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
                     <input
                       value={emp.姓名}
                       onChange={(e) => setEmployees((prev) => prev.map((x, xi) => (xi === i ? { ...x, 姓名: e.target.value } : x)))}
@@ -289,6 +289,13 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                       onChange={(e) => setEmployees((prev) => prev.map((x, xi) => (xi === i ? { ...x, 月工资: e.target.value } : x)))}
                       className="rounded-md border border-slate-200 px-2 py-1 text-xs outline-none focus:border-jushi-accent"
                       placeholder="月工资(元)"
+                    />
+                    <input
+                      value={emp.社保基数 ?? ''}
+                      onChange={(e) => setEmployees((prev) => prev.map((x, xi) => (xi === i ? { ...x, 社保基数: e.target.value } : x)))}
+                      className="rounded-md border border-slate-200 px-2 py-1 text-xs outline-none focus:border-jushi-accent"
+                      placeholder="社保基数(元)"
+                      title="社保核定基数；工资低于最低基数(4986)时按最低基数缴"
                     />
                     <label className="flex items-center gap-1 text-xs text-slate-500">
                       <input
