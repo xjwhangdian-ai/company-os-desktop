@@ -333,6 +333,8 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const filtered = sorted.filter((p) => {
     if (statusFilter === '全部') return true
     if (statusFilter === '待处理') return isPending(p)
+    // 待处理项目的底层状态默认也是"跟进中"，两个筛选必须互斥：跟进中 = 已确认接手的
+    if (statusFilter === '跟进中') return !isPending(p) && (p.card?.状态 ?? '跟进中') === '跟进中'
     return (p.card?.状态 ?? '跟进中') === statusFilter
   })
   const pendingCount = useMemo(() => projects.filter(isPending).length, [projects])

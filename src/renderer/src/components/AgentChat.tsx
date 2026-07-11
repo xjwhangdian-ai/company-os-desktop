@@ -128,9 +128,9 @@ export function AgentChat({
               handleSend()
             }
           }}
-          placeholder="输入你的需求，Enter 发送，Shift+Enter 换行…"
+          placeholder="输入你的需求，Enter 发送，Shift+Enter 换行…（拖右下角可调大输入框）"
           rows={1}
-          className="max-h-40 flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
+          className="min-h-[40px] max-h-80 flex-1 resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
         />
         <button
           onClick={handleSend}
