@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AgentDisplayMeta, OpsDocState, OpsPolicyDoc, OutputEntry } from '@shared/agent-types'
+import type { AgentDisplayMeta, OpsDocState, OpsGovernanceDoc, OpsPolicyDoc } from '@shared/agent-types'
 import { OPS_DOC_STATES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { HelpButton } from '../components/HelpPanel'
@@ -39,7 +39,7 @@ function buildDraftPrompt(): string {
 
 export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const [docs, setDocs] = useState<OpsPolicyDoc[]>([])
-  const [governance, setGovernance] = useState<OutputEntry[]>([])
+  const [governance, setGovernance] = useState<OpsGovernanceDoc[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
 
@@ -56,6 +56,17 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   useEffect(() => {
     refresh()
   }, [])
+
+  async function handleSetGovState(doc: OpsGovernanceDoc, target: OpsDocState): Promise<void> {
+    if (target === doc.state) return
+    try {
+      await window.api.ops.setGovernanceState(doc.relativePath, target)
+      flash(`「${doc.name}」审核状态已标为【${target}】`)
+      await refresh()
+    } catch (err) {
+      flash(`标记失败：${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
 
   async function handleSetState(doc: OpsPolicyDoc, target: OpsDocState): Promise<void> {
     if (target === doc.state) return
@@ -101,6 +112,7 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
             <div className="space-y-1 bg-slate-50 p-2">
               {governance.map((g) => (
                 <div key={g.relativePath} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATE_STYLE[g.state]}`}>{g.state}</span>
                   <button
                     onClick={() => window.api.shell.openPath(g.path)}
                     title={`直接打开查看（${g.relativePath}）`}
@@ -108,6 +120,18 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
                   >
                     {g.name}
                   </button>
+                  <select
+                    value={g.state}
+                    onChange={(e) => handleSetGovState(g, e.target.value as OpsDocState)}
+                    title="标记审核状态（文件不移动，状态单独记录）"
+                    className="shrink-0 rounded border border-slate-300 bg-white px-1 py-0.5 text-[10px] text-slate-500 outline-none"
+                  >
+                    {OPS_DOC_STATES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
                   <span className="shrink-0 text-[10px] text-slate-300">{fmtDate(g.mtimeMs)}</span>
                   <button
                     onClick={() => window.api.shell.showItemInFolder(g.path)}

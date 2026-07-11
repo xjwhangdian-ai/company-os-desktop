@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import type { OpsDocState, OpsPolicyDoc, OutputEntry } from '@shared/agent-types'
+import type { OpsDocState, OpsGovernanceDoc, OpsPolicyDoc } from '@shared/agent-types'
 import { OPS_DOC_STATES } from '@shared/agent-types'
 
 // ============ 行政人力工作台：制度文件四状态流转 + 治理文件（章程等）直达 ============
@@ -84,10 +84,39 @@ export function setPolicyDocState(dataDir: string, relativePath: string, target:
   }
 }
 
-/** 公司章程等治理文件直达：扫 outputs/04_法务_legal/ 里文件名含「章程/代持/股权」的文件 */
-export function listGovernanceDocs(dataDir: string): OutputEntry[] {
+// 治理文件的审核状态：文件本体在 legal 的项目目录里不能移动，状态记在这份 App 托管 JSON
+const GOV_STATE_FILE = join(OPS_ROOT_REL, '治理文件审核状态.json')
+
+function readGovStates(dataDir: string): Record<string, OpsDocState> {
+  const p = join(dataDir, GOV_STATE_FILE)
+  if (!existsSync(p)) return {}
+  try {
+    const raw = JSON.parse(readFileSync(p, 'utf-8'))
+    const out: Record<string, OpsDocState> = {}
+    for (const [k, v] of Object.entries(raw)) {
+      if ((OPS_DOC_STATES as readonly string[]).includes(String(v))) out[k] = v as OpsDocState
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+export function setGovernanceDocState(dataDir: string, relativePath: string, state: OpsDocState): void {
+  ensureOpsStateDirs(dataDir)
+  const states = readGovStates(dataDir)
+  states[relativePath.replace(/\\/g, '/')] = state
+  const p = join(dataDir, GOV_STATE_FILE)
+  const tmp = `${p}.tmp`
+  writeFileSync(tmp, JSON.stringify(states, null, 2), 'utf-8')
+  renameSync(tmp, p)
+}
+
+/** 公司章程等治理文件直达：扫 outputs/04_法务_legal/ 里文件名含「章程/代持/股权」的文件，附审核状态（默认未审核） */
+export function listGovernanceDocs(dataDir: string): OpsGovernanceDoc[] {
+  const states = readGovStates(dataDir)
   const root = join(dataDir, 'outputs', '04_法务_legal')
-  const out: OutputEntry[] = []
+  const out: OpsGovernanceDoc[] = []
   const walk = (dir: string): void => {
     let names: string[] = []
     try {
@@ -104,12 +133,12 @@ export function listGovernanceDocs(dataDir: string): OutputEntry[] {
         continue
       }
       if (!/章程|代持|股权/.test(name)) continue
+      const relativePath = full.slice(dataDir.length + 1).replace(/\\/g, '/')
       out.push({
         name,
         path: full,
-        relativePath: full.slice(dataDir.length + 1).replace(/\\/g, '/'),
-        isDirectory: false,
-        size: st.size,
+        relativePath,
+        state: states[relativePath] ?? '未审核',
         mtimeMs: st.mtimeMs
       })
     }

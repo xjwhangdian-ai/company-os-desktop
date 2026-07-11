@@ -480,3 +480,12 @@ export interface OpsPolicyDoc {
   size: number
   mtimeMs: number
 }
+
+/** 治理文件（章程/代持/股权，产出在 outputs/04_法务_legal/）：文件不动，审核状态记在 App 托管的状态 JSON 里 */
+export interface OpsGovernanceDoc {
+  name: string
+  path: string
+  relativePath: string
+  state: OpsDocState
+  mtimeMs: number
+}

@@ -84,7 +84,7 @@ import {
 import { detectHeader, extractCompanion, readWorkbookRows } from '../fs-io/doc-extract'
 import { listSolutionFiles, removeSolutionFile, saveReportToSolutionLib, uploadSolutionFile } from '../fs-io/solution-workflow'
 import { getOverview, listReceipts, saveEmployees, toggleTask, uploadReceipt } from '../fs-io/finance-workflow'
-import { listGovernanceDocs, listPolicyDocs, setPolicyDocState } from '../fs-io/ops-workflow'
+import { listGovernanceDocs, listPolicyDocs, setGovernanceDocState, setPolicyDocState } from '../fs-io/ops-workflow'
 import { exportMarkdownToDocx } from '../docgen/docx-export'
 import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
 import { runGzhStyle } from '../fs-io/gzh-tool'
@@ -342,4 +342,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     setPolicyDocState(getDataDir(), relativePath, target)
   )
   ipcMain.handle(IPC.opsListGovernanceDocs, () => listGovernanceDocs(getDataDir()))
+  ipcMain.handle(IPC.opsSetGovernanceState, (_e, relativePath: string, state: OpsDocState) =>
+    setGovernanceDocState(getDataDir(), relativePath, state)
+  )
 }

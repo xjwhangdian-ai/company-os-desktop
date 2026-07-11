@@ -23,6 +23,7 @@ import type {
   MaterialLibraryCounts,
   MemberRole,
   OpsDocState,
+  OpsGovernanceDoc,
   OpsPolicyDoc,
   OutputEntry,
   ProductEntry,
@@ -210,8 +211,10 @@ export interface CompanyOsApi {
     listPolicyDocs(): Promise<OpsPolicyDoc[]>
     /** 改状态 = 移动到目标状态文件夹 */
     setPolicyDocState(relativePath: string, target: OpsDocState): Promise<OpsPolicyDoc>
-    /** 公司章程等治理文件直达（扫 outputs/04_法务_legal/ 文件名含 章程/代持/股权） */
-    listGovernanceDocs(): Promise<OutputEntry[]>
+    /** 公司章程等治理文件直达（扫 outputs/04_法务_legal/ 文件名含 章程/代持/股权），附审核状态（默认未审核） */
+    listGovernanceDocs(): Promise<OpsGovernanceDoc[]>
+    /** 治理文件改审核状态：文件不动，状态记 App 托管 JSON */
+    setGovernanceState(relativePath: string, state: OpsDocState): Promise<void>
   }
 }
 

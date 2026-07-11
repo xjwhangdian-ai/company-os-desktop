@@ -94,5 +94,6 @@ export const IPC = {
 
   opsListPolicyDocs: 'ops:list-policy-docs',
   opsSetPolicyDocState: 'ops:set-policy-doc-state',
-  opsListGovernanceDocs: 'ops:list-governance-docs'
+  opsListGovernanceDocs: 'ops:list-governance-docs',
+  opsSetGovernanceState: 'ops:set-governance-state'
 } as const

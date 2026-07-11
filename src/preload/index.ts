@@ -150,7 +150,9 @@ const api: CompanyOsApi = {
     listPolicyDocs: () => ipcRenderer.invoke(IPC.opsListPolicyDocs),
     setPolicyDocState: (relativePath: string, target: OpsDocState) =>
       ipcRenderer.invoke(IPC.opsSetPolicyDocState, relativePath, target),
-    listGovernanceDocs: () => ipcRenderer.invoke(IPC.opsListGovernanceDocs)
+    listGovernanceDocs: () => ipcRenderer.invoke(IPC.opsListGovernanceDocs),
+    setGovernanceState: (relativePath: string, state: OpsDocState) =>
+      ipcRenderer.invoke(IPC.opsSetGovernanceState, relativePath, state)
   }
 }
 
