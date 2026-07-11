@@ -41,6 +41,7 @@ export const IPC = {
   intelPurgeStale: 'intel:purge-stale',
   intelFetchNow: 'intel:fetch-now',
   intelSaveReportToSolution: 'intel:save-report-to-solution',
+  intelFetchReports: 'intel:fetch-reports',
 
   legalListDocs: 'legal:list-docs',
   legalMarkReviewed: 'legal:mark-reviewed',

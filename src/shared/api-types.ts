@@ -129,6 +129,8 @@ export interface CompanyOsApi {
     fetchNow(force?: boolean): Promise<{ ok: boolean; 新增条数: number; 平台结果: string[]; 说明: string }>
     /** 研报条目一键转存进解决方案资料库（政策文件库/行业趋势库），存成情报线索卡 md */
     saveReportToSolution(report: IntelReport): Promise<{ ok: boolean; relativePath: string; existed: boolean }>
+    /** 人工触发研报重抓（拉起 run_reports.sh），与定时任务数据按链接去重合并；仅管理员 Mac 可用 */
+    fetchReports(): Promise<{ ok: boolean; 新增条数: number; 说明: string }>
   }
   legal: {
     listDocs(): Promise<{ pending: LegalDoc[]; reviewed: LegalDoc[] }>

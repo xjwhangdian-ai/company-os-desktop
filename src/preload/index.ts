@@ -82,7 +82,8 @@ const api: CompanyOsApi = {
     listReports: () => ipcRenderer.invoke(IPC.intelListReports),
     purgeStale: () => ipcRenderer.invoke(IPC.intelPurgeStale),
     fetchNow: (force?: boolean) => ipcRenderer.invoke(IPC.intelFetchNow, force ?? false),
-    saveReportToSolution: (report: IntelReport) => ipcRenderer.invoke(IPC.intelSaveReportToSolution, report)
+    saveReportToSolution: (report: IntelReport) => ipcRenderer.invoke(IPC.intelSaveReportToSolution, report),
+    fetchReports: () => ipcRenderer.invoke(IPC.intelFetchReports)
   },
   legal: {
     listDocs: () => ipcRenderer.invoke(IPC.legalListDocs),

@@ -264,6 +264,7 @@ function ReportRow({ r, onNotice }: { r: IntelReport; onNotice: (t: string) => v
 function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; reloadKey: number; onNotice: (t: string) => void }): React.JSX.Element {
   const [reports, setReports] = useState<IntelReport[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [fetching, setFetching] = useState(false)
 
   async function refresh(): Promise<void> {
     setReports(await window.api.intel.listReports())
@@ -272,6 +273,21 @@ function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; re
   useEffect(() => {
     refresh()
   }, [reloadKey])
+
+  /** 刷新 = 真正重新抓取（拉起研报管线，约1-2分钟）+ 与定时任务数据去重合并 + 重读列表 */
+  async function handleRefetch(): Promise<void> {
+    setFetching(true)
+    onNotice('正在重新抓取研报（约1-2分钟，首次会拉起浏览器）…')
+    try {
+      const r = await window.api.intel.fetchReports()
+      onNotice(r.说明)
+    } catch (err) {
+      onNotice(`重抓失败：${err instanceof Error ? err.message : String(err)}——如果刚更新过程序，请完全退出后重新打开再试`)
+    } finally {
+      setFetching(false)
+    }
+    await refresh()
+  }
 
   const mine = useMemo(() => reports.filter((r) => r.分类 === type), [reports, type])
   const byKeyword = useMemo(() => {
@@ -292,10 +308,12 @@ function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; re
             {type}（{mine.length} 份{fetchDate ? ` · ${fetchDate}` : ''}）
           </span>
           <button
-            onClick={refresh}
-            className="app-no-drag rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 hover:border-jushi-accent hover:text-jushi-accent"
+            disabled={fetching}
+            onClick={handleRefetch}
+            title="立即重新抓取 sgpjbg 研报（与每日定时任务的数据按链接去重）"
+            className="app-no-drag rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50"
           >
-            刷新
+            {fetching ? '重抓中…' : '刷新'}
           </button>
         </div>
         <p className="mt-1 text-[11px] leading-snug text-slate-400">
