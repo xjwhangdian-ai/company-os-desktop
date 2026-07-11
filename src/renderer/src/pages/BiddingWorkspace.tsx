@@ -268,6 +268,21 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     }
   }
 
+  /** 待处理项目点「确认跟进」：状态落为跟进中并打人工确认标（saveCard 的 IPC 侧会加 人工确认:true） */
+  async function handleConfirmFollow(p: BiddingProject): Promise<void> {
+    try {
+      await window.api.bidding.saveCard(p.folderName, {
+        ...(p.card ?? { ...EMPTY_CARD_FORM, 更新时间: 0 }),
+        状态: '跟进中',
+        更新时间: Date.now()
+      })
+      flash(`已确认跟进「${p.projectName}」`)
+      await refresh()
+    } catch (err) {
+      flash(`操作失败：${err instanceof Error ? err.message : String(err)}——如果刚更新过程序，请完全退出后重新打开再试`)
+    }
+  }
+
   /** 忽略项目（与行业情报页的「忽略」同款交互）：两侧文件夹移入系统废纸篓，可恢复 */
   async function handleDeleteProject(p: BiddingProject): Promise<void> {
     try {
@@ -426,10 +441,23 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                         >
                           <div className="truncate font-medium text-slate-700">{p.projectName}</div>
                           <div className="mt-1 flex items-center gap-1.5">
-                            {isPending(p) && (
-                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">🆕 待处理</span>
+                            {isPending(p) ? (
+                              <>
+                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">🆕 待处理</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleConfirmFollow(p)
+                                  }}
+                                  title="确认跟进此项目：状态转为「跟进中」，待处理标记消失"
+                                  className="rounded-full bg-jushi-accent px-2 py-0.5 font-medium text-white hover:opacity-90"
+                                >
+                                  确认跟进
+                                </button>
+                              </>
+                            ) : (
+                              <span className={`rounded-full px-1.5 py-0.5 ${STATUS_STYLE[status]}`}>{status}</span>
                             )}
-                            <span className={`rounded-full px-1.5 py-0.5 ${STATUS_STYLE[status]}`}>{status}</span>
                             <DeadlineTag card={p.card} />
                             <button
                               onClick={(e) => {
