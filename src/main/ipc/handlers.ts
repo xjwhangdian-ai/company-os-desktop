@@ -88,6 +88,7 @@ import { detectHeader, extractCompanion, readWorkbookRows } from '../fs-io/doc-e
 import { listSolutionFiles, removeSolutionFile, saveReportToSolutionLib, uploadSolutionFile } from '../fs-io/solution-workflow'
 import { getOverview, listReceipts, saveEmployees, toggleTask, uploadReceipt } from '../fs-io/finance-workflow'
 import { listGovernanceDocs, listPolicyDocs, setGovernanceDocState, setPolicyDocState } from '../fs-io/ops-workflow'
+import { ensureCompanySkeleton } from '../fs-io/data-template'
 import { exportMarkdownToDocx } from '../docgen/docx-export'
 import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
 import { runGzhStyle } from '../fs-io/gzh-tool'
@@ -139,6 +140,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     const entries = readdirSync(target).filter((n) => !n.startsWith('.'))
     if (entries.length > 0) return { ok: false, 说明: '所选文件夹不是空的——请选择/新建一个空文件夹，避免覆盖已有资料' }
     cpSync(templateSrc, target, { recursive: true })
+    ensureCompanySkeleton(target)
     setCompanyDataDir(companyId, target)
     return { ok: true, dataDir: target, 说明: `数据目录已初始化：${target}` }
   })
