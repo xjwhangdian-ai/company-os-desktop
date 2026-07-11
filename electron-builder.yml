@@ -5,6 +5,10 @@ directories:
 # Agent SDK 的原生 claude 可执行文件必须在 asar 外（归档内无法 spawn，见 runner.resolveClaudeExecutable）
 asarUnpack:
   - node_modules/@anthropic-ai/claude-agent-sdk/node_modules/**
+# 安装包内置 company-os 数据目录模板（设置页「初始化目录」用）
+extraResources:
+  - from: resources/company-os-template
+    to: company-os-template
 files:
   - '!**/.vscode/*'
   - '!src/*'

@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AppConfig, Company, MemberRole, ModelMapping, ProviderConfig, ProviderId, TeamMember } from '@shared/agent-types'
+import type { AgentName, AppConfig, Company, MemberRole, ModelMapping, ProviderConfig, ProviderId, TeamMember } from '@shared/agent-types'
 
 // 手写的极简本地 JSON 配置持久化，替代 electron-store：
 // 1) electron-store v10 依赖的 conf v14 是纯 exports-map 包，在本项目
@@ -78,6 +78,17 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
     // qwen3.7-plus 是官方 Claude Code 接入示例里日常用的主力档；qwen3.6-flash 是最便宜档。
     modelMapping: { opus: 'qwen3.7-max', sonnet: 'qwen3.7-plus', haiku: 'qwen3.6-flash' }
   },
+  zhipu: {
+    id: 'zhipu',
+    label: '智谱 GLM',
+    // 智谱官方提供 Anthropic 协议兼容端点（GLM 接入 Claude Code 的官方方式）
+    baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+    authEnvVar: 'ANTHROPIC_AUTH_TOKEN',
+    apiKey: null,
+    // 按智谱官方 Claude Code 接入文档的对应关系预填（glm-4.5 旗舰 / glm-4.5-air 轻量）；
+    // 智谱迭代快，若有更新一代模型（如 glm-5 系列），在设置页对着官方文档改即可。
+    modelMapping: { opus: 'glm-4.5', sonnet: 'glm-4.5', haiku: 'glm-4.5-air' }
+  },
   custom: {
     id: 'custom',
     label: '自定义（如自建 claude-code-router）',
@@ -95,6 +106,8 @@ interface TeamMemberRecord {
   name: string
   pinHash: string | null
   role?: MemberRole
+  /** 员工可见分身；undefined=全部 */
+  可见分身?: AgentName[]
 }
 
 interface StoreSchemaV4 {
@@ -309,26 +322,76 @@ function hashPin(pin: string): string {
   return createHash('sha256').update(pin).digest('hex')
 }
 
+/** 管理员分配账号的初始 PIN；员工首次登录会被提示修改 */
+const DEFAULT_PIN = '123456'
+const DEFAULT_PIN_HASH = createHash('sha256').update(DEFAULT_PIN).digest('hex')
+
 /** 老配置里的成员没有 role 字段：一律视为管理员（现存成员都是装机人自己建的；界面级权限，从宽迁移） */
 function roleOf(m: TeamMemberRecord): MemberRole {
   return m.role ?? 'admin'
 }
 
 function toPublicMember(m: TeamMemberRecord): TeamMember {
-  return { id: m.id, name: m.name, hasPin: m.pinHash !== null, role: roleOf(m) }
+  return {
+    id: m.id,
+    name: m.name,
+    hasPin: m.pinHash !== null,
+    role: roleOf(m),
+    usingDefaultPin: m.pinHash === DEFAULT_PIN_HASH,
+    可见分身: m.可见分身
+  }
 }
 
 export function listTeamMembers(): TeamMember[] {
   return readAll().teamMembers.map(toPublicMember)
 }
 
-/** 第一个成员自动成为管理员（新装机器/新团队场景），之后自助注册的默认普通员工，由管理员在设置页调整 */
-export function addTeamMember(name: string, pin?: string): TeamMember {
+/**
+ * 添加成员（账号由管理员在设置页统一分配；登录页仅在"零成员"时允许创建首个管理员）。
+ * 初始 PIN 固定 123456，成员首次登录会被提示修改。第一个成员强制管理员。
+ */
+export function addTeamMember(name: string, role?: MemberRole, 可见分身?: AgentName[]): TeamMember {
   const all = readAll()
-  const role: MemberRole = all.teamMembers.length === 0 ? 'admin' : 'member'
-  const record: TeamMemberRecord = { id: randomUUID(), name, pinHash: pin ? hashPin(pin) : null, role }
+  const finalRole: MemberRole = all.teamMembers.length === 0 ? 'admin' : (role ?? 'member')
+  const record: TeamMemberRecord = {
+    id: randomUUID(),
+    name,
+    pinHash: DEFAULT_PIN_HASH,
+    role: finalRole,
+    可见分身: finalRole === 'member' ? 可见分身 : undefined
+  }
   writeAll({ ...all, teamMembers: [...all.teamMembers, record] })
   return toPublicMember(record)
+}
+
+/** 成员自助改 PIN：先验旧 PIN */
+export function changePin(id: string, oldPin: string, newPin: string): { ok: boolean; message?: string } {
+  const all = readAll()
+  const member = all.teamMembers.find((m) => m.id === id)
+  if (!member) return { ok: false, message: '成员不存在' }
+  if (member.pinHash && hashPin(oldPin) !== member.pinHash) return { ok: false, message: '原 PIN 不正确' }
+  if (!/^\d{4,8}$/.test(newPin)) return { ok: false, message: '新 PIN 需为 4-8 位数字' }
+  member.pinHash = hashPin(newPin)
+  writeAll(all)
+  return { ok: true }
+}
+
+/** 管理员重置某成员 PIN 回初始值 123456 */
+export function resetPin(id: string): void {
+  const all = readAll()
+  const member = all.teamMembers.find((m) => m.id === id)
+  if (!member) return
+  member.pinHash = DEFAULT_PIN_HASH
+  writeAll(all)
+}
+
+/** 管理员设置员工可见分身（null=全部可见）；管理员角色忽略此配置 */
+export function setMemberAgents(id: string, agents: AgentName[] | null): void {
+  const all = readAll()
+  const member = all.teamMembers.find((m) => m.id === id)
+  if (!member) return
+  member.可见分身 = agents ?? undefined
+  writeAll(all)
 }
 
 export function removeTeamMember(id: string): void {

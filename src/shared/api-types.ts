@@ -70,6 +70,8 @@ export interface CompanyOsApi {
     removeCompany(id: string): Promise<void>
     setCompanyDataDir(id: string, dir: string): Promise<void>
     setActiveCompany(id: string): Promise<void>
+    /** 从安装包内置的 company-os 模板初始化一个新数据目录（弹目录选择框），并绑定到该公司 */
+    initDataDir(companyId: string): Promise<{ ok: boolean; dataDir?: string; 说明: string }>
   }
   agents: {
     list(): Promise<AgentDisplayMeta[]>
@@ -150,9 +152,16 @@ export interface CompanyOsApi {
   }
   identity: {
     list(): Promise<TeamMember[]>
-    add(name: string, pin?: string): Promise<TeamMember>
+    /** 添加成员（管理员在设置页分配；初始 PIN 123456）。首个成员强制管理员 */
+    add(name: string, role?: MemberRole, 可见分身?: AgentName[]): Promise<TeamMember>
     remove(id: string): Promise<void>
     verifyPin(id: string, pin?: string): Promise<boolean>
+    /** 成员自助改 PIN（先验旧 PIN；新 PIN 4-8 位数字） */
+    changePin(id: string, oldPin: string, newPin: string): Promise<{ ok: boolean; message?: string }>
+    /** 管理员重置成员 PIN 回 123456 */
+    resetPin(id: string): Promise<void>
+    /** 管理员设置员工可见分身（null=全部） */
+    setAgents(id: string, agents: AgentName[] | null): Promise<void>
     /** 管理员改角色；不允许把最后一个管理员降级 */
     setRole(id: string, role: MemberRole): Promise<{ ok: boolean; message?: string }>
     /** 登录成功后告知主进程当前用户名（供关闭前同步的提交署名用） */

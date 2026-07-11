@@ -28,7 +28,8 @@ const api: CompanyOsApi = {
     addCompany: (name: string) => ipcRenderer.invoke(IPC.configAddCompany, name),
     removeCompany: (id: string) => ipcRenderer.invoke(IPC.configRemoveCompany, id),
     setCompanyDataDir: (id: string, dir: string) => ipcRenderer.invoke(IPC.configSetCompanyDataDir, id, dir),
-    setActiveCompany: (id: string) => ipcRenderer.invoke(IPC.configSetActiveCompany, id)
+    setActiveCompany: (id: string) => ipcRenderer.invoke(IPC.configSetActiveCompany, id),
+    initDataDir: (companyId: string) => ipcRenderer.invoke(IPC.configInitDataDir, companyId)
   },
   agents: {
     list: () => ipcRenderer.invoke(IPC.agentsList)
@@ -102,7 +103,10 @@ const api: CompanyOsApi = {
   },
   identity: {
     list: () => ipcRenderer.invoke(IPC.identityList),
-    add: (name: string, pin?: string) => ipcRenderer.invoke(IPC.identityAdd, name, pin),
+    add: (name: string, role?: MemberRole, 可见分身?: AgentName[]) => ipcRenderer.invoke(IPC.identityAdd, name, role, 可见分身),
+    changePin: (id: string, oldPin: string, newPin: string) => ipcRenderer.invoke(IPC.identityChangePin, id, oldPin, newPin),
+    resetPin: (id: string) => ipcRenderer.invoke(IPC.identityResetPin, id),
+    setAgents: (id: string, agents: AgentName[] | null) => ipcRenderer.invoke(IPC.identitySetAgents, id, agents),
     remove: (id: string) => ipcRenderer.invoke(IPC.identityRemove, id),
     verifyPin: (id: string, pin?: string) => ipcRenderer.invoke(IPC.identityVerifyPin, id, pin),
     setRole: (id: string, role: MemberRole) => ipcRenderer.invoke(IPC.identitySetRole, id, role),

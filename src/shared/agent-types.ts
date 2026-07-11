@@ -249,6 +249,10 @@ export interface TeamMember {
   name: string
   hasPin: boolean
   role: MemberRole
+  /** 还在用初始 PIN（123456）——登录时提示修改 */
+  usingDefaultPin: boolean
+  /** 员工可见的分身列表；undefined=全部可见。管理员恒为全部，不受此字段限制 */
+  可见分身?: AgentName[]
 }
 
 // ============ 一键同步 ============
@@ -392,7 +396,7 @@ export interface SupplierDocPreview {
  * 'custom' 是通用逃生舱：任何其它自建/自托管的 Anthropic 协议兼容端点（如
  * claude-code-router）都能通过这个槽位接入，不用为每个新供应商改代码。
  */
-export type ProviderId = 'anthropic' | 'deepseek' | 'minimax-intl' | 'minimax-cn' | 'qwen' | 'custom'
+export type ProviderId = 'anthropic' | 'deepseek' | 'minimax-intl' | 'minimax-cn' | 'qwen' | 'zhipu' | 'custom'
 
 export interface ModelMapping {
   opus: string

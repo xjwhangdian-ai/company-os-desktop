@@ -65,7 +65,6 @@ function AddMemberForm({
   const addMember = useIdentityStore((s) => s.addMember)
   const login = useIdentityStore((s) => s.login)
   const [name, setName] = useState('')
-  const [pin, setPin] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(): Promise<void> {
@@ -74,28 +73,23 @@ function AddMemberForm({
       return
     }
     await onBeforeLogin()
-    const member = await addMember(name.trim(), pin.trim() || undefined)
-    await login(member.id, pin.trim() || undefined)
+    // 仅零成员时可见（创建首个管理员）；初始 PIN 固定 123456，登录后可改
+    const member = await addMember(name.trim())
+    await login(member.id, '123456')
     onDone()
   }
 
   return (
     <div className="w-72 space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-700">添加成员</h3>
+      <h3 className="text-sm font-semibold text-slate-700">创建管理员账号（首次使用）</h3>
       <input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="你的名字"
+        placeholder="管理员名字"
         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
       />
-      <input
-        type="password"
-        value={pin}
-        onChange={(e) => setPin(e.target.value)}
-        placeholder="设置 PIN（可选，防止别人顺手冒充你）"
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
-      />
+      <p className="text-xs text-slate-400">初始 PIN 为 123456，登录后可修改；员工账号之后由管理员在「设置 → 团队成员」统一分配。</p>
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2">
         {onCancel && (
@@ -121,10 +115,11 @@ function MemberTile({
   onLogin: () => void
 }): React.JSX.Element {
   const login = useIdentityStore((s) => s.login)
-  const removeMember = useIdentityStore((s) => s.removeMember)
   const [askingPin, setAskingPin] = useState(false)
+  const [changingPin, setChangingPin] = useState(false)
   const [pin, setPin] = useState('')
-  const [error, setError] = useState(false)
+  const [newPin, setNewPin] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   async function handleClick(): Promise<void> {
     if (!member.hasPin) {
@@ -138,13 +133,58 @@ function MemberTile({
 
   async function handlePinSubmit(): Promise<void> {
     await onBeforeLogin()
-    const ok = await login(member.id, pin)
-    if (ok) {
-      onLogin()
-    } else {
-      setError(true)
+    const ok = await window.api.identity.verifyPin(member.id, pin)
+    if (!ok) {
+      setError('PIN 不对')
       setPin('')
+      return
     }
+    // 还在用初始 PIN（123456）→ 先给一次改 PIN 的机会（可跳过）
+    if (member.usingDefaultPin) {
+      setError(null)
+      setChangingPin(true)
+      return
+    }
+    await login(member.id, pin)
+    onLogin()
+  }
+
+  async function handleChangePin(skip: boolean): Promise<void> {
+    if (!skip) {
+      const r = await window.api.identity.changePin(member.id, pin, newPin.trim())
+      if (!r.ok) {
+        setError(r.message ?? '修改失败')
+        return
+      }
+    }
+    await login(member.id, skip ? pin : newPin.trim())
+    onLogin()
+  }
+
+  if (changingPin) {
+    return (
+      <div className="flex w-44 flex-col items-center gap-2 rounded-xl border border-amber-300 bg-white p-3">
+        <span className="text-xs font-medium text-amber-600">你还在用初始 PIN</span>
+        <input
+          autoFocus
+          type="password"
+          value={newPin}
+          onChange={(e) => setNewPin(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleChangePin(false)}
+          placeholder="设置新 PIN（4-8位数字）"
+          className="w-full rounded border border-slate-300 px-2 py-1 text-center text-xs outline-none"
+        />
+        {error && <span className="text-xs text-red-500">{error}</span>}
+        <div className="flex w-full gap-1.5">
+          <button onClick={() => handleChangePin(true)} className="flex-1 rounded border border-slate-300 py-1 text-xs text-slate-500">
+            暂不改
+          </button>
+          <button onClick={() => handleChangePin(false)} className="flex-1 rounded bg-jushi-accent py-1 text-xs font-medium text-white">
+            保存并登录
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (askingPin) {
@@ -162,7 +202,8 @@ function MemberTile({
           placeholder="PIN"
           className={`w-full rounded border px-2 py-1 text-center text-xs outline-none ${error ? 'border-red-400' : 'border-slate-300'}`}
         />
-        {error && <span className="text-xs text-red-500">PIN 不对</span>}
+        {error && <span className="text-xs text-red-500">{error}</span>}
+        {member.usingDefaultPin && <span className="text-[10px] text-slate-400">初始 PIN：123456</span>}
       </div>
     )
   }
@@ -178,16 +219,6 @@ function MemberTile({
         </span>
         <span className="truncate text-sm text-slate-700">{member.name}</span>
         {member.hasPin && <span className="text-xs text-slate-400">🔒 需要 PIN</span>}
-      </button>
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          removeMember(member.id)
-        }}
-        title="移除这个成员"
-        className="absolute right-1 top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-xs text-slate-500 hover:bg-red-100 hover:text-red-500 group-hover:flex"
-      >
-        ✕
       </button>
     </div>
   )
@@ -261,7 +292,6 @@ function DailySyncBanner({ activeCompanyId }: { activeCompanyId: string | null }
 export function IdentityGate(): React.JSX.Element {
   const { members, loaded, loadMembers } = useIdentityStore()
   const { config, loading: configLoading, setActiveCompany } = useConfigStore()
-  const [showAddForm, setShowAddForm] = useState(false)
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
 
   useEffect(() => {
@@ -298,26 +328,16 @@ export function IdentityGate(): React.JSX.Element {
 
       <CompanyPicker selectedCompanyId={selectedCompanyId} onSelect={setSelectedCompanyId} />
 
-      {members.length === 0 || showAddForm ? (
-        <AddMemberForm
-          onBeforeLogin={commitCompany}
-          onDone={noop}
-          onCancel={members.length > 0 ? () => setShowAddForm(false) : undefined}
-        />
+      {members.length === 0 ? (
+        <AddMemberForm onBeforeLogin={commitCompany} onDone={noop} />
       ) : (
         <div className="flex flex-wrap justify-center gap-3">
           {members.map((m) => (
             <MemberTile key={m.id} member={m} onBeforeLogin={commitCompany} onLogin={noop} />
           ))}
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex w-32 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-slate-400 hover:border-slate-400"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-slate-300 text-lg">
-              +
-            </span>
-            <span className="text-sm">新成员</span>
-          </button>
+          <div className="flex w-full basis-full justify-center">
+            <p className="mt-1 text-xs text-slate-400">账号由管理员在「设置 → 团队成员」统一分配 · 初始 PIN 123456</p>
+          </div>
         </div>
       )}
       </div>

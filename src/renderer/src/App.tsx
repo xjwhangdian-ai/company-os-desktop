@@ -48,6 +48,8 @@ export default function App(): React.JSX.Element {
       autoLeftSettings.current = true
       setView({ agent: list[0].name })
     }
+    // 当前查看的分身对该员工不可见（如管理员刚调整了分配）→ 跳回第一个可见分身
+
   }, [ready, loaded, list, view])
 
   // 当前公司没配好（比如刚切到还没选数据目录的瑾智安防）时，自动跳到设置页，
@@ -86,8 +88,12 @@ export default function App(): React.JSX.Element {
   }
 
   const isAdmin = currentUser.role === 'admin'
+  // 员工只看到管理员分配的分身（未配置=全部可见）；管理员恒为全部
+  const visibleList = isAdmin
+    ? list
+    : list.filter((a) => !currentUser.可见分身 || currentUser.可见分身.includes(a.name))
   const activeAgentName = typeof view === 'object' ? view.agent : null
-  const activeAgent = list.find((a) => a.name === activeAgentName) ?? null
+  const activeAgent = visibleList.find((a) => a.name === activeAgentName) ?? null
 
   return (
     <div className="flex h-screen bg-slate-100 text-slate-900">
@@ -128,7 +134,7 @@ export default function App(): React.JSX.Element {
           {!ready ? (
             <p className="px-2 text-xs text-slate-400">请先完成设置页配置</p>
           ) : (
-            <AgentPicker agents={list} activeName={activeAgentName} onSelect={(name) => setView({ agent: name })} />
+            <AgentPicker agents={visibleList} activeName={activeAgentName} onSelect={(name) => setView({ agent: name })} />
           )}
         </div>
 

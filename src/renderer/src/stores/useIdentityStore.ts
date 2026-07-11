@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { TeamMember } from '@shared/agent-types'
+import type { AgentName, MemberRole, TeamMember } from '@shared/agent-types'
 
 interface IdentityState {
   members: TeamMember[]
@@ -7,7 +7,7 @@ interface IdentityState {
   /** 当前会话选中的身份，仅存在内存里，每次重启 App 都要求重新选择 */
   currentUser: TeamMember | null
   loadMembers: () => Promise<void>
-  addMember: (name: string, pin?: string) => Promise<TeamMember>
+  addMember: (name: string, role?: MemberRole, 可见分身?: AgentName[]) => Promise<TeamMember>
   removeMember: (id: string) => Promise<void>
   /** 校验通过则设为 currentUser 并返回 true */
   login: (id: string, pin?: string) => Promise<boolean>
@@ -22,8 +22,8 @@ export const useIdentityStore = create<IdentityState>((set, get) => ({
     const members = await window.api.identity.list()
     set({ members, loaded: true })
   },
-  addMember: async (name, pin) => {
-    const member = await window.api.identity.add(name, pin)
+  addMember: async (name, role, 可见分身) => {
+    const member = await window.api.identity.add(name, role, 可见分身)
     await get().loadMembers()
     return member
   },

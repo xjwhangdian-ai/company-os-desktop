@@ -95,5 +95,10 @@ export const IPC = {
   opsListPolicyDocs: 'ops:list-policy-docs',
   opsSetPolicyDocState: 'ops:set-policy-doc-state',
   opsListGovernanceDocs: 'ops:list-governance-docs',
-  opsSetGovernanceState: 'ops:set-governance-state'
+  opsSetGovernanceState: 'ops:set-governance-state',
+
+  identityChangePin: 'identity:change-pin',
+  identityResetPin: 'identity:reset-pin',
+  identitySetAgents: 'identity:set-agents',
+  configInitDataDir: 'config:init-data-dir'
 } as const

@@ -5,13 +5,14 @@ import type { ModelMapping, ProviderId } from '@shared/agent-types'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
-const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'deepseek', 'minimax-intl', 'minimax-cn', 'qwen', 'custom']
+const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'deepseek', 'minimax-intl', 'minimax-cn', 'qwen', 'zhipu', 'custom']
 
 const PROVIDER_DOCS: Partial<Record<ProviderId, { label: string; url: string }>> = {
   deepseek: { label: 'DeepSeek · Claude Code 接入文档', url: 'https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code' },
   'minimax-intl': { label: 'MiniMax · Claude Code 接入文档', url: 'https://platform.minimax.io/docs/token-plan/claude-code' },
   'minimax-cn': { label: 'MiniMax · Claude Code 接入文档', url: 'https://platform.minimax.io/docs/token-plan/claude-code' },
-  qwen: { label: '阿里云百炼 · Claude Code 接入文档', url: 'https://www.alibabacloud.com/help/en/model-studio/claude-code' }
+  qwen: { label: '阿里云百炼 · Claude Code 接入文档', url: 'https://www.alibabacloud.com/help/en/model-studio/claude-code' },
+  zhipu: { label: '智谱开放平台 · Claude Code 接入文档', url: 'https://docs.bigmodel.cn/cn/guide/develop/claude' }
 }
 
 const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
@@ -21,6 +22,7 @@ const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
   'minimax-cn':
     '已按 2026-07 官方文档预填：MiniMax-M3（旗舰，原生多模态）/ MiniMax-M2.7（主力档）/ MiniMax-M2（最便宜档）。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
   qwen: '已按 2026-07 官方文档预填模型名：qwen3.7-max（旗舰）/ qwen3.7-plus（主力档）/ qwen3.6-flash（最便宜档）。Base URL 没有唯一默认值——阿里云这个端点按地区/套餐分裂成好几种，常见几种：国内 PAYG「https://dashscope.aliyuncs.com/apps/anthropic」、国际 PAYG「https://dashscope-intl.aliyuncs.com/apps/anthropic」、Coding Plan「https://coding-intl.dashscope.aliyuncs.com/apps/anthropic」——对着自己开通的套餐选，不确定就点右侧文档核实。',
+  zhipu: '智谱官方提供 Anthropic 协议兼容端点（GLM 接 Claude Code 的官方方式），Base URL 已预填。模型名按官方文档预填 glm-4.5（旗舰）/ glm-4.5-air（轻量）——智谱迭代快，若已发布更新一代（如 glm-5 系列），点右侧文档确认后改成最新模型名即可。',
   custom: '适用于任何自建/自托管的 Anthropic 协议兼容端点（比如自己起一个 claude-code-router）。'
 }
 
@@ -121,6 +123,19 @@ export function Settings(): React.JSX.Element {
               >
                 选择目录
               </button>
+              {!c.dataDir && (
+                <button
+                  onClick={async () => {
+                    const r = await window.api.config.initDataDir(c.id)
+                    flashSaved(r.说明)
+                    if (r.ok) await useConfigStore.getState().load()
+                  }}
+                  title="没有现成的 company-os 文件夹？从安装包内置模板初始化一个全新数据目录（含 knowledge/9个分身定义/目录骨架）"
+                  className="shrink-0 rounded-md border border-jushi-accent px-2 py-1 text-xs text-jushi-accent hover:bg-jushi-accent/5"
+                >
+                  初始化目录
+                </button>
+              )}
               <button
                 onClick={() => removeCompany(c.id)}
                 className="shrink-0 text-xs text-slate-300 hover:text-red-500"
@@ -268,9 +283,10 @@ function MemberSection({ onFlash }: { onFlash: (text: string) => void }): React.
     <section className="space-y-2">
       <h3 className="text-sm font-medium text-slate-700">团队成员与角色</h3>
       <p className="text-xs text-slate-400">
-        管理员：可进设置页（数据目录/供应商/成员管理）。普通员工：用分身干活（上传 inbox、生成
-        outputs），看不到设置页。登录页自助注册的新成员默认是普通员工。此为界面级权限，不是安全体系。
+        账号由管理员在这里统一分配，初始 PIN 都是 <b>123456</b>（成员首次登录会被提示修改）。
+        管理员：可进设置页、可见全部 9 个分身。普通员工：只见分配给 TA 的分身（不勾选=全部可见）。此为界面级权限，不是安全体系。
       </p>
+      <AddMemberInline onFlash={onFlash} />
       <div className="space-y-1.5">
         {members.map((m) => (
           <div key={m.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
@@ -299,6 +315,17 @@ function MemberSection({ onFlash }: { onFlash: (text: string) => void }): React.
             </select>
             <button
               onClick={async () => {
+                await window.api.identity.resetPin(m.id)
+                onFlash(`${m.name} 的 PIN 已重置为 123456`)
+                await loadMembers()
+              }}
+              className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-500 hover:border-amber-400 hover:text-amber-600"
+              title="忘记 PIN 时用：重置回初始 123456"
+            >
+              重置PIN
+            </button>
+            <button
+              onClick={async () => {
                 await removeMember(m.id)
                 onFlash(`已移除 ${m.name}`)
               }}
@@ -310,8 +337,105 @@ function MemberSection({ onFlash }: { onFlash: (text: string) => void }): React.
             </button>
           </div>
         ))}
+        {members.filter((m) => m.role === 'member').map((m) => (
+          <AgentVisibilityRow key={`agents-${m.id}`} memberId={m.id} memberName={m.name} 可见分身={m.可见分身} onFlash={onFlash} />
+        ))}
         {members.length === 0 && <p className="py-2 text-center text-xs text-slate-400">暂无成员</p>}
       </div>
     </section>
+  )
+}
+
+
+/** 管理员分配新账号：名字+角色；初始 PIN 固定 123456 */
+function AddMemberInline({ onFlash }: { onFlash: (text: string) => void }): React.JSX.Element {
+  const addMember = useIdentityStore((s) => s.addMember)
+  const [name, setName] = useState('')
+  const [role, setRole] = useState<'admin' | 'member'>('member')
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="新成员名字"
+        className="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
+      />
+      <select
+        value={role}
+        onChange={(e) => setRole(e.target.value as 'admin' | 'member')}
+        className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none"
+      >
+        <option value="member">普通员工</option>
+        <option value="admin">管理员</option>
+      </select>
+      <button
+        onClick={async () => {
+          if (!name.trim()) return
+          await addMember(name.trim(), role)
+          onFlash(`已添加 ${name.trim()}（初始 PIN 123456）`)
+          setName('')
+        }}
+        className="shrink-0 rounded-md bg-jushi-accent px-3 py-1.5 text-xs font-medium text-white"
+      >
+        ＋ 分配账号
+      </button>
+    </div>
+  )
+}
+
+const ALL_AGENTS: { name: import('@shared/agent-types').AgentName; label: string }[] = [
+  { name: 'sales', label: '销售' },
+  { name: 'solution', label: '解决方案' },
+  { name: 'bidding', label: '招投标' },
+  { name: 'legal', label: '法务' },
+  { name: 'operation', label: '运营' },
+  { name: 'brand', label: '品牌' },
+  { name: 'ops-policy', label: '行政人力' },
+  { name: 'finance', label: '财务' },
+  { name: 'intel', label: '行业情报' }
+]
+
+/** 员工的可见分身勾选行：全不勾/全勾 = 全部可见（存 null） */
+function AgentVisibilityRow({
+  memberId,
+  memberName,
+  可见分身,
+  onFlash
+}: {
+  memberId: string
+  memberName: string
+  可见分身?: import('@shared/agent-types').AgentName[]
+  onFlash: (text: string) => void
+}): React.JSX.Element {
+  const loadMembers = useIdentityStore((s) => s.loadMembers)
+  const selected = new Set(可见分身 ?? ALL_AGENTS.map((a) => a.name))
+
+  async function toggle(agent: import('@shared/agent-types').AgentName): Promise<void> {
+    const next = new Set(selected)
+    if (next.has(agent)) next.delete(agent)
+    else next.add(agent)
+    // 全选（或全不选）视为"全部可见"，存 null 保持向后兼容
+    const arr = next.size === 0 || next.size === ALL_AGENTS.length ? null : [...next]
+    await window.api.identity.setAgents(memberId, arr)
+    onFlash(`${memberName} 可见分身已更新${arr ? `（${arr.length} 个）` : '（全部）'}`)
+    await loadMembers()
+  }
+
+  return (
+    <div className="ml-8 flex flex-wrap items-center gap-1 rounded-lg bg-slate-50 px-3 py-1.5">
+      <span className="mr-1 text-[11px] text-slate-400">{memberName} 可见：</span>
+      {ALL_AGENTS.map((a) => (
+        <button
+          key={a.name}
+          onClick={() => toggle(a.name)}
+          className={`rounded-full border px-2 py-0.5 text-[11px] ${
+            selected.has(a.name) ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-400'
+          }`}
+        >
+          {a.label}
+        </button>
+      ))}
+    </div>
   )
 }

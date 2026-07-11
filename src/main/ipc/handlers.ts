@@ -1,6 +1,6 @@
-import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
-import { copyFileSync, readFileSync } from 'node:fs'
-import { basename, dirname } from 'node:path'
+import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { copyFileSync, cpSync, existsSync, readFileSync, readdirSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc-channels'
 import type { FileFilter, RunAgentRequest } from '@shared/api-types'
 import type {
@@ -23,6 +23,9 @@ import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import {
   addCompany,
   addTeamMember,
+  changePin,
+  resetPin,
+  setMemberAgents,
   getConfig,
   getDataDir,
   listTeamMembers,
@@ -118,6 +121,27 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.configRemoveCompany, (_e, id: string) => removeCompany(id))
   ipcMain.handle(IPC.configSetCompanyDataDir, (_e, id: string, dir: string) => setCompanyDataDir(id, dir))
   ipcMain.handle(IPC.configSetActiveCompany, (_e, id: string) => setActiveCompany(id))
+
+  // 从安装包内置模板初始化新数据目录：选一个空文件夹 → 拷贝模板 → 绑定到公司
+  ipcMain.handle(IPC.configInitDataDir, async (_e, companyId: string) => {
+    const win = getMainWindow()
+    if (!win) return { ok: false, 说明: '窗口未就绪' }
+    const templateSrc = app.isPackaged
+      ? join(process.resourcesPath, 'company-os-template')
+      : join(app.getAppPath(), 'resources', 'company-os-template')
+    if (!existsSync(templateSrc)) return { ok: false, 说明: '安装包内未找到数据目录模板（company-os-template）' }
+    const result = await dialog.showOpenDialog(win, {
+      title: '选择一个空文件夹作为该公司的数据目录',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return { ok: false, 说明: '已取消' }
+    const target = result.filePaths[0]
+    const entries = readdirSync(target).filter((n) => !n.startsWith('.'))
+    if (entries.length > 0) return { ok: false, 说明: '所选文件夹不是空的——请选择/新建一个空文件夹，避免覆盖已有资料' }
+    cpSync(templateSrc, target, { recursive: true })
+    setCompanyDataDir(companyId, target)
+    return { ok: true, dataDir: target, 说明: `数据目录已初始化：${target}` }
+  })
 
   ipcMain.handle(IPC.agentsList, () => buildAgentDisplayList(getDataDir()))
 
@@ -240,7 +264,12 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.shellOpenPath, (_e, path: string) => shell.openPath(path))
 
   ipcMain.handle(IPC.identityList, () => listTeamMembers())
-  ipcMain.handle(IPC.identityAdd, (_e, name: string, pin?: string) => addTeamMember(name, pin))
+  ipcMain.handle(IPC.identityAdd, (_e, name: string, role?: MemberRole, agents?: AgentName[]) =>
+    addTeamMember(name, role, agents)
+  )
+  ipcMain.handle(IPC.identityChangePin, (_e, id: string, oldPin: string, newPin: string) => changePin(id, oldPin, newPin))
+  ipcMain.handle(IPC.identityResetPin, (_e, id: string) => resetPin(id))
+  ipcMain.handle(IPC.identitySetAgents, (_e, id: string, agents: AgentName[] | null) => setMemberAgents(id, agents))
   ipcMain.handle(IPC.identityRemove, (_e, id: string) => removeTeamMember(id))
   ipcMain.handle(IPC.identityVerifyPin, (_e, id: string, pin?: string) => verifyPin(id, pin))
   ipcMain.handle(IPC.identitySetRole, (_e, id: string, role: MemberRole) => setMemberRole(id, role))
