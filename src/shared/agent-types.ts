@@ -150,6 +150,8 @@ export interface IntelCandidate {
   /** intel 分身标注的相关度；未标注（纯信息流条目）为 null */
   相关度: '高' | '中' | null
   理由: string
+  /** 已跟进项目（此前确认过征询/意向等阶段）发布了正式采购公告——置顶高亮，确认后归档进原项目 */
+  跟进升级?: boolean
 }
 
 export interface IntelConfirmResult {

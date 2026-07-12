@@ -17,7 +17,7 @@ const STATE_FILE = '候选项目处理状态.json'
 const FEED_FILES = 3
 const CURATED_FILES = 14
 
-type CandidateState = Record<string, { 动作: '已确认' | '已忽略'; 时间: number; 项目文件夹?: string }>
+type CandidateState = Record<string, { 动作: '已确认' | '已忽略'; 时间: number; 项目文件夹?: string; 类型?: string }>
 
 function statePath(dataDir: string): string {
   return join(dataDir, TRACK_DIR_REL, STATE_FILE)
@@ -147,22 +147,78 @@ function scanAllCandidates(dataDir: string): IntelCandidate[] {
 
 const REL_RANK = { 高: 0, 中: 1 } as const
 
-/** 待确认列表：过滤掉已确认/已忽略的；日期新在前，同日相关度高在前 */
+/**
+ * 待确认列表。三层处理：
+ * ① 跨天去重——同一项目（名称+类型相同）在多天信息流里重复出现时只留最新一条（相关度标注就高合并）；
+ * ② 状态按名匹配——忽略过的项目名，后续任何日期/类型再出现都不再打扰；确认过的默认也不再出现；
+ * ③ 升级跟踪——例外：已确认跟进的项目（如意见征询阶段）后续发布「采购公告」时，
+ *    作为重点条目重新出现并标 跟进升级，置顶提醒；确认后按名称归档进原项目档。
+ */
 export function listIntelCandidates(dataDir: string): IntelCandidate[] {
   const state = readState(dataDir)
-  return scanAllCandidates(dataDir)
-    .filter((c) => !state[c.key])
-    .sort((a, b) => {
-      if (a.日期 !== b.日期) return a.日期 < b.日期 ? 1 : -1
-      const ra = a.相关度 ? REL_RANK[a.相关度] : 2
-      const rb = b.相关度 ? REL_RANK[b.相关度] : 2
-      return ra - rb
-    })
+
+  // 状态按名索引：忽略名单 + 每个名字已确认过的类型集合
+  const ignoredNames = new Set<string>()
+  const confirmedTypesByName = new Map<string, Set<string>>()
+  for (const [key, st] of Object.entries(state)) {
+    const name = key.slice(key.indexOf('|') + 1).trim()
+    if (!name) continue
+    if (st.动作 === '已忽略') ignoredNames.add(name)
+    else {
+      if (!confirmedTypesByName.has(name)) confirmedTypesByName.set(name, new Set())
+      confirmedTypesByName.get(name)?.add(st.类型 ?? '')
+    }
+  }
+
+  // 跨天去重：名称+类型 相同只留日期最新的一条；相关度标注从旧条目合并
+  const byNameType = new Map<string, IntelCandidate>()
+  for (const c of scanAllCandidates(dataDir)) {
+    const nt = `${c.类型}|${c.项目名称.trim()}`
+    const prev = byNameType.get(nt)
+    if (!prev || prev.日期 < c.日期) {
+      if (prev?.相关度 && !c.相关度) {
+        c.相关度 = prev.相关度
+        c.理由 = c.理由 || prev.理由
+        c.标签 = c.标签 || prev.标签
+      }
+      byNameType.set(nt, c)
+    } else if (c.相关度 && !prev.相关度) {
+      prev.相关度 = c.相关度
+      prev.理由 = prev.理由 || c.理由
+      prev.标签 = prev.标签 || c.标签
+    }
+  }
+
+  const out: IntelCandidate[] = []
+  for (const c of byNameType.values()) {
+    const name = c.项目名称.trim()
+    if (state[c.key]) continue // 本条已处理过
+    if (ignoredNames.has(name)) continue // 忽略过的项目名不再打扰
+    const confirmedTypes = confirmedTypesByName.get(name)
+    if (confirmedTypes) {
+      // 已确认跟进的项目：只有"正式采购公告"作为升级提醒重新出现（此前确认的不是公告阶段时）
+      if (c.类型 === '采购公告' && !confirmedTypes.has('采购公告')) {
+        c.跟进升级 = true
+        out.push(c)
+      }
+      continue
+    }
+    out.push(c)
+  }
+
+  return out.sort((a, b) => {
+    if (Boolean(a.跟进升级) !== Boolean(b.跟进升级)) return a.跟进升级 ? -1 : 1
+    if (a.日期 !== b.日期) return a.日期 < b.日期 ? 1 : -1
+    const ra = a.相关度 ? REL_RANK[a.相关度] : 2
+    const rb = b.相关度 ? REL_RANK[b.相关度] : 2
+    return ra - rb
+  })
 }
 
 export function ignoreIntelCandidate(dataDir: string, key: string): void {
   const state = readState(dataDir)
-  state[key] = { 动作: '已忽略', 时间: Date.now() }
+  const candidate = scanAllCandidates(dataDir).find((c) => c.key === key)
+  state[key] = { 动作: '已忽略', 时间: Date.now(), 类型: candidate?.类型 }
   writeState(dataDir, state)
 }
 
@@ -257,7 +313,7 @@ export function confirmIntelCandidate(dataDir: string, key: string): IntelConfir
   writeSourceSidecar(dataDir, folderName, candidate)
 
   const state = readState(dataDir)
-  state[key] = { 动作: '已确认', 时间: Date.now(), 项目文件夹: folderName }
+  state[key] = { 动作: '已确认', 时间: Date.now(), 项目文件夹: folderName, 类型: candidate.类型 }
   writeState(dataDir, state)
 
   const canDownload = extractZjgovParams(candidate.链接) !== null

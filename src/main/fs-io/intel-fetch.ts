@@ -312,41 +312,58 @@ async function fetchTzygcg(dates: string[]): Promise<FeedEntry[]> {
 
 // ── 合并写入信息流 ───────────────────────────────────────────────────────
 
-/** 把抓到的条目按日期合并进 {日期}_信息流.json：已有条目保留，新项目名才追加 */
+/**
+ * 把抓到的条目按日期合并进 {日期}_信息流.json。去重两层：
+ * 同日按 名称+类型 不重复；跨天——同一 名称+类型 在近三天任一天的信息流里已存在，就不再新增
+ * （政府网站会连续多天挂同一公告，只留首次出现的那条）。
+ */
 function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): number {
   const dir = join(dataDir, TRACK_DIR_REL)
   mkdirSync(dir, { recursive: true })
-  const byDate = new Map<string, FeedEntry[]>()
-  for (const e of entries) {
-    if (!e.项目名称.trim()) continue
-    if (!byDate.has(e.日期)) byDate.set(e.日期, [])
-    byDate.get(e.日期)?.push(e)
-  }
 
-  let added = 0
-  for (const [date, list] of byDate) {
-    const p = join(dir, `${date}_信息流.json`)
-    let existing: Record<string, unknown>[] = []
+  const ntKey = (类型: unknown, 名称: unknown): string => `${String(类型 ?? '')}|${String(名称 ?? '').trim()}`
+
+  // 近三天所有信息流里已有的 名称+类型（跨天去重基准）
+  const seenAll = new Set<string>()
+  const feeds = new Map<string, { path: string; data: Record<string, unknown>; items: Record<string, unknown>[] }>()
+  for (const d of recentDates(WINDOW_DAYS)) {
+    const p = join(dir, `${d}_信息流.json`)
+    let data: Record<string, unknown> = { 日期: d }
+    let items: Record<string, unknown>[] = []
     if (existsSync(p)) {
       try {
-        const feed = JSON.parse(readFileSync(p, 'utf-8'))
-        if (Array.isArray(feed?.项目)) existing = feed.项目
+        data = JSON.parse(readFileSync(p, 'utf-8'))
+        if (Array.isArray(data?.项目)) items = data.项目 as Record<string, unknown>[]
       } catch {
         // 损坏就整个重写
       }
     }
-    const seen = new Set(existing.map((x) => String(x?.项目名称 ?? '').trim()))
-    for (const e of list) {
-      const name = e.项目名称.trim()
-      if (seen.has(name)) continue
-      seen.add(name)
-      const { 日期: _drop, ...feedEntry } = e
-      existing.push(feedEntry)
-      added += 1
-    }
-    const tmp = `${p}.tmp`
-    writeFileSync(tmp, JSON.stringify({ 日期: date, 项目: existing }, null, 2), 'utf-8')
-    renameSync(tmp, p)
+    for (const x of items) seenAll.add(ntKey((x as { 类型?: unknown }).类型, (x as { 项目名称?: unknown }).项目名称))
+    feeds.set(d, { path: p, data, items })
+  }
+
+  let added = 0
+  const touched = new Set<string>()
+  for (const e of entries) {
+    const name = e.项目名称.trim()
+    if (!name) continue
+    const key = ntKey(e.类型, name)
+    if (seenAll.has(key)) continue
+    const feed = feeds.get(e.日期)
+    if (!feed) continue // 窗口外日期不写
+    seenAll.add(key)
+    const { 日期: _drop, ...feedEntry } = e
+    feed.items.push(feedEntry)
+    touched.add(e.日期)
+    added += 1
+  }
+
+  for (const d of touched) {
+    const feed = feeds.get(d)
+    if (!feed) continue
+    const tmp = `${feed.path}.tmp`
+    writeFileSync(tmp, JSON.stringify({ ...feed.data, 日期: d, 项目: feed.items }, null, 2), 'utf-8')
+    renameSync(tmp, feed.path)
   }
   return added
 }

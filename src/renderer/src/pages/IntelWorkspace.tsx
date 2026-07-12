@@ -36,7 +36,16 @@ function CandidateRow({
   onIgnore: () => void
 }): React.JSX.Element {
   return (
-    <div className={`rounded-lg border bg-white p-2.5 ${c.相关度 === '高' ? 'border-rose-200' : 'border-slate-200'}`}>
+    <div
+      className={`rounded-lg border bg-white p-2.5 ${
+        c.跟进升级 ? 'border-amber-400 shadow-sm' : c.相关度 === '高' ? 'border-rose-200' : 'border-slate-200'
+      }`}
+    >
+      {c.跟进升级 && (
+        <div className="mb-1.5 rounded bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
+          🔔 重点：你跟进中的项目发布了正式采购公告
+        </div>
+      )}
       <a
         href={c.链接 || undefined}
         target="_blank"
@@ -77,9 +86,11 @@ function CandidateRow({
         <button
           disabled={disabled}
           onClick={onConfirm}
-          className="flex-1 rounded bg-jushi-accent px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+          className={`flex-1 rounded px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
+            c.跟进升级 ? 'bg-amber-500' : 'bg-jushi-accent'
+          }`}
         >
-          {confirming ? '建档中…' : '✓ 确认跟进 → 招投标'}
+          {confirming ? '建档中…' : c.跟进升级 ? '✓ 归档进已有项目（更新为正式公告）' : '✓ 确认跟进 → 招投标'}
         </button>
         <button
           disabled={disabled}
