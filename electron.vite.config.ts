@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // pptxgenjs 只发 ESM 产物，外部化后主进程(CJS)require 会炸——把它打进 bundle 由 rollup 转换
+    plugins: [externalizeDepsPlugin({ exclude: ['pptxgenjs'] })],
     resolve: {
       alias: {
         '@shared': resolve('src/shared')
