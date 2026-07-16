@@ -157,6 +157,26 @@ export interface CompanyOsApi {
   gzh: {
     runStyle(inputMdPath: string): Promise<string>
   }
+  update: {
+    /** 对比 GitHub Releases 最新版本与当前版本 */
+    check(): Promise<{
+      hasUpdate: boolean
+      current: string
+      latest: string
+      notes: string
+      assetName: string | null
+      assetUrl: string | null
+      assetSize: number
+      releaseUrl: string
+      说明: string
+    }>
+    /** 人工确认后：下载安装包（进度走 onProgress）并自动拉起安装 */
+    download(info: Awaited<ReturnType<CompanyOsApi['update']['check']>>): Promise<{ ok: boolean; path?: string; 说明: string }>
+    onProgress(cb: (p: { pct: number; received: number; total: number }) => void): () => void
+    /** 私有仓库用：是否已配置只读 GitHub Token / 保存（null=清除）。Token 只存本机配置 */
+    getTokenSet(): Promise<boolean>
+    setToken(token: string | null): Promise<void>
+  }
   identity: {
     list(): Promise<TeamMember[]>
     /** 添加成员（管理员在设置页分配；初始 PIN 123456）。首个成员强制管理员 */

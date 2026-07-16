@@ -102,6 +102,17 @@ const api: CompanyOsApi = {
     exportBiddingTriSplit: (markdownPath: string) =>
       ipcRenderer.invoke(IPC.docgenExportBiddingTriSplit, markdownPath)
   },
+  update: {
+    check: () => ipcRenderer.invoke(IPC.updateCheck),
+    download: (info: unknown) => ipcRenderer.invoke(IPC.updateDownload, info),
+    getTokenSet: () => ipcRenderer.invoke(IPC.updateGetTokenSet),
+    setToken: (token: string | null) => ipcRenderer.invoke(IPC.updateSetToken, token),
+    onProgress: (cb: (p: { pct: number; received: number; total: number }) => void) => {
+      const listener = (_e: unknown, payload: { pct: number; received: number; total: number }): void => cb(payload)
+      ipcRenderer.on('update:progress', listener)
+      return () => ipcRenderer.removeListener('update:progress', listener)
+    }
+  },
   gzh: {
     runStyle: (inputMdPath: string) => ipcRenderer.invoke(IPC.gzhRunStyle, inputMdPath)
   },

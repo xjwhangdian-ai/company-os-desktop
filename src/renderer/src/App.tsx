@@ -6,6 +6,7 @@ import { useIdentityStore } from './stores/useIdentityStore'
 import { AgentPicker } from './components/AgentPicker'
 import { IdentityGate } from './components/IdentityGate'
 import { SyncButton } from './components/SyncButton'
+import { UpdateBanner } from './components/UpdateBanner'
 import { Settings } from './pages/Settings'
 import { GenericAgentPage } from './pages/GenericAgentPage'
 import { BiddingWorkspace } from './pages/BiddingWorkspace'
@@ -96,7 +97,9 @@ export default function App(): React.JSX.Element {
   const activeAgent = visibleList.find((a) => a.name === activeAgentName) ?? null
 
   return (
-    <div className="flex h-screen bg-slate-100 text-slate-900">
+    <div className="flex h-screen flex-col bg-slate-100 text-slate-900">
+      <UpdateBanner />
+      <div className="flex min-h-0 flex-1">
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-100 p-3">
         {/* app-drag：无标题栏窗口靠这块区域拖动；pt-7 给 macOS 红绿灯让位，避免压住公司名 */}
         <div className="app-drag mb-4 flex items-center gap-2.5 px-2 pb-1 pt-7">
@@ -216,6 +219,7 @@ export default function App(): React.JSX.Element {
             <GenericAgentPage agent={activeAgent} />
           )}
       </main>
+      </div>
     </div>
   )
 }

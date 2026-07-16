@@ -265,6 +265,8 @@ export function Settings(): React.JSX.Element {
 
       <MemberSection onFlash={flashSaved} />
 
+      <AboutSection onFlash={flashSaved} />
+
       {savedHint && (
         <div className="fixed bottom-6 right-6 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">
           {savedHint}
@@ -272,6 +274,131 @@ export function Settings(): React.JSX.Element {
       )}
       </div>
     </div>
+  )
+}
+
+/** 关于与更新：显示当前版本 + 手动检查 GitHub Releases；有新版时下载安装（与顶部横幅同一套逻辑） */
+function AboutSection({ onFlash }: { onFlash: (t: string) => void }): React.JSX.Element {
+  const [checking, setChecking] = useState(false)
+  const [info, setInfo] = useState<Awaited<ReturnType<typeof window.api.update.check>> | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [pct, setPct] = useState<number | null>(null)
+  const [tokenSet, setTokenSet] = useState(false)
+  const [tokenInput, setTokenInput] = useState('')
+
+  useEffect(() => {
+    window.api.update.getTokenSet().then(setTokenSet)
+  }, [])
+
+  useEffect(() => {
+    if (!downloading) return
+    return window.api.update.onProgress((p) => setPct(p.pct))
+  }, [downloading])
+
+  async function handleCheck(): Promise<void> {
+    setChecking(true)
+    try {
+      const r = await window.api.update.check()
+      setInfo(r)
+      onFlash(r.说明)
+    } catch (err) {
+      onFlash(`检查失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  async function handleUpdate(): Promise<void> {
+    if (!info) return
+    setDownloading(true)
+    setPct(0)
+    try {
+      const r = await window.api.update.download(info)
+      onFlash(r.说明)
+    } finally {
+      setDownloading(false)
+      setPct(null)
+    }
+  }
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-sm font-medium text-slate-700">关于与更新</h3>
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <span className="text-xs text-slate-500">
+          当前版本 <b className="font-mono">v{info?.current ?? '…'}</b>
+          {info?.hasUpdate && (
+            <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              有新版 v{info.latest}
+            </span>
+          )}
+        </span>
+        <button
+          disabled={checking}
+          onClick={handleCheck}
+          className="rounded-md border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50"
+        >
+          {checking ? '检查中…' : '检查更新'}
+        </button>
+        {info?.hasUpdate && (
+          <button
+            disabled={downloading}
+            onClick={handleUpdate}
+            className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+          >
+            {downloading ? `下载中…${pct !== null && pct >= 0 ? ` ${pct}%` : ''}` : '立即更新'}
+          </button>
+        )}
+        <span className="text-[11px] text-slate-400">
+          自动对比 GitHub Releases；启动 8 秒后也会静默检查一次，有新版在窗口顶部提示。
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <span className="text-xs text-slate-500">
+          GitHub Token{' '}
+          {tokenSet ? (
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">已配置</span>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-400">未配置</span>
+          )}
+        </span>
+        <input
+          type="password"
+          value={tokenInput}
+          onChange={(e) => setTokenInput(e.target.value)}
+          placeholder="ghp_… / github_pat_…（仓库为私有时必填）"
+          className="w-64 rounded-md border border-slate-300 px-2 py-1 font-mono text-xs outline-none focus:border-jushi-accent"
+        />
+        <button
+          disabled={!tokenInput.trim()}
+          onClick={async () => {
+            await window.api.update.setToken(tokenInput.trim())
+            setTokenInput('')
+            setTokenSet(true)
+            onFlash('Token 已保存（只存本机配置，不进数据仓库）')
+          }}
+          className="rounded-md border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-40"
+        >
+          保存
+        </button>
+        {tokenSet && (
+          <button
+            onClick={async () => {
+              await window.api.update.setToken(null)
+              setTokenSet(false)
+              onFlash('Token 已清除')
+            }}
+            className="rounded-md border border-slate-300 px-3 py-1 text-xs text-slate-500 hover:border-red-300 hover:text-red-500"
+          >
+            清除
+          </button>
+        )}
+        <span className="w-full text-[11px] leading-snug text-slate-400">
+          App 仓库目前是私有的，检查/下载更新需要一枚只读 Token：GitHub → Settings → Developer settings → Fine-grained
+          tokens，仓库选 company-os-desktop、权限只勾 Contents: Read。每台电脑配一次；若日后把仓库设为 Public 则无需配置。
+        </span>
+      </div>
+    </section>
   )
 }
 

@@ -1,4 +1,5 @@
 import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { addCompany, addTeamMember, changePin, getActiveCompany, getConfig, getDataDir, getGithubToken, getLastSyncAt, listTeamMembers, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setGithubToken, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, verifyPin } from '../config/store'
 import { copyFileSync, cpSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc-channels'
@@ -20,27 +21,6 @@ import type {
   SupplierDocPreview
 } from '@shared/agent-types'
 import { getSyncStatus, syncNow } from '../fs-io/git-sync'
-import {
-  addCompany,
-  addTeamMember,
-  changePin,
-  resetPin,
-  setMemberAgents,
-  getConfig,
-  getDataDir,
-  listTeamMembers,
-  removeCompany,
-  removeTeamMember,
-  setActiveCompany,
-  setActiveProvider,
-  setCompanyDataDir,
-  setMemberRole,
-  setProviderConfig,
-  verifyPin,
-  getActiveCompany,
-  getLastSyncAt,
-  setLastSyncAt
-} from '../config/store'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
 import {
@@ -93,6 +73,7 @@ import { ensureCompanySkeleton } from '../fs-io/data-template'
 import { exportMarkdownToDocx } from '../docgen/docx-export'
 import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
 import { exportMarkdownToPptx } from '../docgen/pptx-export'
+import { checkForUpdate, downloadAndInstall, type UpdateInfo } from '../update/updater'
 import { runGzhStyle } from '../fs-io/gzh-tool'
 
 const activeRuns = new Map<string, AbortController>()
@@ -275,6 +256,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
 
   ipcMain.handle(IPC.gzhRunStyle, (_e, inputMdPath: string) => runGzhStyle(getDataDir(), inputMdPath))
+
+  ipcMain.handle(IPC.updateCheck, () => checkForUpdate())
+  ipcMain.handle(IPC.updateDownload, (_e, info: UpdateInfo) => downloadAndInstall(getMainWindow(), info))
+  ipcMain.handle(IPC.updateGetTokenSet, () => Boolean(getGithubToken()))
+  ipcMain.handle(IPC.updateSetToken, (_e, token: string | null) => setGithubToken(token))
   ipcMain.handle(IPC.shellOpenPath, (_e, path: string) => shell.openPath(path))
 
   ipcMain.handle(IPC.identityList, () => listTeamMembers())

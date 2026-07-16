@@ -119,6 +119,8 @@ interface StoreSchemaV4 {
   teamMembers: TeamMemberRecord[]
   /** 每公司最近一次成功同步的时间戳（驱动每日开/关同步提示）；老配置没有此字段 */
   lastSyncAt?: Record<string, number>
+  /** 自更新用的 GitHub 只读 Token（仓库为私有时必填；仅存本机配置，不进数据仓库） */
+  githubToken?: string | null
 }
 
 interface StoreSchemaV3 {
@@ -424,6 +426,16 @@ export function verifyPin(id: string, pin: string | undefined): boolean {
 }
 
 // ============ 每公司的最近同步时间（驱动"每日开/关同步提示"） ============
+
+export function getGithubToken(): string | null {
+  return readAll().githubToken?.trim() || null
+}
+
+export function setGithubToken(token: string | null): void {
+  const all = readAll()
+  all.githubToken = token?.trim() || null
+  writeAll(all)
+}
 
 export function getLastSyncAt(companyId: string): number | null {
   return readAll().lastSyncAt?.[companyId] ?? null
