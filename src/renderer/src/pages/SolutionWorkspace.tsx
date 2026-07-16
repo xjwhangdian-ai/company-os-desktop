@@ -232,6 +232,11 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
               {(
                 [
                   {
+                    kind: 'template' as SolutionFileKind,
+                    title: '方案模板库',
+                    hint: '方案文档模板（docx/pdf/md）。「生成方案」时可选定一份，分身会严格按模板的章节结构组织内容；产出的 md 在右侧产出面板可一键「转Word / 转PPT」。'
+                  },
+                  {
                     kind: 'productLib' as SolutionFileKind,
                     title: '基础产品库',
                     hint: '基础产品资料（手册/彩页/参数表）。注意：产品名称与参数的统一口径以 knowledge/products/ 为准，这里是补充材料。'
@@ -259,7 +264,7 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
                       {title}（{files[kind].length}）
                     </h3>
                     <button
-                      onClick={() => handleUpload(kind, LIB_FILTERS)}
+                      onClick={() => handleUpload(kind, kind === 'template' ? TEMPLATE_FILTERS : LIB_FILTERS)}
                       className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
                     >
                       📎 上传
@@ -374,7 +379,7 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
                 </button>
               </div>
               <p className="mt-2 text-xs text-slate-400">
-                方案落在 outputs/02_解决方案_solution/，右侧产出面板点「转Word」得正式文件。
+                方案落在 outputs/02_解决方案_solution/，右侧产出面板点「转Word」得正式文件、点「转PPT」得汇报版幻灯片。
               </p>
             </>
           )}
@@ -406,17 +411,30 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
                 refreshKey={outputsRefresh}
                 extraFileAction={(entry: OutputEntry) =>
                   entry.name.endsWith('.md') ? (
-                    <button
-                      onClick={async () => {
-                        const docxPath = await window.api.docgen.exportMarkdownFile(entry.path)
-                        await window.api.shell.showItemInFolder(docxPath)
-                        setOutputsRefresh((k) => k + 1)
-                      }}
-                      className="shrink-0 rounded px-1.5 py-0.5 text-xs text-slate-400 opacity-0 hover:bg-slate-100 hover:text-jushi-accent group-hover:opacity-100"
-                      title="把这份 markdown 转成 Word 并在 Finder 里定位"
-                    >
-                      转Word
-                    </button>
+                    <>
+                      <button
+                        onClick={async () => {
+                          const docxPath = await window.api.docgen.exportMarkdownFile(entry.path)
+                          await window.api.shell.showItemInFolder(docxPath)
+                          setOutputsRefresh((k) => k + 1)
+                        }}
+                        className="shrink-0 rounded px-1.5 py-0.5 text-xs text-slate-400 opacity-0 hover:bg-slate-100 hover:text-jushi-accent group-hover:opacity-100"
+                        title="把这份 markdown 转成 Word 并在文件夹里定位"
+                      >
+                        转Word
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const pptxPath = await window.api.docgen.exportMarkdownPptx(entry.path)
+                          await window.api.shell.showItemInFolder(pptxPath)
+                          setOutputsRefresh((k) => k + 1)
+                        }}
+                        className="shrink-0 rounded px-1.5 py-0.5 text-xs text-slate-400 opacity-0 hover:bg-slate-100 hover:text-jushi-accent group-hover:opacity-100"
+                        title="把这份方案转成汇报版 PPT（章节自动分页，细节以 Word 版为准）"
+                      >
+                        转PPT
+                      </button>
+                    </>
                   ) : null
                 }
               />

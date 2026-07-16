@@ -67,7 +67,8 @@ import { fetchReportsNow, listIntelReports } from '../fs-io/intel-reports'
 import { downloadTenderFile, probeTenderFile } from '../fs-io/tender-download'
 import { purgeStaleIntelData } from '../fs-io/intel-purge'
 import { fetchIntelNow } from '../fs-io/intel-fetch'
-import { listLegalDocs, listLegalTemplates, markReviewed } from '../fs-io/legal-workflow'
+import { getIntelKeywords, setIntelKeywords } from '../fs-io/intel-keywords'
+import { listLegalDocs, listLegalTemplates, markReviewed, generateLegalRedline } from '../fs-io/legal-workflow'
 import {
   addFollowUp,
   exportQuoteImages,
@@ -91,6 +92,7 @@ import { listGovernanceDocs, listPolicyDocs, setGovernanceDocState, setPolicyDoc
 import { ensureCompanySkeleton } from '../fs-io/data-template'
 import { exportMarkdownToDocx } from '../docgen/docx-export'
 import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
+import { exportMarkdownToPptx } from '../docgen/pptx-export'
 import { runGzhStyle } from '../fs-io/gzh-tool'
 
 const activeRuns = new Map<string, AbortController>()
@@ -244,14 +246,24 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.intelFetchNow, (_e, force: boolean) => fetchIntelNow(getDataDir(), force))
   ipcMain.handle(IPC.intelSaveReportToSolution, (_e, report: IntelReport) => saveReportToSolutionLib(getDataDir(), report))
   ipcMain.handle(IPC.intelFetchReports, () => fetchReportsNow(getDataDir()))
+  ipcMain.handle(IPC.intelGetKeywords, () => getIntelKeywords(getDataDir()))
+  ipcMain.handle(IPC.intelSetKeywords, (_e, keywords: string[]) => setIntelKeywords(getDataDir(), keywords))
 
   ipcMain.handle(IPC.legalListDocs, () => listLegalDocs(getDataDir()))
   ipcMain.handle(IPC.legalMarkReviewed, (_e, fileName: string) => markReviewed(getDataDir(), fileName))
+  ipcMain.handle(IPC.legalGenerateRedline, (_e, fileName: string) => generateLegalRedline(getDataDir(), fileName))
 
   ipcMain.handle(IPC.docgenExportMarkdownFile, async (_e, markdownPath: string) => {
     const markdown = readFileSync(markdownPath, 'utf-8')
     const outPath = markdownPath.replace(/\.md$/, '.docx')
     await exportMarkdownToDocx(markdown, outPath)
+    return outPath
+  })
+
+  ipcMain.handle(IPC.docgenExportMarkdownPptx, async (_e, markdownPath: string) => {
+    const markdown = readFileSync(markdownPath, 'utf-8')
+    const outPath = markdownPath.replace(/\.md$/, '.pptx')
+    await exportMarkdownToPptx(markdown, outPath)
     return outPath
   })
 

@@ -134,15 +134,22 @@ export interface CompanyOsApi {
     saveReportToSolution(report: IntelReport): Promise<{ ok: boolean; relativePath: string; existed: boolean }>
     /** 人工触发研报重抓（拉起 run_reports.sh），与定时任务数据按链接去重合并；仅管理员 Mac 可用 */
     fetchReports(): Promise<{ ok: boolean; 新增条数: number; 说明: string }>
+    /** 招投标信息的兴趣关键词（命中标红+计入「只看相关」；存数据仓库，改词立即生效） */
+    getKeywords(): Promise<string[]>
+    setKeywords(keywords: string[]): Promise<string[]>
   }
   legal: {
     listDocs(): Promise<{ pending: LegalDoc[]; reviewed: LegalDoc[] }>
     markReviewed(fileName: string): Promise<void>
+    /** 按分身产出的 修订清单.json，把修改意见以 Word 修订模式写回原合同（仅 .docx） */
+    generateRedline(fileName: string): Promise<{ ok: boolean; outPath?: string; applied: number; missed: { 原文: string; 修改为: string; 理由?: string }[]; 说明: string }>
     listTemplates(): Promise<ContractTemplate[]>
     uploadTemplate(category: ContractCategory, sourcePath: string): Promise<UploadResult>
   }
   docgen: {
     exportMarkdownFile(markdownPath: string): Promise<string>
+    /** markdown 方案 → 汇报版 PPT（H1 封面/H2 分章/要点自动分页/表格截断展示） */
+    exportMarkdownPptx(markdownPath: string): Promise<string>
     exportBiddingTriSplit(
       markdownPath: string
     ): Promise<{ bookTitle: string; fileName: string; path: string }[]>

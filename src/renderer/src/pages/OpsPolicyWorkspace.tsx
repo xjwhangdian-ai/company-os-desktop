@@ -149,18 +149,46 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
             </div>
           </div>
 
-          {/* 制度文件四状态 */}
+          {/* 制度文件四状态（治理文件按其标记状态一并计入看板，带 📜 标识；文件本体仍在 legal 目录不移动） */}
           {OPS_DOC_STATES.map((state) => {
             const items = byState.get(state) ?? []
+            const govItems = governance.filter((g) => g.state === state)
             return (
               <div key={state} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <div className="flex items-center justify-between bg-slate-100 px-2.5 py-1.5">
                   <span className="text-xs font-semibold text-slate-600">
                     <span className={`mr-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${STATE_STYLE[state]}`}>{state}</span>
-                    {items.length} 份
+                    {items.length + govItems.length} 份
+                    {govItems.length > 0 && <span className="ml-1 text-[10px] font-normal text-slate-400">（含治理文件 {govItems.length}）</span>}
                   </span>
                   <span className="text-[10px] text-slate-400">outputs/07_行政人力_ops-policy/{['01_未审核', '02_初审', '03_终审', '04_定稿'][OPS_DOC_STATES.indexOf(state)]}/</span>
                 </div>
+                {govItems.length > 0 && (
+                  <div className="space-y-1 bg-slate-50 p-2 pb-0">
+                    {govItems.map((g) => (
+                      <div key={g.relativePath} className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-2.5 py-1.5">
+                        <span className="shrink-0 text-[10px]" title="公司章程等治理文件，本体在 outputs/04_法务_legal/，标记状态不移动文件">📜</span>
+                        <button
+                          onClick={() => window.api.shell.openPath(g.path)}
+                          className="min-w-0 flex-1 truncate text-left text-xs text-slate-600 hover:text-jushi-accent"
+                        >
+                          {g.name}
+                        </button>
+                        <select
+                          value={g.state}
+                          onChange={(e) => handleSetGovState(g, e.target.value as OpsDocState)}
+                          className="shrink-0 rounded border border-slate-300 bg-white px-1 py-0.5 text-[10px] text-slate-500 outline-none"
+                        >
+                          {OPS_DOC_STATES.map((st) => (
+                            <option key={st} value={st}>
+                              {st}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {items.length > 0 && (
                   <div className="space-y-1 bg-slate-50 p-2">
                     {items.map((d) => (

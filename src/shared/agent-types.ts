@@ -147,6 +147,8 @@ export interface IntelCandidate {
   链接: string
   平台: string
   台州公安: boolean
+  /** 命中的兴趣关键词（读列表时按用户配置动态匹配；未命中为 null） */
+  命中关键词?: string | null
   /** intel 分身标注的相关度；未标注（纯信息流条目）为 null */
   相关度: '高' | '中' | null
   理由: string

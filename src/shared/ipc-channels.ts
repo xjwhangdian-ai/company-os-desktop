@@ -42,14 +42,18 @@ export const IPC = {
   intelFetchNow: 'intel:fetch-now',
   intelSaveReportToSolution: 'intel:save-report-to-solution',
   intelFetchReports: 'intel:fetch-reports',
+  intelGetKeywords: 'intel:get-keywords',
+  intelSetKeywords: 'intel:set-keywords',
 
   legalListDocs: 'legal:list-docs',
   legalMarkReviewed: 'legal:mark-reviewed',
   legalListTemplates: 'legal:list-templates',
   legalUploadTemplate: 'legal:upload-template',
+  legalGenerateRedline: 'legal:generate-redline',
 
   docgenExportMarkdownFile: 'docgen:export-markdown-file',
   docgenExportBiddingTriSplit: 'docgen:export-bidding-tri-split',
+  docgenExportMarkdownPptx: 'docgen:export-markdown-pptx',
 
   gzhRunStyle: 'gzh:run-style',
   shellOpenPath: 'shell:open-path',

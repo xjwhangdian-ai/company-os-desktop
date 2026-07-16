@@ -84,17 +84,21 @@ const api: CompanyOsApi = {
     purgeStale: () => ipcRenderer.invoke(IPC.intelPurgeStale),
     fetchNow: (force?: boolean) => ipcRenderer.invoke(IPC.intelFetchNow, force ?? false),
     saveReportToSolution: (report: IntelReport) => ipcRenderer.invoke(IPC.intelSaveReportToSolution, report),
-    fetchReports: () => ipcRenderer.invoke(IPC.intelFetchReports)
+    fetchReports: () => ipcRenderer.invoke(IPC.intelFetchReports),
+    getKeywords: () => ipcRenderer.invoke(IPC.intelGetKeywords),
+    setKeywords: (keywords: string[]) => ipcRenderer.invoke(IPC.intelSetKeywords, keywords)
   },
   legal: {
     listDocs: () => ipcRenderer.invoke(IPC.legalListDocs),
     markReviewed: (fileName: string) => ipcRenderer.invoke(IPC.legalMarkReviewed, fileName),
+    generateRedline: (fileName: string) => ipcRenderer.invoke(IPC.legalGenerateRedline, fileName),
     listTemplates: () => ipcRenderer.invoke(IPC.legalListTemplates),
     uploadTemplate: (category: ContractCategory, sourcePath: string): Promise<UploadResult> =>
       ipcRenderer.invoke(IPC.legalUploadTemplate, category, sourcePath)
   },
   docgen: {
     exportMarkdownFile: (markdownPath: string) => ipcRenderer.invoke(IPC.docgenExportMarkdownFile, markdownPath),
+    exportMarkdownPptx: (markdownPath: string) => ipcRenderer.invoke(IPC.docgenExportMarkdownPptx, markdownPath),
     exportBiddingTriSplit: (markdownPath: string) =>
       ipcRenderer.invoke(IPC.docgenExportBiddingTriSplit, markdownPath)
   },

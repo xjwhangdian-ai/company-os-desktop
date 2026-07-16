@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import type { AgentName, BiddingUploadResult } from '@shared/agent-types'
 import { AGENT_OUTPUT_FOLDER } from './outputs-scanner'
+import { extractCompanion } from './doc-extract'
 
 // ============ 统一约定（v3）============
 // 专属工作流的"输入"统一进 inbox/{编号_分身}/，"产出"统一进 outputs/{编号_分身}/{项目}/：
@@ -143,6 +144,10 @@ export function uploadToLegalPending(
   const fileName = `【${category}】${basename(sourcePath)}`
   const dest = uniqueDestPath(destDir, fileName)
   copyFileSync(sourcePath, dest)
+  // 生成伴生提取文本：分身审 docx/doc 时能读到全文，修订清单的"原文"引用才能逐字对上
+  if (/\.(docx|doc)$/i.test(dest)) {
+    void extractCompanion(dest).catch(() => null)
+  }
   return { absPath: dest, relativePath: `inbox/04_法务_legal/${basename(dest)}` }
 }
 

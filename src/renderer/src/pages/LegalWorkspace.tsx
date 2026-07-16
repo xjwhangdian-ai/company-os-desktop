@@ -25,6 +25,24 @@ function CategoryBadge({ category }: { category: ContractCategory }): React.JSX.
   return <span className={`rounded px-1.5 py-0.5 text-xs ${color}`}>{category}</span>
 }
 
+/** 审核提示词：意见书 + 机读修订清单（修订清单供「修订版合同」按钮把意见以 Word 修订模式写回原文） */
+function buildReviewPrompt(fileName: string): string {
+  const dir = reviewOutputDir(fileName)
+  const isDocx = /\.docx$/i.test(fileName)
+  return [
+    `审一下这份合同：inbox/04_法务_legal/${fileName}`,
+    `（若是二进制格式，先读同目录的伴生提取文本 ${fileName}_提取文本.txt）`,
+    ``,
+    `产出两份文件：`,
+    `1. 《合同审核意见书》→ ${dir}/审核意见书.md（按标准结构：总体结论/高风险条款/逐条意见/缺失条款/一句话总结）`,
+    `2. 机读修订清单 → ${dir}/修订清单.json——把每条可直接落地的条款修改整理成 JSON 数组：`,
+    `   [{"原文":"…","修改为":"…","理由":"…"}, …]`,
+    `   要求：「原文」必须从合同（或其提取文本）里逐字连续复制 20~80 字、在全文中唯一；`,
+    `   纯删除条款「修改为」填空字符串；只放能落地替换的条款文字，宏观建议写在意见书里不进清单。`,
+    isDocx ? `（用户之后会点「修订版合同」按钮，把清单以 Word 修订模式写回原合同。）` : `（原件不是 docx，修订清单仅作谈判参考。）`
+  ].join('\n')
+}
+
 export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const [pending, setPending] = useState<LegalDoc[]>([])
   const [reviewed, setReviewed] = useState<LegalDoc[]>([])
@@ -32,6 +50,26 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [uploadCategory, setUploadCategory] = useState<ContractCategory>('销售合同')
   const [showTemplates, setShowTemplates] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [redlining, setRedlining] = useState<string | null>(null)
+
+  function flash(text: string): void {
+    setNotice(text)
+    setTimeout(() => setNotice(null), 8000)
+  }
+
+  async function handleRedline(doc: LegalDoc): Promise<void> {
+    setRedlining(doc.fileName)
+    try {
+      const r = await window.api.legal.generateRedline(doc.fileName)
+      flash(r.说明)
+      if (r.ok && r.outPath) await window.api.shell.showItemInFolder(r.outPath)
+    } catch (err) {
+      flash(`生成失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setRedlining(null)
+    }
+  }
 
   async function refresh(): Promise<void> {
     const docs = await window.api.legal.listDocs()
@@ -119,15 +157,21 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <button
-                      onClick={() =>
-                        setPendingPrompt(
-                          `审一下这份合同：inbox/04_法务_legal/${doc.fileName}\n《合同审核意见书》写到 ${reviewOutputDir(doc.fileName)}/审核意见书.md`
-                        )
-                      }
+                      onClick={() => setPendingPrompt(buildReviewPrompt(doc.fileName))}
                       className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
                     >
                       审核
                     </button>
+                    {/\.docx$/i.test(doc.fileName) && (
+                      <button
+                        disabled={redlining !== null}
+                        onClick={() => handleRedline(doc)}
+                        title="按分身审核产出的修订清单，把修改意见以 Word「修订模式」写回原合同——打开即可逐条接受/拒绝"
+                        className="rounded border border-rose-300 bg-white px-2 py-0.5 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                      >
+                        {redlining === doc.fileName ? '生成中…' : '✍ 修订版合同'}
+                      </button>
+                    )}
                     {templateFor(doc.category) && (
                       <button
                         onClick={() =>
@@ -171,6 +215,11 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               ))}
             </div>
           </>
+        )}
+        {notice && (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] leading-snug text-emerald-700">
+            {notice}
+          </div>
         )}
       </div>
 

@@ -4,6 +4,7 @@ import type { IntelCandidate, IntelConfirmResult } from '@shared/agent-types'
 import { ensureBiddingProjectSkeleton } from './upload-router'
 import { readProjectCard, saveProjectCard } from './bidding-workflow'
 import { extractZjgovParams } from './intel-source'
+import { getIntelKeywords, matchIntelKeyword } from './intel-keywords'
 
 // ============ intel 分身推送的招投标信息流：人工确认后才建招投标项目卡 ============
 // 数据源（都在 outputs/09_情报_intel/招投标每日追踪/，由每日管线与 intel 分身产出）：
@@ -156,6 +157,7 @@ const REL_RANK = { 高: 0, 中: 1 } as const
  */
 export function listIntelCandidates(dataDir: string): IntelCandidate[] {
   const state = readState(dataDir)
+  const keywords = getIntelKeywords(dataDir)
 
   // 状态按名索引：忽略名单 + 每个名字已确认过的类型集合
   const ignoredNames = new Set<string>()
@@ -192,6 +194,8 @@ export function listIntelCandidates(dataDir: string): IntelCandidate[] {
   const out: IntelCandidate[] = []
   for (const c of byNameType.values()) {
     const name = c.项目名称.trim()
+    // 兴趣关键词按用户当前配置在读取时动态匹配（改词立即生效，无需重抓）
+    c.命中关键词 = matchIntelKeyword(`${c.项目名称}${c.采购单位}`, keywords)
     if (state[c.key]) continue // 本条已处理过
     if (ignoredNames.has(name)) continue // 忽略过的项目名不再打扰
     const confirmedTypes = confirmedTypesByName.get(name)
