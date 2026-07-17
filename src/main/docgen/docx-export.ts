@@ -25,17 +25,47 @@ const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
 const cellBorder = { style: BorderStyle.SINGLE, size: 2, color: 'AAAAAA' } as const
 const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder }
 
+/**
+ * 需人工确认的内容在 Word 里用黄色高亮标出（全部分身的 docx 导出统一生效）：
+ * 「待确认/待核对/待核实/待补充/待落实/待定」及其所在括注、〔…〕占位符、（内部数据，对外不披露）。
+ * 匹配整个括注（如「（待确认，以报价为准）」整段标黄）比只标关键词更醒目。
+ */
+const PENDING_RE =
+  /〔[^〕]*〕|[（(][^（）()]*(?:待确认|待核对|待核实|待补充|待落实|内部数据[，,]对外不披露)[^（）()]*[)）]|待确认|待核对|待核实|待补充|待落实/g
+
+/** 把一段纯文本按"待确认"标记切成 (文字, 是否高亮) 片段 */
+function splitPending(text: string): { text: string; highlight: boolean }[] {
+  const out: { text: string; highlight: boolean }[] = []
+  let last = 0
+  PENDING_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = PENDING_RE.exec(text)) !== null) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index), highlight: false })
+    out.push({ text: m[0], highlight: true })
+    last = PENDING_RE.lastIndex
+  }
+  if (last < text.length) out.push({ text: text.slice(last), highlight: false })
+  return out
+}
+
+function pushRuns(runs: TextRun[], text: string, opts: Partial<IRunOptions>): void {
+  for (const seg of splitPending(text)) {
+    if (!seg.text) continue
+    runs.push(new TextRun({ text: seg.text, ...opts, ...(seg.highlight ? { highlight: 'yellow' } : {}) }))
+  }
+}
+
 function parseInline(text: string, baseOpts: Partial<IRunOptions> = {}): TextRun[] {
   const runs: TextRun[] = []
   const re = /\*\*(.+?)\*\*/g
   let lastIndex = 0
   let m: RegExpExecArray | null
   while ((m = re.exec(text)) !== null) {
-    if (m.index > lastIndex) runs.push(new TextRun({ text: text.slice(lastIndex, m.index), ...baseOpts }))
-    runs.push(new TextRun({ text: m[1], bold: true, ...baseOpts }))
+    if (m.index > lastIndex) pushRuns(runs, text.slice(lastIndex, m.index), baseOpts)
+    pushRuns(runs, m[1], { ...baseOpts, bold: true })
     lastIndex = re.lastIndex
   }
-  if (lastIndex < text.length) runs.push(new TextRun({ text: text.slice(lastIndex), ...baseOpts }))
+  if (lastIndex < text.length) pushRuns(runs, text.slice(lastIndex), baseOpts)
   if (runs.length === 0) runs.push(new TextRun({ text: '', ...baseOpts }))
   return runs
 }
