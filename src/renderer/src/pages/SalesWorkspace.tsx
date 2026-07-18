@@ -23,6 +23,11 @@ type SalesTab = '产品库' | '选型' | '报价单' | '客户'
 type UploadMode = 'supplier' | 'bid'
 /** 产品库视图：卡片（SPS 选型式，默认）/ 列表（全字段表格）/ 比价（同款多供应商） */
 type ProductView = '卡片' | '列表' | '比价'
+/** 排序（对齐 SPS 的排序下拉）；毛利率按 (售-成本)/售 计算，仅内部参考 */
+type SortMode = '默认排序' | '价格从低到高' | '价格从高到低' | '毛利率排序(内部)'
+const SORT_MODES: SortMode[] = ['默认排序', '价格从低到高', '价格从高到低', '毛利率排序(内部)']
+/** 参数对比上限（SPS 同款交互，超过并排看不过来） */
+const COMPARE_MAX = 4
 
 interface PreviewCard extends SupplierDocPreview {
   mode: UploadMode
@@ -142,6 +147,14 @@ function searchScore(p: ProductEntry, tokens: string[]): number {
 /** 卡片/详情展示价：建议售价优先（对外口径），无价则空 */
 function displayPrice(p: ProductEntry): string {
   return p.建议销售价 || p.投标报价 || ''
+}
+
+/** 毛利率（内部）：(售-成本)/售，两价都是数字才有 */
+function marginRate(p: ProductEntry): number | null {
+  const sell = priceNum(displayPrice(p))
+  const cost = priceNum(p.成本价)
+  if (sell === null || cost === null || sell <= 0) return null
+  return ((sell - cost) / sell) * 100
 }
 
 /** 一行需求解析：末尾的 "x3 / ×3 / *3" 当数量 */
@@ -317,10 +330,14 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('全部')
   const [productView, setProductView] = useState<ProductView>('卡片')
+  const [sortMode, setSortMode] = useState<SortMode>('默认排序')
   const [priceMin, setPriceMin] = useState('')
   const [priceMax, setPriceMax] = useState('')
   const [detailId, setDetailId] = useState<string | null>(null)
   const [detailQty, setDetailQty] = useState('1')
+  const [compareIds, setCompareIds] = useState<string[]>([])
+  const [showCompare, setShowCompare] = useState(false)
+  const [bulkRate, setBulkRate] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [previews, setPreviews] = useState<PreviewCard[]>([])
@@ -414,6 +431,30 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     if (tokens.length > 0) scored.sort((a, b) => b.score - a.score || b.p.更新时间 - a.p.更新时间)
     return scored.map((x) => x.p)
   }, [products, query, categoryFilter, priceMin, priceMax])
+
+  /** 排序（在筛选结果之上；"默认"= 有搜索词按相关度、无搜索词按更新时间） */
+  const sortedProducts = useMemo(() => {
+    if (sortMode === '默认排序') return filteredProducts
+    const list = [...filteredProducts]
+    const price = (p: ProductEntry): number | null => priceNum(displayPrice(p))
+    if (sortMode === '价格从低到高') list.sort((a, b) => (price(a) ?? Infinity) - (price(b) ?? Infinity))
+    else if (sortMode === '价格从高到低') list.sort((a, b) => (price(b) ?? -Infinity) - (price(a) ?? -Infinity))
+    else list.sort((a, b) => (marginRate(b) ?? -Infinity) - (marginRate(a) ?? -Infinity))
+    return list
+  }, [filteredProducts, sortMode])
+
+  function toggleCompare(id: string): void {
+    setCompareIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id)
+      if (prev.length >= COMPARE_MAX) {
+        flash(`最多同时对比 ${COMPARE_MAX} 个产品，先移掉一个`)
+        return prev
+      }
+      return [...prev, id]
+    })
+  }
+
+  const compareProducts = compareIds.map((id) => products.find((p) => p.id === id)).filter((p): p is ProductEntry => Boolean(p))
 
   const detailProduct = detailId ? (products.find((p) => p.id === detailId) ?? null) : null
   /** 详情弹层里的"同款其他供应商"（品牌+型号相同的其它记录），按进价升序 */
@@ -710,6 +751,17 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-jushi-accent"
                   />
                 </div>
+                <select
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-600 outline-none"
+                >
+                  {SORT_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
                 <div className="flex overflow-hidden rounded-lg border border-slate-300">
                   {(['卡片', '列表', '比价'] as ProductView[]).map((v) => (
                     <button
@@ -851,7 +903,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               {productView === '卡片' && (
                 <>
                   <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-3">
-                    {filteredProducts.map((p) => {
+                    {sortedProducts.map((p) => {
                       const price = displayPrice(p)
                       return (
                         <div
@@ -889,15 +941,31 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                             <span className="max-w-24 truncate text-xs text-slate-300" title="供应商（采购侧）">
                               {p.供应商名称 || ''}
                             </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                addToCart(p)
-                              }}
-                              className="rounded-md bg-jushi-accent px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
-                            >
-                              🛒 加入
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleCompare(p.id)
+                                }}
+                                title="加入参数对比（最多 4 个）"
+                                className={`rounded-md border px-1.5 py-1 text-xs ${
+                                  compareIds.includes(p.id)
+                                    ? 'border-jushi-accent bg-jushi-accent/10 text-jushi-accent'
+                                    : 'border-slate-200 text-slate-400 hover:border-slate-300'
+                                }`}
+                              >
+                                对比
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  addToCart(p)
+                                }}
+                                className="rounded-md bg-jushi-accent px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
+                              >
+                                🛒 加入
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )
@@ -989,7 +1057,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredProducts.map((p) => (
+                    {sortedProducts.map((p) => (
                       <tr key={p.id} className="border-t border-slate-100 align-top hover:bg-slate-50">
                         <td className="px-2 py-1.5">
                           {p.图片 && dataDir ? (
@@ -1031,6 +1099,12 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         <td className="whitespace-nowrap px-2 py-2">
                           <button onClick={() => addToCart(p)} className="mr-1.5 text-jushi-accent hover:underline">
                             加入报价单
+                          </button>
+                          <button
+                            onClick={() => toggleCompare(p.id)}
+                            className={`mr-1.5 ${compareIds.includes(p.id) ? 'text-jushi-accent' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            对比{compareIds.includes(p.id) ? '✓' : ''}
                           </button>
                           <button
                             onClick={() => {
@@ -1200,6 +1274,104 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         </button>
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 对比浮条（SPS 式）：勾了产品就浮出来 */}
+              {compareIds.length > 0 && !showCompare && (
+                <div className="fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-lg">
+                  <span className="text-sm text-slate-600">已选 {compareIds.length} 个产品</span>
+                  <button
+                    onClick={() => setShowCompare(true)}
+                    disabled={compareIds.length < 2}
+                    className="rounded-full bg-jushi-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+                  >
+                    ⚖ 参数对比
+                  </button>
+                  <button onClick={() => setCompareIds([])} className="text-xs text-slate-400 hover:text-slate-600">
+                    清空
+                  </button>
+                </div>
+              )}
+
+              {/* 参数并排对比弹层 */}
+              {showCompare && compareProducts.length >= 2 && (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30" onClick={() => setShowCompare(false)}>
+                  <div
+                    className="max-h-[85vh] w-[860px] overflow-y-auto rounded-xl bg-white p-4 shadow-xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-base font-semibold text-slate-800">产品参数对比（{compareProducts.length}）</h3>
+                      <button onClick={() => setShowCompare(false)} className="text-slate-400 hover:text-slate-600">
+                        ✕
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <tbody>
+                          <tr>
+                            <td className="w-24 px-2 py-2 align-top text-slate-400"></td>
+                            {compareProducts.map((p) => (
+                              <td key={p.id} className="px-2 py-2 align-top">
+                                {p.图片 && dataDir ? (
+                                  <img src={appfileUrl(`${dataDir}/${p.图片}`)} className="h-20 w-20 rounded object-cover" />
+                                ) : (
+                                  <div className="flex h-20 w-20 items-center justify-center rounded bg-slate-50 text-lg text-slate-300">📦</div>
+                                )}
+                                <p className="mt-1 font-medium text-slate-700">{p.产品名称}</p>
+                                <button onClick={() => toggleCompare(p.id)} className="mt-0.5 text-slate-300 hover:text-red-500">
+                                  移出对比
+                                </button>
+                              </td>
+                            ))}
+                          </tr>
+                          {(
+                            [
+                              ['品牌', (p: ProductEntry) => p.品牌],
+                              ['型号', (p: ProductEntry) => p.型号],
+                              ['生产制造商', (p: ProductEntry) => p.生产制造商],
+                              ['产地', (p: ProductEntry) => p.产地],
+                              ['技术规格', (p: ProductEntry) => p.技术参数],
+                              ['单位', (p: ProductEntry) => p.单位],
+                              ['税率', (p: ProductEntry) => p.税率],
+                              ['质保期', (p: ProductEntry) => (p.质保期 ? `${p.质保期} 个月` : '')],
+                              ['对外报价参考', (p: ProductEntry) => (displayPrice(p) ? `¥ ${displayPrice(p)}` : '')],
+                              ['进价(内部)', (p: ProductEntry) => p.成本价],
+                              ['毛利率(内部)', (p: ProductEntry) => (marginRate(p) !== null ? `${marginRate(p)!.toFixed(1)}%` : '')],
+                              ['供应商(内部)', (p: ProductEntry) => p.供应商名称]
+                            ] as [string, (p: ProductEntry) => string][]
+                          ).map(([label, get]) => (
+                            <tr key={label} className="border-t border-slate-100">
+                              <td className="px-2 py-2 align-top font-medium text-slate-400">{label}</td>
+                              {compareProducts.map((p) => (
+                                <td
+                                  key={p.id}
+                                  className={`px-2 py-2 align-top ${label.includes('内部') ? 'text-slate-400' : 'text-slate-600'} ${label === '对外报价参考' ? 'font-semibold text-jushi-accent' : ''}`}
+                                >
+                                  <span className="whitespace-pre-wrap">{get(p) || '—'}</span>
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                          <tr className="border-t border-slate-100">
+                            <td className="px-2 py-2"></td>
+                            {compareProducts.map((p) => (
+                              <td key={p.id} className="px-2 py-2">
+                                <button
+                                  onClick={() => addToCart(p)}
+                                  className="rounded-md bg-jushi-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                                >
+                                  🛒 加入报价单
+                                </button>
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-400">标注（内部）的行是采购侧信息，不会出现在任何对外文件里。</p>
                   </div>
                 </div>
               )}
@@ -1420,6 +1592,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       <th className="px-2 py-2 font-medium">产品名称</th>
                       <th className="px-2 py-2 font-medium">品牌/供应商</th>
                       <th className="w-20 px-2 py-2 font-medium">数量</th>
+                      <th className="w-24 px-2 py-2 font-medium" title="产品库建议销售价">标准价</th>
+                      <th className="w-20 px-2 py-2 font-medium" title="报价单价÷标准价，改折扣率自动算单价">折扣率</th>
                       <th className="w-32 px-2 py-2 font-medium">报价单价</th>
                       <th className="w-24 px-2 py-2 font-medium">成本参考</th>
                       <th className="w-24 px-2 py-2 font-medium">小计</th>
@@ -1431,6 +1605,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       const price = parseFloat(line.报价单价.replace(/[^\d.]/g, ''))
                       const qty = parseFloat(line.数量)
                       const subtotal = isFinite(price) && isFinite(qty) ? price * qty : null
+                      const std = priceNum(line.product.建议销售价)
+                      const rate = std !== null && std > 0 && isFinite(price) ? (price / std) * 100 : null
                       return (
                         <tr key={line.product.id} className="border-t border-slate-100">
                           <td className="px-2 py-1.5">
@@ -1452,6 +1628,34 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                               }
                               className="w-16 rounded border border-slate-300 px-1.5 py-1 text-xs outline-none focus:border-jushi-accent"
                             />
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-2 text-slate-400">{line.product.建议销售价 || '—'}</td>
+                          <td className="px-2 py-1.5">
+                            {std !== null && std > 0 ? (
+                              <div className="flex items-center gap-0.5">
+                                <input
+                                  value={rate !== null ? (Math.round(rate * 10) / 10).toString() : ''}
+                                  onChange={(e) => {
+                                    const r = parseFloat(e.target.value)
+                                    if (!isFinite(r)) return
+                                    const newPrice = (std * r) / 100
+                                    setCart((prev) =>
+                                      prev.map((l) =>
+                                        l.product.id === line.product.id
+                                          ? { ...l, 报价单价: String(Math.round(newPrice * 100) / 100) }
+                                          : l
+                                      )
+                                    )
+                                  }}
+                                  className="w-12 rounded border border-slate-300 px-1 py-1 text-right text-xs outline-none focus:border-jushi-accent"
+                                />
+                                <span className="text-slate-400">%</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-300" title="没有标准价（建议销售价），无法按折扣率算价">
+                                —
+                              </span>
+                            )}
                           </td>
                           <td className="px-2 py-1.5">
                             <input
@@ -1481,7 +1685,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     })}
                     {cart.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-2 py-6 text-center text-slate-400">
+                        <td colSpan={10} className="px-2 py-6 text-center text-slate-400">
                           报价单为空——到「产品库」里查询产品并点「加入报价单」
                         </td>
                       </tr>
@@ -1515,7 +1719,41 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     ''
                   )}
                 </span>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  {cart.length > 0 && (
+                    <div className="flex items-center gap-1 text-xs text-slate-500" title="对有标准价的行统一按折扣率重算报价单价">
+                      <span>整单折扣</span>
+                      <input
+                        value={bulkRate}
+                        onChange={(e) => setBulkRate(e.target.value)}
+                        placeholder="95"
+                        className="w-12 rounded border border-slate-300 px-1 py-1 text-right outline-none focus:border-jushi-accent"
+                      />
+                      <span>%</span>
+                      <button
+                        onClick={() => {
+                          const r = parseFloat(bulkRate)
+                          if (!isFinite(r) || r <= 0) {
+                            flash('先填一个有效的折扣率，如 95')
+                            return
+                          }
+                          let applied = 0
+                          setCart((prev) =>
+                            prev.map((l) => {
+                              const std = priceNum(l.product.建议销售价)
+                              if (std === null || std <= 0) return l
+                              applied++
+                              return { ...l, 报价单价: String(Math.round(std * r) / 100) }
+                            })
+                          )
+                          flash(`已按 ${r}% 重算 ${applied} 行报价（无标准价的行未动）`)
+                        }}
+                        className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50"
+                      >
+                        应用
+                      </button>
+                    </div>
+                  )}
                   <button
                     disabled={cart.length === 0}
                     onClick={handleExportImagesOnly}
