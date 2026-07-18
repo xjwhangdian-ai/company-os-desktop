@@ -15,6 +15,7 @@ import type {
   CustomerFields,
   LinkedFile,
   ProductFields,
+  QuoteLineInput,
   ProviderConfig,
   ProviderId,
   SolutionFileKind,
@@ -52,6 +53,7 @@ import { listLegalDocs, listLegalTemplates, markReviewed, generateLegalRedline }
 import {
   addFollowUp,
   exportQuoteImages,
+  generateQuoteExcel,
   importExcelByHeader,
   linkCustomerFile,
   listCustomers,
@@ -335,6 +337,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   )
   ipcMain.handle(IPC.salesExportQuoteImages, (_e, productIds: string[], customerName: string) =>
     exportQuoteImages(getDataDir(), productIds, customerName)
+  )
+  ipcMain.handle(
+    IPC.salesGenerateQuoteXlsx,
+    (_e, lines: QuoteLineInput[], customerName: string, templateFileName: string | null) =>
+      generateQuoteExcel(getDataDir(), lines, customerName, templateFileName)
   )
 
   ipcMain.handle(IPC.salesListCustomers, () => listCustomers(getDataDir()))

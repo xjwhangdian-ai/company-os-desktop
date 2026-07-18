@@ -10,8 +10,18 @@ import {
   unlinkSync,
   writeFileSync
 } from 'node:fs'
-import { basename, extname, isAbsolute, join, resolve } from 'node:path'
-import type { CustomerEntry, CustomerFields, LinkedFile, ProductEntry, ProductFields, QuotationTemplate } from '@shared/agent-types'
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import type {
+  CustomerEntry,
+  CustomerFields,
+  LinkedFile,
+  ProductEntry,
+  ProductFields,
+  QuotationTemplate,
+  QuoteLineInput,
+  QuoteXlsxResult
+} from '@shared/agent-types'
+import { generateQuoteXlsx, type QuoteRow } from '../docgen/quote-xlsx'
 import { detectHeader, readWorkbookRows } from './doc-extract'
 
 // ============ 销售工作台的数据层 ============
@@ -91,7 +101,15 @@ function writeJsonAtomic(path: string, data: unknown): void {
 const PRODUCT_FIELD_KEYS: (keyof ProductFields)[] = [
   '产品名称',
   '产品分类',
+  '品牌',
+  '型号',
+  '生产制造商',
+  '产地',
   '技术参数',
+  '单位',
+  '税率',
+  '质保期',
+  '物料代码',
   '成本价',
   '建议销售价',
   '投标报价',
@@ -103,10 +121,13 @@ const PRODUCT_FIELD_KEYS: (keyof ProductFields)[] = [
   '来源文件'
 ]
 
-/** v1（单价字段）→ v2（成本价/建议销售价/投标报价 + 产品分类 + 图片）就地迁移 */
+/** v3 新增的贸易型字段（对齐对外报价单列结构），老库就地迁移补空串 */
+const V3_NEW_KEYS = ['品牌', '型号', '生产制造商', '产地', '单位', '税率', '质保期', '物料代码'] as const
+
+/** v1（单价字段）→ v2（三档价格）→ v3（品牌/型号/制造商等贸易字段）就地迁移 */
 function readProductDb(dataDir: string): ProductDb {
   const path = join(dataDir, PRODUCT_DB_REL)
-  const db = readJson<ProductDb>(path, { version: 2, products: [] })
+  const db = readJson<ProductDb>(path, { version: 3, products: [] })
   let changed = false
   for (const p of db.products as unknown as Record<string, string>[]) {
     if ('单价' in p) {
@@ -114,15 +135,15 @@ function readProductDb(dataDir: string): ProductDb {
       delete p.单价
       changed = true
     }
-    for (const k of ['产品分类', '成本价', '建议销售价', '投标报价'] as const) {
+    for (const k of ['产品分类', '成本价', '建议销售价', '投标报价', ...V3_NEW_KEYS] as const) {
       if (p[k] === undefined) {
         p[k] = ''
         changed = true
       }
     }
   }
-  if (db.version !== 2) {
-    db.version = 2
+  if (db.version !== 3) {
+    db.version = 3
     changed = true
   }
   if (changed && existsSync(path)) writeJsonAtomic(path, db)
@@ -148,9 +169,9 @@ function normName(s: string): string {
   return s.replace(/\s/g, '')
 }
 
-/** 去重键：同名产品 + 同供应商视为同一条 */
-function dedupKey(f: { 产品名称: string; 供应商名称: string }): string {
-  return `${normName(f.产品名称)}##${normName(f.供应商名称)}`
+/** 去重键：产品名 + 型号 + 供应商 三元组——贸易业务里"同名不同型号"是常态（如两款数据存储），不能互相覆盖 */
+function dedupKey(f: { 产品名称: string; 型号?: string; 供应商名称: string }): string {
+  return `${normName(f.产品名称)}##${normName(f.型号 ?? '')}##${normName(f.供应商名称)}`
 }
 
 export interface MergeResult {
@@ -189,7 +210,11 @@ function mergeEntries(db: ProductDb, incoming: ProductFields[]): MergeResult {
     } else {
       target = byKey.get(dedupKey(fields))
       if (!target) {
-        const candidates = db.products.filter((p) => normName(p.产品名称) === normName(fields.产品名称))
+        const candidates = db.products.filter(
+          (p) =>
+            normName(p.产品名称) === normName(fields.产品名称) &&
+            (!normName(fields.型号) || normName(p.型号) === normName(fields.型号))
+        )
         if (candidates.length === 1) target = candidates[0]
         else if (candidates.length > 1) {
           skipped++
@@ -359,6 +384,115 @@ export function exportQuoteImages(
     }
   }
   return { dir, exported, missing }
+}
+
+// ============ 机械报价单（Excel 秒出，不经过 AI） ============
+
+const QUOTE_LOG_REL = join('销售', '报价台账.json')
+
+interface QuoteLogEntry {
+  单号: string
+  客户: string
+  条目数: number
+  /** 含非数字单价时为 null */
+  合计: number | null
+  文件: string
+  时间: number
+}
+
+interface QuoteLog {
+  version: number
+  说明: string
+  记录: QuoteLogEntry[]
+}
+
+/** 报价台账：每张机械生成的报价单记一笔——这是后续进销存（报价→订单→出入库）的单据源头 */
+function appendQuoteLog(dataDir: string, entry: Omit<QuoteLogEntry, '单号'>, dateCode: string): QuoteLogEntry {
+  const path = join(dataDir, QUOTE_LOG_REL)
+  const log = readJson<QuoteLog>(path, {
+    version: 1,
+    说明: 'App 托管的报价台账（进销存单据源头），请勿手改；每张机械生成的 Excel 报价单自动登记一笔',
+    记录: []
+  })
+  const seq = log.记录.filter((r) => r.单号.includes(dateCode)).length + 1
+  const full: QuoteLogEntry = { 单号: `BJ-${dateCode}-${String(seq).padStart(2, '0')}`, ...entry }
+  log.记录.push(full)
+  writeJsonAtomic(path, log)
+  return full
+}
+
+function parseNum(s: string): number | null {
+  const n = parseFloat(s.replace(/[^\d.]/g, ''))
+  return isFinite(n) && /\d/.test(s) ? n : null
+}
+
+/**
+ * 机械生成对外报价单 Excel：产品库取数 → 只保留可对外字段 → 填进 xlsx 模板（或内置版式）
+ * → 登记报价台账 → 客户库有同名客户时自动关联报价文件。
+ * 红线在数据组装层落实：QuoteRow 里没有成本价/供应商联系人字段，品牌列只取"品牌"，不用供应商名称代替。
+ */
+export async function generateQuoteExcel(
+  dataDir: string,
+  lines: QuoteLineInput[],
+  customerName: string,
+  templateFileName: string | null
+): Promise<QuoteXlsxResult> {
+  const db = readProductDb(dataDir)
+  const rows: QuoteRow[] = []
+  for (const l of lines) {
+    const p = db.products.find((x) => x.id === l.productId)
+    if (!p) continue
+    rows.push({
+      产品名称: p.产品名称,
+      生产制造商: p.生产制造商,
+      产地: p.产地,
+      品牌: p.品牌,
+      型号: p.型号,
+      技术参数: p.技术参数,
+      税率: p.税率,
+      单位: p.单位,
+      质保期: p.质保期,
+      物料代码: p.物料代码,
+      备注: p.备注 ?? '',
+      数量: parseNum(l.数量),
+      数量原文: l.数量,
+      单价: parseNum(l.单价),
+      单价原文: l.单价
+    })
+  }
+  if (rows.length === 0) throw new Error('报价单里的产品在产品库里都不存在了，请刷新产品库')
+
+  let templatePath: string | null = null
+  if (templateFileName) {
+    if (!templateFileName.toLowerCase().endsWith('.xlsx')) {
+      throw new Error('只有 .xlsx 模板能机械填充；docx/pdf 模板请用「AI 生成报价文件」')
+    }
+    templatePath = join(dataDir, TEMPLATE_DIR_REL, templateFileName)
+    if (!existsSync(templatePath)) throw new Error(`模板文件不存在：${templateFileName}`)
+  }
+
+  const d = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const dateCode = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+  const customer = customerName.trim() || '通用'
+  const dir = join(dataDir, 'outputs', '01_销售_sales', `${date}_${customer}_报价`)
+  mkdirSync(dir, { recursive: true })
+  const outPath = join(dir, `${date}_${customer}_报价单.xlsx`)
+
+  const { 合计, warnings } = await generateQuoteXlsx({ templatePath, outPath, lines: rows, customerName: customer })
+
+  const logEntry = appendQuoteLog(
+    dataDir,
+    { 客户: customer, 条目数: rows.length, 合计, 文件: relative(resolve(dataDir), resolve(outPath)), 时间: Date.now() },
+    dateCode
+  )
+
+  // 客户库里有同名客户就自动把报价文件关联上（没有就跳过，不强建客户）
+  const matched = readCustomerDb(dataDir).customers.find((c) => c.客户名称 === customer)
+  if (matched) linkCustomerFile(dataDir, matched.id, '报价文件', outPath)
+
+  return { outPath, dir, 单号: logEntry.单号, 合计, warnings }
 }
 
 export function listQuotationTemplates(dataDir: string): QuotationTemplate[] {

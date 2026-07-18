@@ -19,7 +19,7 @@ import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 import { useConfigStore } from '../stores/useConfigStore'
 
-type SalesTab = '产品库' | '报价单' | '客户'
+type SalesTab = '产品库' | '选型' | '报价单' | '客户'
 type UploadMode = 'supplier' | 'bid'
 
 interface PreviewCard extends SupplierDocPreview {
@@ -32,10 +32,26 @@ interface CartLine {
   报价单价: string
 }
 
+/** 选型页：一条客户需求 + 匹配到的候选产品 */
+interface NeedMatch {
+  need: string
+  qty: string
+  candidates: { product: ProductEntry; score: number }[]
+  chosenId: string | null
+}
+
 const EMPTY_PRODUCT_FORM: ProductFields = {
   产品名称: '',
   产品分类: '',
+  品牌: '',
+  型号: '',
+  生产制造商: '',
+  产地: '',
   技术参数: '',
+  单位: '',
+  税率: '',
+  质保期: '',
+  物料代码: '',
   成本价: '',
   建议销售价: '',
   投标报价: '',
@@ -70,6 +86,60 @@ function defaultQuotePrice(p: ProductEntry): string {
   return p.建议销售价 || p.投标报价 || p.成本价
 }
 
+function priceNum(s: string): number | null {
+  const n = parseFloat((s ?? '').replace(/[^\d.]/g, ''))
+  return isFinite(n) && /\d/.test(s ?? '') ? n : null
+}
+
+/** 比价分组键：优先 品牌+型号（同一型号多家供货），否则按产品名称归并 */
+function compareKey(p: ProductEntry): string {
+  const bm = `${p.品牌}${p.型号}`.replace(/\s/g, '')
+  return bm || p.产品名称.replace(/\s/g, '')
+}
+
+/**
+ * 选型匹配打分（纯前端，不消耗 AI 额度）：把需求拆成词元，
+ * 命中产品名称权重最高，其次品牌/型号/分类，最后技术参数。
+ */
+function scoreProduct(p: ProductEntry, tokens: string[]): number {
+  let score = 0
+  for (const t of tokens) {
+    if (p.产品名称.includes(t)) score += 5
+    if (p.品牌.includes(t) || p.型号.includes(t)) score += 3
+    if (p.产品分类.includes(t)) score += 3
+    if (p.技术参数.includes(t)) score += 1
+    if ((p.备注 ?? '').includes(t)) score += 1
+  }
+  return score
+}
+
+/** 一行需求解析：末尾的 "x3 / ×3 / *3" 当数量 */
+function parseNeedLine(line: string): { need: string; qty: string } {
+  const m = /^(.*?)[x×*]\s*(\d+)\s*$/i.exec(line.trim())
+  return m ? { need: m[1].trim(), qty: m[2] } : { need: line.trim(), qty: '1' }
+}
+
+function matchNeed(need: string, products: ProductEntry[]): { product: ProductEntry; score: number }[] {
+  const tokens = need
+    .split(/[\s,，、;；/]+/)
+    .flatMap((t) => {
+      // 长中文短语再切 2 字词元，"单警执法记录仪"也能命中"执法记录仪"
+      if (/^[一-龥]{4,}$/.test(t)) {
+        const grams: string[] = [t]
+        for (let i = 0; i + 2 <= t.length; i++) grams.push(t.slice(i, i + 2))
+        return grams
+      }
+      return [t]
+    })
+    .filter((t) => t.length >= 2)
+  if (tokens.length === 0) return []
+  return products
+    .map((product) => ({ product, score: scoreProduct(product, tokens) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+}
+
 /** 构造"AI 解析供应商资料/投标报价文件"的提示词——分身只写 _待入库/ 暂存 JSON，规范库由 App 合并 */
 function buildParsePrompt(preview: PreviewCard): string {
   const readTarget = preview.companionRelativePath
@@ -81,7 +151,7 @@ function buildParsePrompt(preview: PreviewCard): string {
       `解析这份投标报价文件，提取各产品的投标报价写入暂存区。`,
       `文件：${readTarget}`,
       `要求：`,
-      `1. 每个产品提取为一个 JSON 对象，只填两个字段的值：产品名称、投标报价；其余字段（产品分类、技术参数、成本价、建议销售价、供应商名称、供应商联系人、供应商联系方式、备注）一律填空字符串""，来源文件填"${preview.fileName}"。`,
+      `1. 每个产品提取为一个 JSON 对象，只填两个字段的值：产品名称、投标报价；其余字段（产品分类、品牌、型号、生产制造商、产地、技术参数、单位、税率、质保期、物料代码、成本价、建议销售价、供应商名称、供应商联系人、供应商联系方式、备注）一律填空字符串""，来源文件填"${preview.fileName}"。`,
       `2. 产品名称照抄文件原文写法（App 会按名称匹配到产品库里的已有条目回填投标报价）；投标报价保留原文（含单位/含税说明）。`,
       `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身。`,
       `4. 不要修改 销售/产品库/产品库.json。`,
@@ -92,8 +162,8 @@ function buildParsePrompt(preview: PreviewCard): string {
     `解析这份供应商产品资料，提取产品条目写入暂存区。`,
     `资料文件：${readTarget}`,
     `要求：`,
-    `1. 每个产品提取为一个 JSON 对象，字段名严格使用：产品名称、产品分类、技术参数、成本价、建议销售价、投标报价、供应商名称、供应商联系人、供应商联系方式、备注、来源文件（来源文件统一填"${preview.fileName}"）。`,
-    `2. 供应商报价表里的价格是给我们的进货价，填进"成本价"；资料里明确写了建议零售价/指导价才填"建议销售价"，没有就留空。技术参数把规格/型号/关键参数拼成一段完整文字；所有价格保留资料原文写法（含单位、含税说明）；资料里没有的字段填空字符串""，禁止编造。`,
+    `1. 每个产品提取为一个 JSON 对象，字段名严格使用：产品名称、产品分类、品牌、型号、生产制造商、产地、技术参数、单位、税率、质保期、物料代码、成本价、建议销售价、投标报价、供应商名称、供应商联系人、供应商联系方式、备注、来源文件（来源文件统一填"${preview.fileName}"）。`,
+    `2. 供应商报价表里的价格是给我们的进货价，填进"成本价"；资料里明确写了建议零售价/指导价才填"建议销售价"，没有就留空。品牌/型号/生产制造商/产地/单位/税率照资料原文填（质保期折算成月数，如"三年"填"36"）；注意区分：品牌是产品品牌（如海康威视），供应商名称是把货卖给我们的渠道公司，两者可能不同。技术参数把规格/关键参数拼成一段完整文字；所有价格保留资料原文写法（含单位、含税说明）；资料里没有的字段填空字符串""，禁止编造。`,
     `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身，不要包裹代码块或其它文字。`,
     `4. 不要修改 销售/产品库/产品库.json——那是桌面 App 托管的规范库，你写的暂存文件会由 App 校验后合并进去。`,
     `完成后回复：提取了多少条产品、哪些字段缺失比较多。`
@@ -111,7 +181,7 @@ function buildQuotationPrompt(
   const rows = lines
     .map(
       (l) =>
-        `| ${l.product.产品名称} | ${l.product.技术参数.replace(/\|/g, '，').slice(0, 200)} | ${l.product.供应商名称} | ${l.数量} | ${l.报价单价} |`
+        `| ${l.product.产品名称} | ${l.product.品牌 || '（未填，留空）'} | ${l.product.型号} | ${l.product.技术参数.replace(/\|/g, '，').slice(0, 200)} | ${l.数量} | ${l.报价单价} |`
     )
     .join('\n')
   const templatePart = template
@@ -126,9 +196,9 @@ function buildQuotationPrompt(
     `生成一份对外报价文件（markdown）。`,
     ``,
     `客户名称：${customerName.trim() || '（未指定，做通用版，客户名留占位）'}`,
-    `产品明细（共 ${lines.length} 项，"品牌"列即产品库里的供应商名称）：`,
-    `| 产品名称 | 技术参数 | 品牌 | 数量 | 单价（元） |`,
-    `|---|---|---|---|---|`,
+    `产品明细（共 ${lines.length} 项；品牌列取产品库"品牌"字段，未填的留空，不要用供应商名称顶替——供应商是采购渠道，属采购侧信息）：`,
+    `| 产品名称 | 品牌 | 型号 | 技术参数 | 数量 | 单价（元） |`,
+    `|---|---|---|---|---|---|`,
     rows,
     ``,
     templatePart,
@@ -158,11 +228,19 @@ function ProductForm({
   const FIELDS: { key: keyof ProductFields; label: string; wide?: boolean }[] = [
     { key: '产品名称', label: '产品名称 *' },
     { key: '产品分类', label: '产品分类' },
+    { key: '品牌', label: '品牌（对外报价用）' },
+    { key: '型号', label: '型号' },
+    { key: '生产制造商', label: '生产制造商' },
+    { key: '产地', label: '产地' },
     { key: '技术参数', label: '技术参数', wide: true },
+    { key: '单位', label: '单位（台/套/个）' },
+    { key: '税率', label: '税率' },
+    { key: '质保期', label: '质保期（月）' },
+    { key: '物料代码', label: '物料代码' },
     { key: '成本价', label: '成本价（采购侧，不进报价）' },
     { key: '建议销售价', label: '建议销售价' },
     { key: '投标报价', label: '投标报价' },
-    { key: '供应商名称', label: '供应商名称' },
+    { key: '供应商名称', label: '供应商名称（采购渠道）' },
     { key: '供应商联系人', label: '供应商联系人' },
     { key: '供应商联系方式', label: '供应商联系方式' },
     { key: '备注', label: '备注', wide: true }
@@ -207,6 +285,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [products, setProducts] = useState<ProductEntry[]>([])
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('全部')
+  const [compareView, setCompareView] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [previews, setPreviews] = useState<PreviewCard[]>([])
@@ -217,6 +296,10 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [templates, setTemplates] = useState<QuotationTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [quoteCustomer, setQuoteCustomer] = useState('')
+  const [budget, setBudget] = useState('')
+
+  const [needsText, setNeedsText] = useState('')
+  const [needMatches, setNeedMatches] = useState<NeedMatch[]>([])
 
   const [customers, setCustomers] = useState<CustomerEntry[]>([])
   const [customerFilter, setCustomerFilter] = useState<'全部' | CustomerStatus>('全部')
@@ -272,11 +355,25 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     return products.filter((p) => {
       if (categoryFilter !== '全部' && p.产品分类 !== categoryFilter) return false
       if (!q) return true
-      return [p.产品名称, p.产品分类, p.技术参数, p.供应商名称, p.供应商联系人].some((v) =>
+      return [p.产品名称, p.产品分类, p.品牌, p.型号, p.生产制造商, p.技术参数, p.供应商名称, p.供应商联系人].some((v) =>
         (v ?? '').toLowerCase().includes(q)
       )
     })
   }, [products, query, categoryFilter])
+
+  /** 比价视图：同品牌+型号（或同名）的多供应商条目归组，最低进价供应商排前 */
+  const compareGroups = useMemo(() => {
+    const groups = new Map<string, ProductEntry[]>()
+    for (const p of filteredProducts) {
+      const k = compareKey(p)
+      groups.set(k, [...(groups.get(k) ?? []), p])
+    }
+    return Array.from(groups.values())
+      .map((items) =>
+        [...items].sort((a, b) => (priceNum(a.成本价) ?? Infinity) - (priceNum(b.成本价) ?? Infinity))
+      )
+      .sort((a, b) => b.length - a.length)
+  }, [filteredProducts])
 
   async function handleUploadDocs(mode: UploadMode): Promise<void> {
     const paths = await window.api.dialog.pickFiles(SUPPLIER_DOC_FILTERS)
@@ -339,6 +436,109 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     return cart.length > 0 ? total : null
   }, [cart])
 
+  /** 毛利估算（内部参考）：所有行的报价与成本价都是数字时才给出 */
+  const cartMargin = useMemo(() => {
+    if (cartTotal === null) return null
+    let cost = 0
+    for (const l of cart) {
+      const c = priceNum(l.product.成本价)
+      const qty = parseFloat(l.数量)
+      if (c === null || !isFinite(qty)) return null
+      cost += c * qty
+    }
+    return cartTotal > 0 ? { 毛利: cartTotal - cost, 毛利率: ((cartTotal - cost) / cartTotal) * 100 } : null
+  }, [cart, cartTotal])
+
+  /** 选型：需求清单逐行匹配产品库（纯前端打分，不消耗 AI 额度） */
+  function handleMatchNeeds(): void {
+    const lines = needsText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    if (lines.length === 0) {
+      flash('先在需求清单里输入采购需求，一行一条（行尾可加 x数量）')
+      return
+    }
+    setNeedMatches(
+      lines.map((line) => {
+        const { need, qty } = parseNeedLine(line)
+        const candidates = matchNeed(need, products)
+        return { need, qty, candidates, chosenId: candidates[0]?.product.id ?? null }
+      })
+    )
+  }
+
+  const chosenTotal = useMemo(() => {
+    let total = 0
+    for (const m of needMatches) {
+      if (!m.chosenId) continue
+      const p = products.find((x) => x.id === m.chosenId)
+      if (!p) continue
+      const price = priceNum(defaultQuotePrice(p))
+      const qty = parseFloat(m.qty)
+      if (price === null || !isFinite(qty)) return null
+      total += price * qty
+    }
+    return total
+  }, [needMatches, products])
+
+  const budgetNum = priceNum(budget)
+
+  function addChosenToCart(): void {
+    let added = 0
+    setCart((prev) => {
+      let next = [...prev]
+      for (const m of needMatches) {
+        if (!m.chosenId) continue
+        const p = products.find((x) => x.id === m.chosenId)
+        if (!p || next.some((l) => l.product.id === p.id)) continue
+        next = [...next, { product: p, 数量: m.qty, 报价单价: defaultQuotePrice(p) }]
+        added++
+      }
+      return next
+    })
+    setTab('报价单')
+    flash(added > 0 ? `已把 ${added} 个选中产品加入报价单` : '选中的产品都已在报价单里')
+  }
+
+  /** 选型没匹配到/要更专业的推荐时，把需求+预算丢给分身（分身只读产品库，回复推荐清单） */
+  function buildRecommendPrompt(): string {
+    return [
+      `按客户采购需求从产品库里选型推荐。`,
+      quoteCustomer.trim() ? `客户：${quoteCustomer.trim()}（公安/政法客户口径）` : '',
+      budget.trim() ? `采购预算：${budget.trim()} 元——推荐组合的合计要卡在预算内，留出谈判空间。` : '',
+      `需求清单：`,
+      needsText.trim(),
+      ``,
+      `要求：读 销售/产品库/产品库.json（只读，禁止写入），对每条需求给出 1-2 个推荐产品（产品名称/品牌/型号/关键参数/建议报价），同一产品多家供应商时按成本价低、货源稳的优先并说明理由；没有匹配产品的需求明确说"库里没有"，不要硬凑。最后给推荐组合的合计金额${budget.trim() ? '与预算对比' : ''}。只在对话里回复，不用写文件。注意：回复里不要出现供应商联系人/联系方式（采购侧信息）。`
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  /** 机械生成 Excel 报价单（秒出，不经过 AI） */
+  async function handleGenerateQuoteXlsx(): Promise<void> {
+    setBusy(true)
+    try {
+      const template = templates.find((t) => t.fileName === selectedTemplate) ?? null
+      const r = await window.api.sales.generateQuoteXlsx(
+        cart.map((l) => ({ productId: l.product.id, 数量: l.数量, 单价: l.报价单价 })),
+        quoteCustomer,
+        template && template.fileName.toLowerCase().endsWith('.xlsx') ? template.fileName : null
+      )
+      flash(
+        `报价单已生成（${r.单号}${r.合计 !== null ? `，合计 ¥${r.合计.toLocaleString()}` : ''}）` +
+          (r.warnings.length > 0 ? ` ⚠ ${r.warnings[0]}` : '')
+      )
+      await window.api.shell.showItemInFolder(r.outPath)
+      setOutputsRefresh((k) => k + 1)
+    } catch (err) {
+      flash(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleGenerateQuotation(): Promise<void> {
     const template = templates.find((t) => t.fileName === selectedTemplate) ?? null
     const withImages = cart.filter((l) => l.product.图片)
@@ -395,7 +595,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       <div className="flex min-w-0 flex-1 flex-col border-r border-slate-200">
         <div className="app-drag flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5">
           <div className="app-no-drag flex gap-1">
-            {(['产品库', '报价单', '客户'] as SalesTab[]).map((t) => (
+            {(['产品库', '选型', '报价单', '客户'] as SalesTab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -437,6 +637,15 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     </option>
                   ))}
                 </select>
+                <button
+                  onClick={() => setCompareView((v) => !v)}
+                  title="同一产品（品牌+型号相同）多家供应商时归组对比进价"
+                  className={`rounded-lg border px-3 py-1.5 text-sm ${
+                    compareView ? 'border-jushi-accent bg-jushi-accent/10 text-jushi-accent' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  ⚖️ 比价视图
+                </button>
                 <button
                   onClick={() => handleUploadDocs('supplier')}
                   disabled={busy}
@@ -534,6 +743,63 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 />
               )}
 
+              {compareView && (
+                <div className="space-y-2">
+                  {compareGroups.map((group) => {
+                    const first = group[0]
+                    const multi = group.length > 1
+                    const minCost = priceNum(first.成本价)
+                    return (
+                      <div key={first.id} className={`rounded-lg border bg-white ${multi ? 'border-jushi-accent/40' : 'border-slate-200'}`}>
+                        <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
+                          <span className="text-sm font-medium text-slate-700">{first.产品名称}</span>
+                          {(first.品牌 || first.型号) && (
+                            <span className="text-xs text-slate-400">{[first.品牌, first.型号].filter(Boolean).join(' · ')}</span>
+                          )}
+                          <span
+                            className={`ml-auto rounded-full px-2 py-0.5 text-xs ${
+                              multi ? 'bg-jushi-accent/10 text-jushi-accent' : 'bg-slate-100 text-slate-400'
+                            }`}
+                          >
+                            {group.length} 家供应商
+                          </span>
+                        </div>
+                        <table className="w-full text-xs">
+                          <tbody>
+                            {group.map((p, i) => (
+                              <tr key={p.id} className={i > 0 ? 'border-t border-slate-50' : ''}>
+                                <td className="w-40 px-3 py-1.5 text-slate-600">{p.供应商名称 || '（未填供应商）'}</td>
+                                <td className="w-32 whitespace-nowrap px-2 py-1.5">
+                                  <span className={i === 0 && multi && minCost !== null ? 'font-semibold text-emerald-600' : 'text-slate-500'}>
+                                    进价 {p.成本价 || '—'}
+                                  </span>
+                                  {i === 0 && multi && minCost !== null && <span className="ml-1 text-emerald-600">↓最低</span>}
+                                </td>
+                                <td className="w-28 whitespace-nowrap px-2 py-1.5 text-slate-600">售价 {p.建议销售价 || '—'}</td>
+                                <td className="w-28 whitespace-nowrap px-2 py-1.5 text-slate-500">投标 {p.投标报价 || '—'}</td>
+                                <td className="px-2 py-1.5 text-slate-400" title={p.技术参数}>
+                                  <span className="line-clamp-1">{p.技术参数 || ''}</span>
+                                </td>
+                                <td className="w-24 whitespace-nowrap px-2 py-1.5 text-right">
+                                  <button onClick={() => addToCart(p)} className="text-jushi-accent hover:underline">
+                                    加入报价单
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  })}
+                  {compareGroups.length === 0 && <p className="py-6 text-center text-xs text-slate-400">没有匹配的产品</p>}
+                  <p className="text-xs text-slate-400">
+                    进价为采购侧信息（仅内部可见）；同组内按进价从低到高排列。品牌+型号相同才会归为一组，老数据没填品牌/型号的按产品名称归组。
+                  </p>
+                </div>
+              )}
+
+              {!compareView && (
               <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <table className="w-full text-xs">
                   <thead>
@@ -572,6 +838,9 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         </td>
                         <td className="max-w-40 px-2 py-2 font-medium text-slate-700">
                           {p.产品名称}
+                          {(p.品牌 || p.型号) && (
+                            <span className="block font-normal text-slate-400">{[p.品牌, p.型号].filter(Boolean).join(' · ')}</span>
+                          )}
                           {(p.供应商联系人 || p.供应商联系方式) && (
                             <span className="block text-slate-400" title="供应商联系（采购侧信息，不进报价）">
                               {[p.供应商联系人, p.供应商联系方式].filter(Boolean).join(' / ')}
@@ -621,13 +890,152 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   </tbody>
                 </table>
               </div>
+              )}
+            </>
+          )}
+
+          {/* ============ 选型（按需求+预算快速筛选） ============ */}
+          {tab === '选型' && (
+            <>
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="mb-0.5 block text-xs text-slate-400">
+                    客户采购需求清单（一行一条，行尾可加数量如「执法记录仪 x20」）
+                  </label>
+                  <textarea
+                    value={needsText}
+                    onChange={(e) => setNeedsText(e.target.value)}
+                    rows={5}
+                    placeholder={'例如：\n单警执法记录仪 x20\n4G布控球\n防暴头盔 x50'}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
+                  />
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-xs text-slate-400">采购预算（元，可选）</label>
+                  <input
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    placeholder="如 200000"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
+                  />
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    <button
+                      onClick={handleMatchNeeds}
+                      className="rounded-lg bg-jushi-accent px-3 py-2 text-sm font-medium text-white"
+                    >
+                      🔍 匹配产品库
+                    </button>
+                    <button
+                      onClick={() => needsText.trim() && setPendingPrompt(buildRecommendPrompt())}
+                      disabled={!needsText.trim()}
+                      title="把需求清单和预算交给 sales 分身做专业选型推荐（消耗 AI 额度）"
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      🤖 让分身推荐
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {needMatches.length > 0 && (
+                <>
+                  <div className="space-y-2">
+                    {needMatches.map((m, mi) => (
+                      <div key={mi} className="rounded-lg border border-slate-200 bg-white p-3">
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-700">{m.need}</span>
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">x{m.qty}</span>
+                          {m.candidates.length === 0 && (
+                            <span className="text-xs text-amber-600">产品库里没匹配到——换个关键词，或点「让分身推荐」</span>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          {m.candidates.map(({ product: p }) => {
+                            const chosen = m.chosenId === p.id
+                            return (
+                              <label
+                                key={p.id}
+                                className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${
+                                  chosen ? 'border-jushi-accent bg-jushi-accent/5' : 'border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  checked={chosen}
+                                  onChange={() =>
+                                    setNeedMatches((prev) =>
+                                      prev.map((x, xi) => (xi === mi ? { ...x, chosenId: p.id } : x))
+                                    )
+                                  }
+                                />
+                                <span className="font-medium text-slate-700">{p.产品名称}</span>
+                                <span className="text-slate-400">{[p.品牌, p.型号].filter(Boolean).join(' · ')}</span>
+                                <span className="ml-auto whitespace-nowrap text-slate-500">
+                                  报价参考 {defaultQuotePrice(p) || '—'}
+                                </span>
+                                <span className="whitespace-nowrap text-slate-400" title="进价，仅内部参考">
+                                  进价 {p.成本价 || '—'}
+                                </span>
+                                <span className="whitespace-nowrap text-slate-400">{p.供应商名称 || ''}</span>
+                              </label>
+                            )
+                          })}
+                          {m.candidates.length > 0 && (
+                            <label className="flex cursor-pointer items-center gap-2 px-2 py-1 text-xs text-slate-400">
+                              <input
+                                type="radio"
+                                checked={m.chosenId === null}
+                                onChange={() =>
+                                  setNeedMatches((prev) => prev.map((x, xi) => (xi === mi ? { ...x, chosenId: null } : x)))
+                                }
+                              />
+                              这条不选
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <span className="text-sm">
+                      {chosenTotal !== null ? (
+                        <>
+                          <span className="text-slate-600">已选合计（按默认报价估算）：¥ {chosenTotal.toLocaleString()}</span>
+                          {budgetNum !== null && (
+                            <span className={`ml-2 font-medium ${chosenTotal > budgetNum ? 'text-red-600' : 'text-emerald-600'}`}>
+                              {chosenTotal > budgetNum
+                                ? `超预算 ¥ ${(chosenTotal - budgetNum).toLocaleString()}`
+                                : `预算内，剩余 ¥ ${(budgetNum - chosenTotal).toLocaleString()}`}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-slate-400">部分选中产品价格非数字，合计以报价单页为准</span>
+                      )}
+                    </span>
+                    <button
+                      onClick={addChosenToCart}
+                      disabled={!needMatches.some((m) => m.chosenId)}
+                      className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+                    >
+                      ➕ 全部加入报价单
+                    </button>
+                  </div>
+                </>
+              )}
+              {needMatches.length === 0 && (
+                <p className="py-8 text-center text-xs text-slate-400">
+                  输入客户需求清单后点「匹配产品库」——按产品名/品牌/型号/分类/参数即时打分匹配，不消耗 AI 额度
+                </p>
+              )}
             </>
           )}
 
           {/* ============ 报价单 ============ */}
           {tab === '报价单' && (
             <>
-              <div className="mb-3 grid grid-cols-2 gap-2">
+              <div className="mb-3 grid grid-cols-3 gap-2">
                 <div>
                   <label className="mb-0.5 block text-xs text-slate-400">关联客户（可选，也可直接手填）</label>
                   <div className="flex gap-2">
@@ -680,6 +1088,15 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       📎 上传模板
                     </button>
                   </div>
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-xs text-slate-400">客户预算（元，可选）</label>
+                  <input
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    placeholder="用于对比合计，不会写进报价"
+                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
+                  />
                 </div>
               </div>
 
@@ -763,7 +1180,28 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
 
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-sm text-slate-600">
-                  {cartTotal !== null ? `合计（估算）：¥ ${cartTotal.toFixed(2)}` : cart.length > 0 ? '合计：单价含非数字内容，由分身在文件里标注' : ''}
+                  {cartTotal !== null ? (
+                    <>
+                      合计（估算）：¥ {cartTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      {budgetNum !== null && (
+                        <span className={`ml-2 font-medium ${cartTotal > budgetNum ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {cartTotal > budgetNum
+                            ? `超预算 ¥ ${(cartTotal - budgetNum).toLocaleString()}`
+                            : `预算内，剩余 ¥ ${(budgetNum - cartTotal).toLocaleString()}`}
+                        </span>
+                      )}
+                      {cartMargin !== null && (
+                        <span className="ml-2 text-xs text-slate-400" title="按成本价估算，仅内部参考，不会出现在报价文件里">
+                          毛利估算(内部)：¥ {cartMargin.毛利.toLocaleString(undefined, { maximumFractionDigits: 0 })}（
+                          {cartMargin.毛利率.toFixed(1)}%）
+                        </span>
+                      )}
+                    </>
+                  ) : cart.length > 0 ? (
+                    '合计：单价含非数字内容，生成时在文件里标注'
+                  ) : (
+                    ''
+                  )}
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -775,17 +1213,26 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     🖼️ 导出产品图片
                   </button>
                   <button
-                    disabled={cart.length === 0}
-                    onClick={handleGenerateQuotation}
+                    disabled={cart.length === 0 || busy}
+                    onClick={handleGenerateQuoteXlsx}
+                    title="不经过 AI，秒出 Excel：选了 .xlsx 模板就往模板里填行（保留模板抬头/报价说明/落款），否则用内置标准版式；同时登记报价台账并自动关联同名客户"
                     className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
                   >
-                    ✍️ 生成报价文件
+                    ⚡ 生成报价单 Excel
+                  </button>
+                  <button
+                    disabled={cart.length === 0}
+                    onClick={handleGenerateQuotation}
+                    title="让 sales 分身写 markdown 版报价文件（可转 Word），适合需要话术包装或非 xlsx 模板的场景"
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    ✍️ AI 生成报价文件
                   </button>
                 </div>
               </div>
               <p className="mt-2 text-xs text-slate-400">
-                报价单价默认取建议销售价（缺失时退投标报价/成本价，注意核对加价）。生成后在右侧产出面板找到 .md
-                文件点「转Word」得到正式 .docx；成本价与供应商联系方式绝不会写进对外报价。
+                报价单价默认取建议销售价（缺失时退投标报价/成本价，注意核对加价）。⚡Excel 版：品牌列只取产品的「品牌」字段；
+                成本价与供应商信息绝不会写进对外报价。每张 Excel 报价单自动登记进 销售/报价台账.json（进销存的单据源头）。
               </p>
             </>
           )}

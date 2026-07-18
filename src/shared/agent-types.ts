@@ -286,7 +286,18 @@ export interface ProductEntry {
   id: string
   产品名称: string
   产品分类: string
+  /** 对外报价单的"品牌"列只取这个字段（供应商名称可能是经销渠道，属采购侧信息） */
+  品牌: string
+  型号: string
+  生产制造商: string
+  产地: string
   技术参数: string
+  /** 台/套/个… 报价单的计量单位列 */
+  单位: string
+  税率: string
+  /** 质保期，单位月 */
+  质保期: string
+  物料代码: string
   /** 供应商给我们的进货价——采购侧口径，严禁进对外产出 */
   成本价: string
   /** 对客户的常规建议售价，报价单默认取它 */
@@ -356,6 +367,26 @@ export interface QuotationTemplate {
   relativePath: string
   /** docx/xlsx 模板会有一个 App 预提取的纯文本伴生文件，agent 读它来模仿模板结构 */
   companionRelativePath?: string
+}
+
+/** 机械生成 Excel 报价单的一行输入（价格由用户在报价单页确认过，不是成本价） */
+export interface QuoteLineInput {
+  productId: string
+  数量: string
+  单价: string
+}
+
+export interface QuoteXlsxResult {
+  /** 生成的 .xlsx 绝对路径 */
+  outPath: string
+  /** 报价产出目录 */
+  dir: string
+  /** 报价台账单号，如 BJ-20260718-01 */
+  单号: string
+  /** 可计算时的合计金额（元），含非数字单价时为 null */
+  合计: number | null
+  /** 需人工注意的事项（缺品牌、模板没识别到某列等） */
+  warnings: string[]
 }
 
 // ============ 解决方案工作台 ============

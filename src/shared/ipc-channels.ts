@@ -80,6 +80,7 @@ export const IPC = {
   salesUploadSupplierDoc: 'sales:upload-supplier-doc',
   salesImportExcel: 'sales:import-excel',
   salesExportQuoteImages: 'sales:export-quote-images',
+  salesGenerateQuoteXlsx: 'sales:generate-quote-xlsx',
   salesListTemplates: 'sales:list-templates',
   salesUploadTemplate: 'sales:upload-template',
   salesListCustomers: 'sales:list-customers',

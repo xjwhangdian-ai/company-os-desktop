@@ -25,6 +25,7 @@ function isInsideKnowledge(dataDir: string, targetPath: string): boolean {
 const APP_OWNED_FILES = [
   join('销售', '产品库', '产品库.json'),
   join('销售', '客户库.json'),
+  join('销售', '报价台账.json'),
   // 财务工作台：员工/发薪日/月度任务勾选由 App 托管，分身产出一律进 outputs/08_财务_finance/
   join('财务', '财税台账.json')
 ]

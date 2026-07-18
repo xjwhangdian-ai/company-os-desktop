@@ -108,14 +108,24 @@ export async function extractCompanion(filePath: string): Promise<string | null>
 
 // 注意字段顺序：投标报价/建议销售价的专用叫法先认领各自的列（一列只能配一个字段），
 // 剩下的通用价格叫法（单价/价格/报价）才归成本价——供应商报价表里的价格就是我们的进货成本。
+// 顺序即匹配优先级：具体字段在前（型号/品牌/制造商），泛化字段在后（技术参数/成本价），
+// 每列只归一个字段，防止"规格型号"被技术参数抢走、"品牌"被供应商名称抢走。
 const FIELD_SYNONYMS: Record<string, string[]> = {
-  产品名称: ['产品名称', '品名', '产品', '货名', '设备名称', '名称'],
+  产品名称: ['产品名称', '品名', '货名', '设备名称', '商品名称', '名称', '产品'],
+  型号: ['型号', '产品型号', '开票型号'],
+  品牌: ['品牌', '牌子'],
+  生产制造商: ['生产制造商', '制造商', '生产厂家', '厂家', '厂商'],
+  产地: ['产地'],
+  单位: ['计量单位', '单位'],
+  税率: ['税率'],
+  质保期: ['质保期', '质保', '保修期'],
+  物料代码: ['物料代码', '物料编码', '物料号'],
   产品分类: ['产品分类', '产品类别', '分类', '类别', '品类', '类型', '产品线'],
-  技术参数: ['技术参数', '规格参数', '技术规格', '规格型号', '参数', '规格', '配置', '型号'],
+  技术参数: ['技术参数', '规格参数', '技术规格', '规格型号', '参数', '规格', '配置'],
   投标报价: ['投标报价', '投标单价', '投标价', '中标价', '中标单价'],
   建议销售价: ['建议销售价', '建议零售价', '建议售价', '指导价', '零售价', '市场价'],
   成本价: ['成本价', '进货价', '采购价', '含税单价', '未税单价', '出厂价', '供货价', '单价', '价格', '报价', '销售价'],
-  供应商名称: ['供应商名称', '供应商', '生产厂家', '厂家', '厂商', '品牌'],
+  供应商名称: ['供应商名称', '供应商', '供货商', '经销商', '代理商'],
   供应商联系人: ['供应商联系人', '联系人'],
   供应商联系方式: ['供应商联系方式', '联系电话', '联系方式', '手机号', '电话', '手机']
 }
@@ -129,34 +139,65 @@ export interface HeaderDetection {
   dataRows: string[][]
 }
 
-/** 在第一个工作表的前 30 行里找表头行：至少命中"产品名称"字段的同义词才算有效表头 */
-export function detectHeader(sheets: SheetData[]): HeaderDetection | null {
-  for (const sheet of sheets) {
-    const scanLimit = Math.min(sheet.rows.length, 30)
-    for (let i = 0; i < scanLimit; i++) {
-      const row = sheet.rows[i]
-      const mapping: Record<string, number> = {}
-      const usedCols = new Set<number>()
-      for (const [field, synonyms] of Object.entries(FIELD_SYNONYMS)) {
+function mapHeaderRow(row: string[]): Record<string, number> {
+  const mapping: Record<string, number> = {}
+  const usedCols = new Set<number>()
+  for (const [field, synonyms] of Object.entries(FIELD_SYNONYMS)) {
+    // 匹配优先级：先精确相等再包含，且同义词按列表顺序逐个找——
+    // "名称"列精确命中产品名称而不被"商品名称（开票名称）"抢占，
+    // "型号"列优先于"开票型号"列（后者常是开票口径，区分度低）。
+    let hit = -1
+    outer: for (const exact of [true, false]) {
+      for (const syn of synonyms) {
         for (let col = 0; col < row.length; col++) {
           if (usedCols.has(col)) continue
-          const cell = row[col].replace(/\s/g, '')
+          const cell = (row[col] ?? '').replace(/\s/g, '')
           if (!cell) continue
-          if (synonyms.some((syn) => cell.includes(syn))) {
-            mapping[field] = col
-            usedCols.add(col)
-            break
+          if (exact ? cell === syn : cell.includes(syn)) {
+            hit = col
+            break outer
           }
         }
       }
-      if (mapping['产品名称'] !== undefined && Object.keys(mapping).length >= 2) {
-        return {
-          sheetName: sheet.name,
-          headerRowIndex: i,
-          headers: row,
-          fieldMapping: mapping,
-          dataRows: sheet.rows.slice(i + 1).filter((r) => (r[mapping['产品名称']] ?? '').trim() !== '')
-        }
+    }
+    if (hit >= 0) {
+      mapping[field] = hit
+      usedCols.add(hit)
+    }
+  }
+  return mapping
+}
+
+/**
+ * 在每个工作表的前 30 行里选**命中字段最多**的一行当表头（并列取更靠前的）。
+ * 不能用"第一个命中 ≥2 的行"：合并的大标题行（如"产品报价单"横跨全表）会把
+ * 同一段文字铺到每一列，恰好凑出 产品名称+成本价 两个假命中。
+ */
+export function detectHeader(sheets: SheetData[]): HeaderDetection | null {
+  for (const sheet of sheets) {
+    const scanLimit = Math.min(sheet.rows.length, 30)
+    let best: { i: number; mapping: Record<string, number> } | null = null
+    for (let i = 0; i < scanLimit; i++) {
+      const row = sheet.rows[i]
+      // 非空值全部相同的行是合并标题行，不可能是表头
+      const nonEmpty = row.map((c) => (c ?? '').trim()).filter(Boolean)
+      if (nonEmpty.length > 1 && new Set(nonEmpty).size === 1) continue
+      const mapping = mapHeaderRow(row)
+      if (mapping['产品名称'] === undefined || Object.keys(mapping).length < 2) continue
+      if (!best || Object.keys(mapping).length > Object.keys(best.mapping).length) best = { i, mapping }
+    }
+    if (best) {
+      const { i, mapping } = best
+      return {
+        sheetName: sheet.name,
+        headerRowIndex: i,
+        headers: sheet.rows[i],
+        fieldMapping: mapping,
+        dataRows: sheet.rows.slice(i + 1).filter((r) => {
+          const name = (r[mapping['产品名称']] ?? '').trim()
+          // 汇总行（"合计(元)"落在名称列）不是产品
+          return name !== '' && !/^合\s*计/.test(name)
+        })
       }
     }
   }

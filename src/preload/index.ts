@@ -15,6 +15,7 @@ import type {
   ProductFields,
   ProviderConfig,
   ProviderId,
+  QuoteLineInput,
   SolutionFileKind,
 } from '@shared/agent-types'
 
@@ -141,6 +142,8 @@ const api: CompanyOsApi = {
     importExcel: (relativePath: string) => ipcRenderer.invoke(IPC.salesImportExcel, relativePath),
     exportQuoteImages: (productIds: string[], customerName: string) =>
       ipcRenderer.invoke(IPC.salesExportQuoteImages, productIds, customerName),
+    generateQuoteXlsx: (lines: QuoteLineInput[], customerName: string, templateFileName: string | null) =>
+      ipcRenderer.invoke(IPC.salesGenerateQuoteXlsx, lines, customerName, templateFileName),
     listTemplates: () => ipcRenderer.invoke(IPC.salesListTemplates),
     uploadTemplate: (sourcePath: string) => ipcRenderer.invoke(IPC.salesUploadTemplate, sourcePath),
     listCustomers: () => ipcRenderer.invoke(IPC.salesListCustomers),
