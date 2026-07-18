@@ -21,6 +21,8 @@ import { useConfigStore } from '../stores/useConfigStore'
 
 type SalesTab = '产品库' | '选型' | '报价单' | '客户'
 type UploadMode = 'supplier' | 'bid'
+/** 产品库视图：卡片（SPS 选型式，默认）/ 列表（全字段表格）/ 比价（同款多供应商） */
+type ProductView = '卡片' | '列表' | '比价'
 
 interface PreviewCard extends SupplierDocPreview {
   mode: UploadMode
@@ -111,6 +113,35 @@ function scoreProduct(p: ProductEntry, tokens: string[]): number {
     if ((p.备注 ?? '').includes(t)) score += 1
   }
   return score
+}
+
+/**
+ * 产品库搜索（SPS 式）：空格分词 AND 匹配——每个词都要命中任一字段才算；
+ * 返回相关度得分用于排序（0 = 不匹配），型号精确命中排最前。
+ */
+function searchScore(p: ProductEntry, tokens: string[]): number {
+  let total = 0
+  for (const t of tokens) {
+    const T = t.toLowerCase()
+    let s = 0
+    if (p.型号.toLowerCase() === T) s = Math.max(s, 100)
+    else if (p.型号.toLowerCase().startsWith(T)) s = Math.max(s, 60)
+    else if (p.型号.toLowerCase().includes(T)) s = Math.max(s, 30)
+    if (p.产品名称.toLowerCase() === T) s = Math.max(s, 80)
+    else if (p.产品名称.toLowerCase().includes(T)) s = Math.max(s, 25)
+    if (p.品牌.toLowerCase().includes(T)) s = Math.max(s, 15)
+    if (p.产品分类.toLowerCase().includes(T)) s = Math.max(s, 10)
+    if (p.生产制造商.toLowerCase().includes(T) || p.供应商名称.toLowerCase().includes(T)) s = Math.max(s, 8)
+    if (p.技术参数.toLowerCase().includes(T) || (p.备注 ?? '').toLowerCase().includes(T)) s = Math.max(s, 5)
+    if (s === 0) return 0 // AND 语义：有一个词不命中就整条出局
+    total += s
+  }
+  return total
+}
+
+/** 卡片/详情展示价：建议售价优先（对外口径），无价则空 */
+function displayPrice(p: ProductEntry): string {
+  return p.建议销售价 || p.投标报价 || ''
 }
 
 /** 一行需求解析：末尾的 "x3 / ×3 / *3" 当数量 */
@@ -285,7 +316,11 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [products, setProducts] = useState<ProductEntry[]>([])
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('全部')
-  const [compareView, setCompareView] = useState(false)
+  const [productView, setProductView] = useState<ProductView>('卡片')
+  const [priceMin, setPriceMin] = useState('')
+  const [priceMax, setPriceMax] = useState('')
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [detailQty, setDetailQty] = useState('1')
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [previews, setPreviews] = useState<PreviewCard[]>([])
@@ -345,21 +380,49 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
-  const categories = useMemo(() => {
-    const set = new Set(products.map((p) => p.产品分类).filter(Boolean))
-    return ['全部', ...Array.from(set)]
+  /** 分类导航（SPS 式左侧栏）：分类 → 数量，按数量排序，未填分类的归"未分类" */
+  const categoryNav = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of products) {
+      const c = p.产品分类 || '未分类'
+      counts.set(c, (counts.get(c) ?? 0) + 1)
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
   }, [products])
 
   const filteredProducts = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return products.filter((p) => {
-      if (categoryFilter !== '全部' && p.产品分类 !== categoryFilter) return false
-      if (!q) return true
-      return [p.产品名称, p.产品分类, p.品牌, p.型号, p.生产制造商, p.技术参数, p.供应商名称, p.供应商联系人].some((v) =>
-        (v ?? '').toLowerCase().includes(q)
-      )
-    })
-  }, [products, query, categoryFilter])
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    const min = priceNum(priceMin)
+    const max = priceNum(priceMax)
+    const scored: { p: ProductEntry; score: number }[] = []
+    for (const p of products) {
+      if (categoryFilter !== '全部' && (p.产品分类 || '未分类') !== categoryFilter) continue
+      if (min !== null || max !== null) {
+        // 价格筛选按对外口径（建议售价→投标价），都没填价的产品在价格筛选下隐藏
+        const price = priceNum(displayPrice(p))
+        if (price === null) continue
+        if (min !== null && price < min) continue
+        if (max !== null && price > max) continue
+      }
+      let score = 0
+      if (tokens.length > 0) {
+        score = searchScore(p, tokens)
+        if (score === 0) continue
+      }
+      scored.push({ p, score })
+    }
+    if (tokens.length > 0) scored.sort((a, b) => b.score - a.score || b.p.更新时间 - a.p.更新时间)
+    return scored.map((x) => x.p)
+  }, [products, query, categoryFilter, priceMin, priceMax])
+
+  const detailProduct = detailId ? (products.find((p) => p.id === detailId) ?? null) : null
+  /** 详情弹层里的"同款其他供应商"（品牌+型号相同的其它记录），按进价升序 */
+  const detailSiblings = useMemo(() => {
+    if (!detailProduct) return []
+    return products
+      .filter((p) => p.id !== detailProduct.id && compareKey(p) === compareKey(detailProduct))
+      .sort((a, b) => (priceNum(a.成本价) ?? Infinity) - (priceNum(b.成本价) ?? Infinity))
+  }, [detailProduct, products])
 
   /** 比价视图：同品牌+型号（或同名）的多供应商条目归组，最低进价供应商排前 */
   const compareGroups = useMemo(() => {
@@ -417,12 +480,17 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     await refreshProducts()
   }
 
-  function addToCart(product: ProductEntry): void {
+  function addToCart(product: ProductEntry, qty = '1'): void {
     setCart((prev) => {
-      if (prev.some((l) => l.product.id === product.id)) return prev
-      return [...prev, { product, 数量: '1', 报价单价: defaultQuotePrice(product) }]
+      const existing = prev.find((l) => l.product.id === product.id)
+      if (existing) {
+        // 重复加购按 SPS 习惯累加数量
+        const merged = String((parseFloat(existing.数量) || 0) + (parseFloat(qty) || 1))
+        return prev.map((l) => (l.product.id === product.id ? { ...l, 数量: merged } : l))
+      }
+      return [...prev, { product, 数量: qty, 报价单价: defaultQuotePrice(product) }]
     })
-    flash(`已加入报价单：${product.产品名称}${product.建议销售价 ? '' : '（无建议销售价，默认取了其它价格口径，注意核对）'}`)
+    flash(`已加入报价单：${product.产品名称} x${qty}${product.建议销售价 ? '' : '（无建议销售价，默认取了其它价格口径，注意核对）'}`)
   }
 
   const cartTotal = useMemo(() => {
@@ -623,29 +691,39 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="按产品关键字 / 供应商搜索…"
-                  className="w-56 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-jushi-accent"
+                  placeholder="搜产品 / 品牌 / 型号 / 参数，空格隔开多个关键词…"
+                  autoFocus
+                  className="w-72 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-jushi-accent"
                 />
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-600 outline-none"
-                >
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c === '全部' ? '全部分类' : c}
-                    </option>
+                <div className="flex items-center gap-1 text-xs text-slate-400">
+                  <input
+                    value={priceMin}
+                    onChange={(e) => setPriceMin(e.target.value)}
+                    placeholder="价格≥"
+                    className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-jushi-accent"
+                  />
+                  <span>—</span>
+                  <input
+                    value={priceMax}
+                    onChange={(e) => setPriceMax(e.target.value)}
+                    placeholder="价格≤"
+                    className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-jushi-accent"
+                  />
+                </div>
+                <div className="flex overflow-hidden rounded-lg border border-slate-300">
+                  {(['卡片', '列表', '比价'] as ProductView[]).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setProductView(v)}
+                      title={v === '比价' ? '同一产品（品牌+型号相同）多家供应商归组对比进价' : v === '卡片' ? 'SPS 式选型卡片（图+价）' : '全字段表格'}
+                      className={`px-3 py-1.5 text-sm ${
+                        productView === v ? 'bg-jushi-accent text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {v === '卡片' ? '🗂️' : v === '列表' ? '☰' : '⚖️'} {v}
+                    </button>
                   ))}
-                </select>
-                <button
-                  onClick={() => setCompareView((v) => !v)}
-                  title="同一产品（品牌+型号相同）多家供应商时归组对比进价"
-                  className={`rounded-lg border px-3 py-1.5 text-sm ${
-                    compareView ? 'border-jushi-accent bg-jushi-accent/10 text-jushi-accent' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  ⚖️ 比价视图
-                </button>
+                </div>
                 <button
                   onClick={() => handleUploadDocs('supplier')}
                   disabled={busy}
@@ -743,7 +821,102 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 />
               )}
 
-              {compareView && (
+              <div className="flex items-start gap-3">
+                {/* SPS 式左侧分类导航 */}
+                <div className="w-44 shrink-0 rounded-lg border border-slate-200 bg-white p-1.5">
+                  <button
+                    onClick={() => setCategoryFilter('全部')}
+                    className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs ${
+                      categoryFilter === '全部' ? 'bg-jushi-accent/10 font-medium text-jushi-accent' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>全部产品</span>
+                    <span className="text-slate-400">{products.length}</span>
+                  </button>
+                  {categoryNav.map(([cat, count]) => (
+                    <button
+                      key={cat}
+                      onClick={() => setCategoryFilter(cat)}
+                      className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs ${
+                        categoryFilter === cat ? 'bg-jushi-accent/10 font-medium text-jushi-accent' : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="truncate">{cat}</span>
+                      <span className="ml-1 shrink-0 text-slate-400">{count}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="min-w-0 flex-1">
+              {productView === '卡片' && (
+                <>
+                  <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-3">
+                    {filteredProducts.map((p) => {
+                      const price = displayPrice(p)
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => {
+                            setDetailId(p.id)
+                            setDetailQty('1')
+                          }}
+                          className="cursor-pointer rounded-lg border border-slate-200 bg-white p-2.5 transition-shadow hover:border-jushi-accent/50 hover:shadow-sm"
+                        >
+                          <div className="flex gap-2.5">
+                            {p.图片 && dataDir ? (
+                              <img src={appfileUrl(`${dataDir}/${p.图片}`)} className="h-16 w-16 shrink-0 rounded object-cover" />
+                            ) : (
+                              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-slate-50 text-lg text-slate-300">
+                                📦
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-slate-700" title={p.产品名称}>
+                                {p.产品名称}
+                              </p>
+                              <p className="truncate text-xs text-slate-400" title={[p.品牌, p.型号].filter(Boolean).join(' ')}>
+                                {[p.品牌, p.型号].filter(Boolean).join(' · ') || '—'}
+                              </p>
+                              <p className="mt-0.5 truncate text-xs text-slate-400" title={p.技术参数}>
+                                {p.技术参数 || ''}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-1.5 flex items-center justify-between">
+                            <span className="text-sm font-semibold text-jushi-accent">
+                              {price ? `¥ ${price}` : '价格待定'}
+                            </span>
+                            <span className="max-w-24 truncate text-xs text-slate-300" title="供应商（采购侧）">
+                              {p.供应商名称 || ''}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                addToCart(p)
+                              }}
+                              className="rounded-md bg-jushi-accent px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
+                            >
+                              🛒 加入
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {filteredProducts.length === 0 && (
+                    <p className="py-8 text-center text-xs text-slate-400">
+                      {products.length === 0 ? '产品库为空——上传供应商资料或手动添加' : '没有匹配的产品，试试减少关键词或放宽价格区间'}
+                    </p>
+                  )}
+                  {filteredProducts.length > 0 && (
+                    <p className="mt-2 text-xs text-slate-400">
+                      共 {filteredProducts.length} 条{query.trim() ? '（按相关度排序，型号精确命中排最前）' : ''}；点卡片看详情与同款比价，🛒 直接加入报价单
+                    </p>
+                  )}
+                </>
+              )}
+
+              {productView === '比价' && (
                 <div className="space-y-2">
                   {compareGroups.map((group) => {
                     const first = group[0]
@@ -799,7 +972,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 </div>
               )}
 
-              {!compareView && (
+              {productView === '列表' && (
               <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <table className="w-full text-xs">
                   <thead>
@@ -890,6 +1063,145 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   </tbody>
                 </table>
               </div>
+              )}
+                </div>
+              </div>
+
+              {/* 产品详情弹层（SPS 式）：全字段 + 大图 + 同款其他供应商比价 + 数量加购 */}
+              {detailProduct && (
+                <div
+                  className="fixed inset-0 z-40 flex items-center justify-center bg-black/30"
+                  onClick={() => setDetailId(null)}
+                >
+                  <div
+                    className="max-h-[85vh] w-[640px] overflow-y-auto rounded-xl bg-white p-4 shadow-xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-800">{detailProduct.产品名称}</h3>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {[detailProduct.品牌, detailProduct.型号].filter(Boolean).join(' · ') || '品牌/型号未填'}
+                        </p>
+                      </div>
+                      <button onClick={() => setDetailId(null)} className="text-slate-400 hover:text-slate-600">
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="mt-3 flex gap-3">
+                      {detailProduct.图片 && dataDir ? (
+                        <img
+                          src={appfileUrl(`${dataDir}/${detailProduct.图片}`)}
+                          className="h-40 w-40 shrink-0 cursor-pointer rounded-lg object-cover"
+                          title="点击更换图片"
+                          onClick={() => handleSetImage(detailProduct.id)}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => handleSetImage(detailProduct.id)}
+                          className="flex h-40 w-40 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-300 hover:border-jushi-accent hover:text-jushi-accent"
+                        >
+                          + 上传产品图
+                        </button>
+                      )}
+                      <div className="min-w-0 flex-1 space-y-1 text-xs">
+                        {(
+                          [
+                            ['分类', detailProduct.产品分类],
+                            ['生产制造商', detailProduct.生产制造商],
+                            ['产地', detailProduct.产地],
+                            ['单位', detailProduct.单位],
+                            ['税率', detailProduct.税率],
+                            ['质保期', detailProduct.质保期 ? `${detailProduct.质保期} 个月` : ''],
+                            ['备注', detailProduct.备注 ?? '']
+                          ] as [string, string][]
+                        )
+                          .filter(([, v]) => v)
+                          .map(([k, v]) => (
+                            <p key={k} className="text-slate-600">
+                              <span className="mr-1 text-slate-400">{k}：</span>
+                              {v}
+                            </p>
+                          ))}
+                        <div className="mt-1.5 rounded-md bg-slate-50 p-2">
+                          <p className="text-sm font-semibold text-jushi-accent">
+                            {displayPrice(detailProduct) ? `对外报价参考 ¥ ${displayPrice(detailProduct)}` : '对外价格待定'}
+                          </p>
+                          <p className="mt-0.5 text-slate-400" title="采购侧信息，不会出现在对外报价里">
+                            进价 {detailProduct.成本价 || '—'} · 投标价 {detailProduct.投标报价 || '—'} · 供应商{' '}
+                            {detailProduct.供应商名称 || '—'}（内部）
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {detailProduct.技术参数 && (
+                      <div className="mt-3">
+                        <h4 className="mb-1 text-xs font-semibold text-slate-500">技术规格</h4>
+                        <p className="whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs leading-relaxed text-slate-600">
+                          {detailProduct.技术参数}
+                        </p>
+                      </div>
+                    )}
+
+                    {detailSiblings.length > 0 && (
+                      <div className="mt-3">
+                        <h4 className="mb-1 text-xs font-semibold text-slate-500">同款其他供应商（按进价升序，内部比价）</h4>
+                        <div className="space-y-1">
+                          {detailSiblings.map((s) => (
+                            <div key={s.id} className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-xs">
+                              <span className="text-slate-600">{s.供应商名称 || '（未填供应商）'}</span>
+                              <span className="text-slate-400">进价 {s.成本价 || '—'}</span>
+                              <span className="text-slate-400">售价 {s.建议销售价 || '—'}</span>
+                              <button
+                                onClick={() => {
+                                  setDetailId(s.id)
+                                  setDetailQty('1')
+                                }}
+                                className="ml-auto text-jushi-accent hover:underline"
+                              >
+                                看这家
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                      <div className="flex gap-2 text-xs">
+                        <button
+                          onClick={() => {
+                            setEditingId(detailProduct.id)
+                            setShowAddForm(false)
+                            setDetailId(null)
+                          }}
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          编辑资料
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400">数量</span>
+                        <input
+                          value={detailQty}
+                          onChange={(e) => setDetailQty(e.target.value)}
+                          className="w-16 rounded-md border border-slate-300 px-2 py-1.5 text-center text-sm outline-none focus:border-jushi-accent"
+                        />
+                        <button
+                          onClick={() => {
+                            addToCart(detailProduct, detailQty || '1')
+                            setDetailId(null)
+                          }}
+                          className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                        >
+                          🛒 加入报价单
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
             </>
           )}
