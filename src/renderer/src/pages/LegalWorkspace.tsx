@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AgentDisplayMeta, ContractCategory, ContractTemplate, LegalDoc } from '@shared/agent-types'
 import { CONTRACT_CATEGORIES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
+import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { FileDropzone } from '../components/FileDropzone'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -48,6 +49,7 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [reviewed, setReviewed] = useState<LegalDoc[]>([])
   const [templates, setTemplates] = useState<ContractTemplate[]>([])
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
+  const [showChat, setShowChat] = useState(true)
   const [uploadCategory, setUploadCategory] = useState<ContractCategory>('销售合同')
   const [showTemplates, setShowTemplates] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -82,13 +84,17 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     refresh()
   }, [])
 
+  useEffect(() => {
+    if (pendingPrompt) setShowChat(true)
+  }, [pendingPrompt])
+
   function templateFor(category: ContractCategory): ContractTemplate | undefined {
     return templates.find((t) => t.category === category)
   }
 
   return (
     <div className="flex h-full">
-      <div className="w-80 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3">
+      <div className={`shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3 ${showChat ? 'w-80' : 'flex-1'}`}>
         <div className="app-drag mb-2 flex items-center justify-between pt-1">
           <h2 className="text-xs font-semibold text-slate-500">法务工作台</h2>
           <div className="app-no-drag flex items-center gap-2">
@@ -223,7 +229,8 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
         )}
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
+      <div className={`overflow-hidden transition-all ${showChat ? 'flex-1' : 'w-0'}`}>
         <AgentChat
           agent={agent}
           uploadFn={(p) => window.api.upload.legalPending(p, uploadCategory)}

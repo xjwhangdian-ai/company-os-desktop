@@ -14,6 +14,7 @@ import type {
 } from '@shared/agent-types'
 import { CONTACT_ROLES, CUSTOMER_STATUSES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
+import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -1906,20 +1907,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       </div>
 
       {/* 中：分身对话（可收起——查产品/出报价都是机械操作，不占对话就把它折起来；派 AI 任务时自动展开） */}
-      <div className="flex w-7 shrink-0 flex-col items-center border-l border-slate-200 bg-slate-50">
-        <button
-          onClick={() => setShowChat((v) => !v)}
-          title={showChat ? '收起分身对话' : '展开分身对话'}
-          className="py-3 text-slate-400 hover:text-jushi-accent"
-        >
-          {showChat ? '›' : '‹'}
-        </button>
-        {!showChat && (
-          <span className="mt-1 text-xs text-slate-400" style={{ writingMode: 'vertical-rl' }}>
-            💬 分身对话
-          </span>
-        )}
-      </div>
+      <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
       <div className={`shrink-0 overflow-hidden transition-all ${showChat ? 'w-[400px]' : 'w-0'}`}>
         {/* 收起时只折宽度不卸载组件，对话记录与进行中的任务都保留 */}
         <div className="h-full w-[400px]">

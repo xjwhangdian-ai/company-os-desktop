@@ -241,8 +241,13 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [showProjectUpload, setShowProjectUpload] = useState(false)
   const [showCard, setShowCard] = useState(true)
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
+  const [showChat, setShowChat] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (pendingPrompt) setShowChat(true)
+  }, [pendingPrompt])
   const [openCat, setOpenCat] = useState<Record<BidCategory, boolean>>({
     采购意向: true,
     意见征询: true,
@@ -503,7 +508,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         ) : (
           <>
             {project && (
-              <div className="max-h-[55%] overflow-y-auto border-b border-slate-200 bg-white px-5 py-3">
+              <div className={`overflow-y-auto border-b border-slate-200 bg-white px-5 py-3 ${showChat ? 'max-h-[55%]' : 'flex-1'}`}>
                 <div className="flex items-center justify-between">
                   <div>
                     {project.tenderSource?.公告链接 ? (
@@ -639,7 +644,15 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                 )}
               </div>
             )}
-            <div className="flex-1 overflow-hidden">
+            {/* 分身对话收起条：收起后上方项目详情占满高度 */}
+            <button
+              onClick={() => setShowChat((v) => !v)}
+              className="flex shrink-0 items-center gap-1.5 border-t border-slate-200 bg-slate-50 px-4 py-1.5 text-xs text-slate-500 hover:text-jushi-accent"
+              title={showChat ? '收起分身对话' : '展开分身对话'}
+            >
+              {showChat ? '▾' : '▸'} 💬 分身对话
+            </button>
+            <div className={`overflow-hidden ${showChat ? 'flex-1' : 'h-0'}`}>
               <AgentChat
                 key={project ? project.folderName : '__no_project__'}
                 agent={agent}

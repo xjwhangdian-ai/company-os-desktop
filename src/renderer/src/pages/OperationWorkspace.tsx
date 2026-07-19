@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AgentDisplayMeta, ChatAttachment, OutputEntry } from '@shared/agent-types'
 import type { FileFilter } from '@shared/api-types'
 import { AgentChat } from '../components/AgentChat'
@@ -37,7 +37,12 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   const [injectedPrompt, setInjectedPrompt] = useState<string | null>(null)
   const [injectedAttachments, setInjectedAttachments] = useState<ChatAttachment[] | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
+  const [showChat, setShowChat] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    if (injectedPrompt || injectedAttachments) setShowChat(true)
+  }, [injectedPrompt, injectedAttachments])
 
   function handleGenerate(): void {
     setInjectedPrompt(PLATFORM_PROMPTS[platform])
@@ -99,9 +104,17 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
           </div>
         </div>
 
-        {platform === '微信公众号' && <GzhStyleButton />}
+        {platform === '微信公众号' && showChat && <GzhStyleButton />}
 
-        <div className="flex-1 overflow-hidden">
+        {/* 分身对话收起条 */}
+        <button
+          onClick={() => setShowChat((v) => !v)}
+          className="flex shrink-0 items-center gap-1.5 border-t border-slate-200 bg-slate-50 px-4 py-1.5 text-xs text-slate-500 hover:text-jushi-accent"
+          title={showChat ? '收起分身对话' : '展开分身对话'}
+        >
+          {showChat ? '▾' : '▸'} 💬 分身对话
+        </button>
+        <div className={`overflow-hidden ${showChat ? 'flex-1' : 'h-0'}`}>
           <AgentChat
             agent={agent}
             pendingPrompt={injectedPrompt}

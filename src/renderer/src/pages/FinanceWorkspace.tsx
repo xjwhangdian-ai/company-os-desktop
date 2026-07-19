@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AgentDisplayMeta, FinanceEmployee, FinanceOverview, OutputEntry } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
+import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -84,7 +85,12 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
+  const [showChat, setShowChat] = useState(true)
   const [notice, setNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (pendingPrompt) setShowChat(true)
+  }, [pendingPrompt])
 
   function flash(text: string): void {
     setNotice(text)
@@ -342,8 +348,10 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         {notice && <div className="border-t border-slate-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</div>}
       </div>
 
-      {/* 中：分身对话（财税咨询） */}
-      <div className="flex w-[400px] shrink-0 flex-col">
+      {/* 中：分身对话（财税咨询，可收起） */}
+      <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
+      <div className={`shrink-0 overflow-hidden transition-all ${showChat ? 'w-[400px]' : 'w-0'}`}>
+      <div className="flex h-full w-[400px] flex-col">
         <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
           <p className="mb-1.5 text-xs font-semibold text-slate-500">💬 财税咨询（点一个填入输入框，改好再发）</p>
           <div className="flex flex-wrap gap-1">
@@ -362,6 +370,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         <div className="min-h-0 flex-1">
           <AgentChat agent={agent} pendingPrompt={pendingPrompt} onPendingPromptConsumed={() => setPendingPrompt(null)} />
         </div>
+      </div>
       </div>
 
       {/* 右：产出面板 */}

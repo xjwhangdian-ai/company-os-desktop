@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { AgentDisplayMeta, OutputEntry, SolutionFile, SolutionFileKind } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
+import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -84,7 +85,12 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
+  const [showChat, setShowChat] = useState(true)
   const [outputsRefresh, setOutputsRefresh] = useState(0)
+
+  useEffect(() => {
+    if (pendingPrompt) setShowChat(true)
+  }, [pendingPrompt])
 
   function flash(text: string): void {
     setNotice(text)
@@ -388,9 +394,12 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
         {notice && <div className="border-t border-slate-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</div>}
       </div>
 
-      {/* 中：分身对话 */}
-      <div className="w-[400px] shrink-0">
-        <AgentChat agent={agent} pendingPrompt={pendingPrompt} onPendingPromptConsumed={() => setPendingPrompt(null)} />
+      {/* 中：分身对话（可收起） */}
+      <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
+      <div className={`shrink-0 overflow-hidden transition-all ${showChat ? 'w-[400px]' : 'w-0'}`}>
+        <div className="h-full w-[400px]">
+          <AgentChat agent={agent} pendingPrompt={pendingPrompt} onPendingPromptConsumed={() => setPendingPrompt(null)} />
+        </div>
       </div>
 
       {/* 右：产出面板 */}
