@@ -157,7 +157,13 @@ export interface CompanyOsApi {
     ): Promise<{ bookTitle: string; fileName: string; path: string }[]>
   }
   gzh: {
-    runStyle(inputMdPath: string): Promise<string>
+    /** 一键排版，theme 选风格（炬视/瑾智），返回排版 HTML 路径 */
+    runStyle(inputMdPath: string, theme?: '炬视' | '瑾智'): Promise<string>
+    /** 按品牌风格生成公众号封面（横版 900×383 + 方版 500×500），返回两图路径 */
+    generateCover(
+      inputMdPath: string,
+      theme: '炬视' | '瑾智'
+    ): Promise<{ banner: string; square: string; title: string; theme: '炬视' | '瑾智' }>
   }
   update: {
     /** 对比 GitHub Releases 最新版本与当前版本 */

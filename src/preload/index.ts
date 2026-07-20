@@ -115,7 +115,9 @@ const api: CompanyOsApi = {
     }
   },
   gzh: {
-    runStyle: (inputMdPath: string) => ipcRenderer.invoke(IPC.gzhRunStyle, inputMdPath)
+    runStyle: (inputMdPath: string, theme?: '炬视' | '瑾智') => ipcRenderer.invoke(IPC.gzhRunStyle, inputMdPath, theme),
+    generateCover: (inputMdPath: string, theme: '炬视' | '瑾智') =>
+      ipcRenderer.invoke(IPC.gzhGenerateCover, inputMdPath, theme)
   },
   identity: {
     list: () => ipcRenderer.invoke(IPC.identityList),

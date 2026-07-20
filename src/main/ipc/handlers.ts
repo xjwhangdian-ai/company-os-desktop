@@ -76,7 +76,7 @@ import { exportMarkdownToDocx } from '../docgen/docx-export'
 import { exportBiddingTriSplit } from '../docgen/bidding-tri-split'
 import { exportMarkdownToPptx } from '../docgen/pptx-export'
 import { checkForUpdate, downloadAndInstall, type UpdateInfo } from '../update/updater'
-import { runGzhStyle } from '../fs-io/gzh-tool'
+import { runGzhStyle, generateGzhCover, type GzhTheme } from '../fs-io/gzh-tool'
 
 const activeRuns = new Map<string, AbortController>()
 
@@ -257,7 +257,12 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return exportBiddingTriSplit(markdown, outDir, baseName)
   })
 
-  ipcMain.handle(IPC.gzhRunStyle, (_e, inputMdPath: string) => runGzhStyle(getDataDir(), inputMdPath))
+  ipcMain.handle(IPC.gzhRunStyle, (_e, inputMdPath: string, theme?: GzhTheme) =>
+    runGzhStyle(getDataDir(), inputMdPath, theme)
+  )
+  ipcMain.handle(IPC.gzhGenerateCover, (_e, inputMdPath: string, theme: GzhTheme) =>
+    generateGzhCover(inputMdPath, theme)
+  )
 
   ipcMain.handle(IPC.updateCheck, () => checkForUpdate())
   ipcMain.handle(IPC.updateDownload, (_e, info: UpdateInfo) => downloadAndInstall(getMainWindow(), info))

@@ -56,6 +56,7 @@ export const IPC = {
   docgenExportMarkdownPptx: 'docgen:export-markdown-pptx',
 
   gzhRunStyle: 'gzh:run-style',
+  gzhGenerateCover: 'gzh:generate-cover',
   updateCheck: 'update:check',
   updateDownload: 'update:download',
   updateGetTokenSet: 'update:get-token-set',
