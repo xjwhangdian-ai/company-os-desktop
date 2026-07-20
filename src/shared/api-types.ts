@@ -98,6 +98,12 @@ export interface CompanyOsApi {
     biddingProject(sourcePath: string): Promise<BiddingUploadResult>
     biddingMaterial(category: string, sourcePath: string): Promise<UploadResult>
     legalPending(sourcePath: string, category: ContractCategory): Promise<UploadResult>
+    /** 运营公众号素材按主题落 inbox/05_运营_operation/{主题}/，图片顺序重命名 {主题}_序号.ext */
+    operationTheme(theme: string, sourcePath: string): Promise<UploadResult>
+  }
+  operation: {
+    /** 读 {主题}/_配图识别.json（分身看图后写的），把图片重命名为 {主题}_序号_描述.ext 并生成 配图清单.md */
+    applyImageNames(theme: string): Promise<{ renamed: number; listRelative: string; total: number }>
   }
   outputs: {
     scan(agentName: AgentName): Promise<OutputEntry[]>

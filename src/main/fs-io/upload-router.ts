@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import type { AgentName, BiddingUploadResult } from '@shared/agent-types'
 import { AGENT_OUTPUT_FOLDER } from './outputs-scanner'
@@ -169,6 +169,90 @@ export function uploadToSalesRawDoc(dataDir: string, sourcePath: string): { absP
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
   return { absPath: dest, relativePath: `inbox/01_销售_sales/供应商资料/${basename(dest)}` }
+}
+
+// ============ 运营（公众号配图）专属 ============
+// 痛点：手机/微信图是哈希名，谁也看不出内容，分身配图文全靠猜 → 图文不符。
+// 解法：①按主题落 inbox/05_运营_operation/{主题}/ 并顺序重命名 {主题}_序号.ext（分组+编号）；
+//       ②「AI 识别配图」让分身逐张看图写 _配图识别.json，App 据此把文件重命名成
+//         {主题}_序号_{内容描述}.ext 并生成 配图清单.md，从此文件名自带内容、配文不再张冠李戴。
+
+const OP_IMG_EXT = /\.(jpg|jpeg|png|gif|webp|heic)$/i
+function sanitizeSeg(s: string): string {
+  return (s || '').replace(/[\\/:*?"<>|\n\r\t]/g, '').replace(/\s+/g, '').trim()
+}
+
+/** 运营专属：公众号素材按主题落 inbox/05_运营_operation/{主题}/；图片顺序重命名 {主题}_序号.ext */
+export function uploadToOperationTheme(
+  dataDir: string,
+  theme: string,
+  sourcePath: string
+): { absPath: string; relativePath: string } {
+  const t = sanitizeSeg(theme).slice(0, 40) || todayStr()
+  const destDir = join(dataDir, 'inbox', '05_运营_operation', t)
+  mkdirSync(destDir, { recursive: true })
+  const ext = extname(sourcePath).toLowerCase()
+  let fileName: string
+  if (OP_IMG_EXT.test(ext)) {
+    const n = readdirSync(destDir).filter((f) => OP_IMG_EXT.test(f)).length
+    fileName = `${t}_${String(n + 1).padStart(2, '0')}${ext}`
+  } else {
+    fileName = basename(sourcePath)
+  }
+  const dest = uniqueDestPath(destDir, fileName)
+  copyFileSync(sourcePath, dest)
+  return { absPath: dest, relativePath: `inbox/05_运营_operation/${t}/${basename(dest)}` }
+}
+
+/**
+ * 运营专属：读 {主题}/_配图识别.json（分身逐张看图后写的 [{文件名,描述,图注}]），
+ * 把每张图重命名成 {主题}_序号_{描述}.ext，并生成 配图清单.md 供写文章时对号入座。
+ */
+export function applyOperationImageNames(
+  dataDir: string,
+  theme: string
+): { renamed: number; listRelative: string; total: number } {
+  const t = sanitizeSeg(theme).slice(0, 40)
+  const dir = join(dataDir, 'inbox', '05_运营_operation', t)
+  const jsonPath = join(dir, '_配图识别.json')
+  if (!existsSync(jsonPath)) {
+    throw new Error('还没有识别结果——请先点「🔍 AI 识别配图」让分身逐张看图并写出 _配图识别.json')
+  }
+  let list: { 文件名?: string; 描述?: string; 图注?: string }[]
+  try {
+    const raw = JSON.parse(readFileSync(jsonPath, 'utf-8'))
+    list = Array.isArray(raw) ? raw : Array.isArray(raw?.images) ? raw.images : []
+  } catch {
+    throw new Error('_配图识别.json 不是合法 JSON，请让分身重写')
+  }
+  const rows = ['| 文件 | 画面内容 | 建议图注 |', '|---|---|---|']
+  let renamed = 0
+  let seq = 0
+  for (const item of list) {
+    const name = item.文件名 || ''
+    if (!name || !OP_IMG_EXT.test(name)) continue
+    const cur = join(dir, name)
+    if (!existsSync(cur)) continue
+    seq++
+    const ext = extname(name).toLowerCase()
+    const desc = sanitizeSeg(item.描述 || '').slice(0, 12)
+    const newName = `${t}_${String(seq).padStart(2, '0')}${desc ? '_' + desc : ''}${ext}`
+    let finalName = name
+    if (newName !== name) {
+      const target = uniqueDestPath(dir, newName)
+      renameSync(cur, target)
+      finalName = basename(target)
+      renamed++
+    }
+    rows.push(`| ${finalName} | ${(item.描述 || '').replace(/\|/g, '，')} | ${(item.图注 || '').replace(/\|/g, '，')} |`)
+  }
+  const listPath = join(dir, '配图清单.md')
+  writeFileSync(
+    listPath,
+    `# ${t} · 配图清单\n\n> App 按分身识别结果重命名并生成。写文章时据此选图配文，插入前仍需 Read 复核画面。\n\n${rows.join('\n')}\n`,
+    'utf-8'
+  )
+  return { renamed, listRelative: `inbox/05_运营_operation/${t}/配图清单.md`, total: seq }
 }
 
 /** 销售专属：报价文件模板落 销售/_模板/报价模板/ */

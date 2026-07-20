@@ -22,6 +22,8 @@ export const IPC = {
   uploadBiddingProject: 'upload:bidding-project',
   uploadBiddingMaterial: 'upload:bidding-material',
   uploadLegalPending: 'upload:legal-pending',
+  uploadOperationTheme: 'upload:operation-theme',
+  operationApplyImageNames: 'operation:apply-image-names',
 
   outputsScan: 'outputs:scan',
 

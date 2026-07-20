@@ -32,6 +32,8 @@ import {
   uploadToLegalPending,
   uploadToLegalTemplate,
   uploadToMaterialLibrary,
+  uploadToOperationTheme,
+  applyOperationImageNames,
   uploadToSalesRawDoc,
   uploadToSalesTemplate
 } from '../fs-io/upload-router'
@@ -185,6 +187,12 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.uploadBiddingProject, (_e, sourcePath: string) => uploadToBiddingProject(getDataDir(), sourcePath))
   ipcMain.handle(IPC.uploadBiddingMaterial, (_e, category: string, sourcePath: string) =>
     uploadToMaterialLibrary(getDataDir(), category, sourcePath)
+  )
+  ipcMain.handle(IPC.uploadOperationTheme, (_e, theme: string, sourcePath: string) =>
+    uploadToOperationTheme(getDataDir(), theme, sourcePath)
+  )
+  ipcMain.handle(IPC.operationApplyImageNames, (_e, theme: string) =>
+    applyOperationImageNames(getDataDir(), theme)
   )
   ipcMain.handle(IPC.uploadLegalPending, (_e, sourcePath: string, category: string) =>
     uploadToLegalPending(getDataDir(), sourcePath, category)

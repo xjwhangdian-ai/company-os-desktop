@@ -59,7 +59,13 @@ const api: CompanyOsApi = {
     biddingMaterial: (category: string, sourcePath: string): Promise<UploadResult> =>
       ipcRenderer.invoke(IPC.uploadBiddingMaterial, category, sourcePath),
     legalPending: (sourcePath: string, category: ContractCategory): Promise<UploadResult> =>
-      ipcRenderer.invoke(IPC.uploadLegalPending, sourcePath, category)
+      ipcRenderer.invoke(IPC.uploadLegalPending, sourcePath, category),
+    operationTheme: (theme: string, sourcePath: string): Promise<UploadResult> =>
+      ipcRenderer.invoke(IPC.uploadOperationTheme, theme, sourcePath)
+  },
+  operation: {
+    applyImageNames: (theme: string): Promise<{ renamed: number; listRelative: string; total: number }> =>
+      ipcRenderer.invoke(IPC.operationApplyImageNames, theme)
   },
   outputs: {
     scan: (agentName: AgentName) => ipcRenderer.invoke(IPC.outputsScan, agentName)

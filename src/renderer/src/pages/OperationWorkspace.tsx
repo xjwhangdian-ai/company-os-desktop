@@ -33,19 +33,68 @@ function attachmentIcon(fileName: string): string {
 
 export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const [platform, setPlatform] = useState<Platform>('小红书')
+  const [theme, setTheme] = useState('')
   const [mediaAttachments, setMediaAttachments] = useState<ChatAttachment[]>([])
   const [injectedPrompt, setInjectedPrompt] = useState<string | null>(null)
   const [injectedAttachments, setInjectedAttachments] = useState<ChatAttachment[] | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
   const [showChat, setShowChat] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  function flash(t: string): void {
+    setNotice(t)
+    setTimeout(() => setNotice(null), 6000)
+  }
+
+  /** 素材上传：填了主题就落主题文件夹并顺序改名，否则退回通用 inbox */
+  function uploadMedia(p: string): Promise<{ absPath: string; relativePath: string }> {
+    return theme.trim() ? window.api.upload.operationTheme(theme.trim(), p) : window.api.upload.generic('operation', p)
+  }
+
+  /** 让分身逐张看图，把内容识别写进 {主题}/_配图识别.json */
+  function handleIdentify(): void {
+    const t = theme.trim()
+    if (!t) {
+      flash('先填「主题」并上传图片，识别结果才好归到对应文件夹')
+      return
+    }
+    setInjectedPrompt(
+      [
+        `识别这次公众号配图的内容，供写文章时精准配图注（防图文不符）。`,
+        `1. 用 Read 工具**逐张打开** inbox/05_运营_operation/${t}/ 下的每张图片（jpg/png 等），看清实际画面。`,
+        `2. 为每张图写一个 JSON 对象：{"文件名":"原文件名带扩展名","描述":"画面内容4-12字如 讲师手持话筒演讲/校园红砖路人物背影","图注":"图：适合放进文章的一句说明"}。`,
+        `3. 用 Write 把 JSON 数组写到 inbox/05_运营_operation/${t}/_配图识别.json（只含 JSON 数组本身）。`,
+        `4. 严格按真实画面写，绝不凭文件名臆测；看不清的图描述写"待人工确认"。`,
+        `完成后回复识别了几张、有没有内容雷同或不适合入文的图。之后我点「应用重命名」App 会据此把图重命名并生成配图清单。`
+      ].join('\n')
+    )
+  }
+
+  async function handleApplyNames(): Promise<void> {
+    const t = theme.trim()
+    if (!t) {
+      flash('先填主题')
+      return
+    }
+    try {
+      const r = await window.api.operation.applyImageNames(t)
+      flash(`已按识别结果重命名 ${r.renamed}/${r.total} 张图，并生成配图清单：${r.listRelative}`)
+    } catch (err) {
+      flash(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   useEffect(() => {
     if (injectedPrompt || injectedAttachments) setShowChat(true)
   }, [injectedPrompt, injectedAttachments])
 
   function handleGenerate(): void {
-    setInjectedPrompt(PLATFORM_PROMPTS[platform])
+    const t = theme.trim()
+    const themeLine = t
+      ? `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_公众号/（先建子文件夹）。配图在 inbox/05_运营_operation/${t}/，若有 配图清单.md 先读它选图；插入每张图前用 Read 复核画面，图注严格对应画面内容，绝不张冠李戴。`
+      : ''
+    setInjectedPrompt(PLATFORM_PROMPTS[platform] + themeLine)
     if (mediaAttachments.length > 0) {
       setInjectedAttachments(mediaAttachments)
       setMediaAttachments([])
@@ -64,23 +113,48 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
           </div>
 
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-400">素材：</span>
+            <span className="text-xs text-slate-400">主题：</span>
+            <input
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              placeholder="本篇主题，如 周末浙大充电学习"
+              className="w-52 rounded-lg border border-slate-300 px-2.5 py-1 text-xs outline-none focus:border-jushi-accent"
+              title="填主题后，上传的图片/视频会归到 inbox/05_运营_operation/{主题}/ 并顺序改名，便于识别与配文"
+            />
+            <span className="ml-1 text-xs text-slate-400">素材：</span>
             {MEDIA_UPLOAD_KINDS.map((kind) => (
               <FileDropzone
                 key={kind.key}
                 compact
                 buttonLabel={kind.buttonLabel}
                 filters={kind.filters}
-                uploadFn={(p) => window.api.upload.generic('operation', p)}
+                uploadFn={uploadMedia}
                 onUploaded={(a) => setMediaAttachments((prev) => [...prev, ...a])}
               />
             ))}
+            <button
+              onClick={handleIdentify}
+              disabled={!theme.trim()}
+              title="让分身逐张看图识别内容（防图文不符），写出 _配图识别.json"
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            >
+              🔍 AI 识别配图
+            </button>
+            <button
+              onClick={handleApplyNames}
+              disabled={!theme.trim()}
+              title="按识别结果把图片重命名为 主题_序号_内容 并生成配图清单"
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            >
+              ✅ 应用重命名
+            </button>
             {mediaAttachments.map((a) => (
               <span key={a.path} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
                 {attachmentIcon(a.fileName)} {a.fileName}
               </span>
             ))}
           </div>
+          {notice && <p className="mb-1 text-xs text-emerald-700">{notice}</p>}
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">平台：</span>
