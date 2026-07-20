@@ -33,12 +33,16 @@ export function loadAgentDefinitions(dataDir: string): AgentDefinition[] {
   const agentsDir = join(dataDir, '.claude', 'agents')
   let files: string[] = []
   try {
-    files = readdirSync(agentsDir).filter((f) => f.endsWith('.md'))
+    // 只认「文件名恰好等于某个已知分身名」的定义文件（sales.md / legal.md …）。
+    // 这样能挡掉 Google Drive/网盘生成的同步冲突副本（如 legal.sync-conflict-xxx.md）——
+    // 它们是 legal.md 的完整拷贝，frontmatter 里 name 仍是 legal，若按 name 收录会出现重复分身。
+    files = readdirSync(agentsDir).filter((f) => f.endsWith('.md') && KNOWN_AGENT_NAMES.includes(f.slice(0, -3) as AgentName))
   } catch {
     return []
   }
 
   const results: AgentDefinition[] = []
+  const seen = new Set<AgentName>()
   for (const file of files) {
     const full = join(agentsDir, file)
     let raw: string
@@ -50,8 +54,10 @@ export function loadAgentDefinitions(dataDir: string): AgentDefinition[] {
     const { data, content } = matter(raw)
     const fm = data as AgentFrontmatter
     const nameFromFile = file.replace(/\.md$/, '')
-    const name = (fm.name ?? nameFromFile) as AgentName
-    if (!KNOWN_AGENT_NAMES.includes(name)) continue
+    // 以文件名为准（已确保是已知分身名），忽略 frontmatter 里可能不一致的 name，杜绝重复
+    const name = nameFromFile as AgentName
+    if (!KNOWN_AGENT_NAMES.includes(name) || seen.has(name)) continue
+    seen.add(name)
 
     const tools = Array.isArray(fm.tools)
       ? fm.tools
