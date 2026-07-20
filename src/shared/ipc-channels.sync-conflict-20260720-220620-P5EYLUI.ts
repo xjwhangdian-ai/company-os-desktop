@@ -1,0 +1,80 @@
+export const IPC = {
+  configGet: 'config:get',
+  configPickDataDir: 'config:pick-data-dir',
+  configSetActiveProvider: 'config:set-active-provider',
+  configSetProviderConfig: 'config:set-provider-config',
+
+  configAddCompany: 'config:add-company',
+  configRemoveCompany: 'config:remove-company',
+  configSetCompanyDataDir: 'config:set-company-data-dir',
+  configSetActiveCompany: 'config:set-active-company',
+
+  agentsList: 'agents:list',
+  agentRun: 'agent:run',
+  agentCancel: 'agent:cancel',
+  agentStreamEvent: 'agent:stream-event',
+
+  dialogPickFiles: 'dialog:pick-files',
+  shellShowItemInFolder: 'shell:show-item-in-folder',
+  shellSaveAsCopy: 'shell:save-as-copy',
+
+  uploadGeneric: 'upload:generic',
+  uploadBiddingProject: 'upload:bidding-project',
+  uploadBiddingMaterial: 'upload:bidding-material',
+  uploadLegalPending: 'upload:legal-pending',
+
+  outputsScan: 'outputs:scan',
+
+  biddingListProjects: 'bidding:list-projects',
+  biddingMaterialCounts: 'bidding:material-counts',
+  biddingSaveCard: 'bidding:save-card',
+  biddingExportLedger: 'bidding:export-ledger',
+  uploadBiddingClarification: 'upload:bidding-clarification',
+
+  legalListDocs: 'legal:list-docs',
+  legalMarkReviewed: 'legal:mark-reviewed',
+  legalListTemplates: 'legal:list-templates',
+  legalUploadTemplate: 'legal:upload-template',
+
+  docgenExportMarkdownFile: 'docgen:export-markdown-file',
+  docgenExportBiddingTriSplit: 'docgen:export-bidding-tri-split',
+
+  gzhRunStyle: 'gzh:run-style',
+  shellOpenPath: 'shell:open-path',
+
+  identityList: 'identity:list',
+  identityAdd: 'identity:add',
+  identityRemove: 'identity:remove',
+  identityVerifyPin: 'identity:verify-pin',
+  identitySetRole: 'identity:set-role',
+  identityNotifyLogin: 'identity:notify-login',
+
+  syncStatus: 'sync:status',
+  syncNow: 'sync:now',
+  syncLastAt: 'sync:last-at',
+
+  salesListProducts: 'sales:list-products',
+  salesSaveProduct: 'sales:save-product',
+  salesRemoveProduct: 'sales:remove-product',
+  salesSetProductImage: 'sales:set-product-image',
+  salesUploadSupplierDoc: 'sales:upload-supplier-doc',
+  salesImportExcel: 'sales:import-excel',
+  salesExportQuoteImages: 'sales:export-quote-images',
+  salesListTemplates: 'sales:list-templates',
+  salesUploadTemplate: 'sales:upload-template',
+  salesListCustomers: 'sales:list-customers',
+  salesSaveCustomer: 'sales:save-customer',
+  salesRemoveCustomer: 'sales:remove-customer',
+  salesAddFollowUp: 'sales:add-follow-up',
+  salesLinkCustomerFile: 'sales:link-customer-file',
+  salesUnlinkCustomerFile: 'sales:unlink-customer-file',
+  salesResolveLinkedPath: 'sales:resolve-linked-path',
+
+  solutionListFiles: 'solution:list-files',
+  solutionUpload: 'solution:upload',
+  solutionRemoveFile: 'solution:remove-file',
+  solutionWhisperStatus: 'solution:whisper-status',
+  solutionTranscribeStart: 'solution:transcribe-start',
+  solutionTranscribeCancel: 'solution:transcribe-cancel',
+  solutionTranscribeEvent: 'solution:transcribe-event'
+} as const

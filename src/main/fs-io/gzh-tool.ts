@@ -82,14 +82,14 @@ function coverTitle(mdPath: string): string {
   return basename(mdPath).replace(/\.md$/i, '').replace(/^\d{4}-\d{2}-\d{2}_/, '')
 }
 
-/** 按标题长度选字号（banner 横版 / square 方版分别给系数） */
+/** 按标题长度选字号（banner 横版 / square 方版分别给系数）；超长标题再降一档，配合自动换行不溢出 */
 function titleFont(title: string, square: boolean): number {
   const n = [...title].length
   const base = square ? 46 : 52
   if (n <= 10) return base
   if (n <= 16) return base - 8
   if (n <= 24) return base - 16
-  return base - 22
+  return base - 24
 }
 
 function coverHtml(brand: CoverBrand, title: string, w: number, h: number, square: boolean): string {
@@ -129,8 +129,15 @@ async function renderPng(html: string, w: number, h: number, outPath: string): P
   })
   try {
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
-    // 给字体/布局一点结算时间，避免截到空白
-    await new Promise((r) => setTimeout(r, 150))
+    // 等中文字体真正加载完再截图，否则可能截到 fallback 字体甚至空白
+    try {
+      await win.webContents.executeJavaScript(
+        'document.fonts && document.fonts.ready ? document.fonts.ready.then(() => true) : true'
+      )
+    } catch {
+      /* 老版本无 document.fonts，忽略 */
+    }
+    await new Promise((r) => setTimeout(r, 120))
     const img = await win.capturePage()
     const norm = img.resize({ width: w, height: h })
     writeFileSync(outPath, norm.toPNG())

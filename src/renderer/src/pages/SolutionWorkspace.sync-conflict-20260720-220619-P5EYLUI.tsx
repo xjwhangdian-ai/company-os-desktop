@@ -1,0 +1,513 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { v4 as uuid } from 'uuid'
+import type { AgentDisplayMeta, OutputEntry, SolutionFile, SolutionFileKind, WhisperStatus } from '@shared/agent-types'
+import { AgentChat } from '../components/AgentChat'
+import { OutputsPanel } from '../components/OutputsPanel'
+import { HelpButton } from '../components/HelpPanel'
+import { HELP_CONTENT } from '../lib/help-content'
+
+type SolutionTab = '需求文件' | '资料库' | '生成方案'
+
+const REQUIREMENT_FILTERS = [
+  { name: '需求文件（录音/文档）', extensions: ['mp3', 'm4a', 'wav', 'md', 'docx', 'doc', 'pdf', 'txt'] }
+]
+const LIB_FILTERS = [{ name: '资料文档', extensions: ['md', 'docx', 'doc', 'pdf', 'txt', 'xlsx', 'pptx'] }]
+const TEMPLATE_FILTERS = [{ name: '方案模板', extensions: ['docx', 'pdf', 'md', 'txt'] }]
+
+const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium'] as const
+
+interface TranscribeState {
+  jobId: string
+  progress: string
+}
+
+function fmtSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+}
+
+function fmtDate(ms: number): string {
+  const d = new Date(ms)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function today(): string {
+  return fmtDate(Date.now())
+}
+
+/** 构造"生成解决方案"的提示词 */
+function buildSolutionPrompt(
+  projectName: string,
+  requirements: SolutionFile[],
+  libs: { productLib: number; solutionLib: number },
+  template: SolutionFile | null
+): string {
+  const project = projectName.trim() || '未命名项目'
+  const reqLines = requirements.map((f) => {
+    if (f.fileName.endsWith('_转写.md')) return `- ${f.relativePath}（会议录音 AI 转写，可能有错别字/专有名词错误，理解大意为主，关键数字如有疑义标「待核对」）`
+    if (f.companionRelativePath) return `- ${f.relativePath}（二进制格式，读提取文本 ${f.companionRelativePath}）`
+    return `- ${f.relativePath}`
+  })
+  const templatePart = template
+    ? `模板：${template.relativePath}${template.companionRelativePath ? `（二进制格式请读提取文本 ${template.companionRelativePath}）` : ''}——严格按模板的章节结构组织内容。`
+    : `没有指定模板，用标准方案结构：项目理解与需求分析 → 需求清单与逐项响应 → 总体架构（知枢OS + 天空地水装备组合，按本项目场景裁剪）→ 分项技术方案 → 实施与交付计划 → 培训与售后服务 → 配置与报价清单（价格留占位）。`
+  const dir = `outputs/02_解决方案_solution/${today()}_${project}`
+  return [
+    `生成一份解决方案（markdown）。`,
+    ``,
+    `项目名称：${project}`,
+    `需求文件（先完整阅读，客户需求以此为准）：`,
+    ...reqLines,
+    ``,
+    `资料库（按需检索取材，不要整篇照搬）：`,
+    `- 基础产品库：解决方案/基础产品库/（共 ${libs.productLib} 份，用 Glob 列出后按相关性选读）`,
+    `- 基础解决方案库：解决方案/基础解决方案库/（共 ${libs.solutionLib} 份，找同类场景方案参考结构与打法）`,
+    `- 产品统一口径：knowledge/products/（产品名称/参数以此为准，与上述资料冲突时以 knowledge 为准）`,
+    ``,
+    templatePart,
+    `红线：knowledge/internal/ 严禁引用；无来源的参数/性能数字一律写「待确认」，不臆造；产品名用「知」字体系；不承诺公司不具备的资质与业绩。`,
+    `产出路径：${dir}/${today()}_${project}_解决方案.md`,
+    `完成后一句话总结：方案主线 + 最主要的「待确认」项。`
+  ].join('\n')
+}
+
+export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
+  const [tab, setTab] = useState<SolutionTab>('需求文件')
+  const [files, setFiles] = useState<Record<SolutionFileKind, SolutionFile[]>>({
+    requirement: [],
+    productLib: [],
+    solutionLib: [],
+    template: []
+  })
+  const [whisper, setWhisper] = useState<WhisperStatus | null>(null)
+  const [whisperModel, setWhisperModel] = useState<string>('small')
+  const [transcribing, setTranscribing] = useState<Record<string, TranscribeState>>({})
+  const jobToFile = useRef<Record<string, string>>({})
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const [selectedReqs, setSelectedReqs] = useState<Set<string>>(new Set())
+  const [projectName, setProjectName] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState('')
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
+  const [showOutputs, setShowOutputs] = useState(false)
+  const [outputsRefresh, setOutputsRefresh] = useState(0)
+
+  function flash(text: string): void {
+    setNotice(text)
+    setTimeout(() => setNotice(null), 4500)
+  }
+
+  async function refresh(): Promise<void> {
+    setFiles(await window.api.solution.listFiles())
+  }
+
+  useEffect(() => {
+    refresh()
+    window.api.solution.whisperStatus().then(setWhisper)
+    const off = window.api.solution.onTranscribeEvent((event) => {
+      const fileRel = jobToFile.current[event.jobId]
+      if (!fileRel) return
+      if (event.type === 'progress') {
+        setTranscribing((prev) => ({ ...prev, [fileRel]: { jobId: event.jobId, progress: event.text } }))
+      } else if (event.type === 'done') {
+        delete jobToFile.current[event.jobId]
+        setTranscribing((prev) => {
+          const next = { ...prev }
+          delete next[fileRel]
+          return next
+        })
+        flash(`转写完成：${event.outputRelativePath.split('/').pop()}`)
+        refresh()
+      } else {
+        delete jobToFile.current[event.jobId]
+        setTranscribing((prev) => {
+          const next = { ...prev }
+          delete next[fileRel]
+          return next
+        })
+        flash(`转写失败：${event.message}`)
+      }
+    })
+    return off
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleUpload(kind: SolutionFileKind, filters: { name: string; extensions: string[] }[]): Promise<void> {
+    const paths = await window.api.dialog.pickFiles(filters)
+    for (const p of paths) {
+      await window.api.solution.upload(kind, p)
+    }
+    if (paths.length > 0) await refresh()
+  }
+
+  async function handleTranscribe(file: SolutionFile): Promise<void> {
+    const status = await window.api.solution.whisperStatus()
+    setWhisper(status)
+    if (!status.found || !status.ffmpegFound) return
+    const jobId = uuid()
+    jobToFile.current[jobId] = file.relativePath
+    setTranscribing((prev) => ({ ...prev, [file.relativePath]: { jobId, progress: '启动转写引擎…（首次使用会先下载模型，请耐心等待）' } }))
+    await window.api.solution.transcribeStart(jobId, file.relativePath, whisperModel)
+  }
+
+  const selectableReqs = useMemo(() => files.requirement.filter((f) => !f.isAudio), [files.requirement])
+  const selectedTemplateFile = files.template.find((t) => t.fileName === selectedTemplate) ?? null
+
+  function jumpToGenerate(file: SolutionFile): void {
+    setSelectedReqs(new Set([file.relativePath]))
+    setTab('生成方案')
+  }
+
+  function handleGenerate(): void {
+    const reqs = selectableReqs.filter((f) => selectedReqs.has(f.relativePath))
+    if (reqs.length === 0) return
+    setPendingPrompt(
+      buildSolutionPrompt(projectName, reqs, { productLib: files.productLib.length, solutionLib: files.solutionLib.length }, selectedTemplateFile)
+    )
+  }
+
+  const whisperReady = whisper?.found && whisper?.ffmpegFound
+
+  return (
+    <div className="flex h-full">
+      {/* 左：工作区 */}
+      <div className="flex min-w-0 flex-1 flex-col border-r border-slate-200">
+        <div className="app-drag flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5">
+          <div className="app-no-drag flex gap-1">
+            {(['需求文件', '资料库', '生成方案'] as SolutionTab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                  tab === t ? 'bg-jushi-accent text-white' : 'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {t}
+                {t === '生成方案' && selectedReqs.size > 0 && (
+                  <span className="ml-1 rounded-full bg-white/25 px-1.5 text-xs">{selectedReqs.size}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="app-no-drag">
+            <HelpButton content={HELP_CONTENT.solution} />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* ============ 需求文件 ============ */}
+          {tab === '需求文件' && (
+            <>
+              {whisper && !whisperReady && (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-slate-600">
+                  <p className="font-medium text-amber-700">⚠️ 本地转写引擎未就绪（mp3 自动转写需要）</p>
+                  <p className="mt-1">
+                    转写在本机离线完成，不消耗 AI 额度。打开「终端」执行以下命令安装（一次即可）：
+                  </p>
+                  <pre className="mt-1.5 rounded bg-slate-800 px-2.5 py-1.5 text-emerald-300">brew install ffmpeg openai-whisper</pre>
+                  <p className="mt-1.5 text-slate-400">
+                    {whisper.found ? '✓ whisper 已装' : '✗ whisper 未装'} ·{' '}
+                    {whisper.ffmpegFound ? '✓ ffmpeg 已装' : '✗ ffmpeg 未装'}
+                    ；装好后点
+                    <button
+                      onClick={() => window.api.solution.whisperStatus().then(setWhisper)}
+                      className="mx-1 text-jushi-accent underline"
+                    >
+                      重新检测
+                    </button>
+                    。首次转写会自动下载模型（small 约 460MB）。
+                  </p>
+                </div>
+              )}
+
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleUpload('requirement', REQUIREMENT_FILTERS)}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  📎 上传需求文件（钉钉录音 mp3 / 纪要 md 等）
+                </button>
+                {whisperReady && (
+                  <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                    转写模型：
+                    <select
+                      value={whisperModel}
+                      onChange={(e) => setWhisperModel(e.target.value)}
+                      className="rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs outline-none"
+                    >
+                      {WHISPER_MODELS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                          {m === 'small' ? '（推荐）' : m === 'medium' ? '（更准更慢）' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                {files.requirement.map((f) => {
+                  const job = transcribing[f.relativePath]
+                  return (
+                    <div key={f.relativePath} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400">{f.isAudio ? '🎙️' : '📄'}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{f.fileName}</span>
+                        {f.isAudio && f.hasTranscript && (
+                          <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-600">已转写</span>
+                        )}
+                        <span className="shrink-0 text-xs text-slate-300">
+                          {fmtSize(f.size)} · {fmtDate(f.mtimeMs)}
+                        </span>
+                        {f.isAudio && !job && (
+                          <button
+                            onClick={() => handleTranscribe(f)}
+                            className="shrink-0 rounded-md bg-jushi-accent px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
+                            disabled={!whisperReady}
+                            title={whisperReady ? '本地 whisper 转写为文字（离线，不消耗 AI 额度）' : '先安装转写引擎（见上方提示）'}
+                          >
+                            {f.hasTranscript ? '重新转写' : '自动转写'}
+                          </button>
+                        )}
+                        {!f.isAudio && (
+                          <button
+                            onClick={() => jumpToGenerate(f)}
+                            className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
+                          >
+                            用它生成方案 →
+                          </button>
+                        )}
+                        <button
+                          onClick={() => window.api.shell.showItemInFolder(f.path)}
+                          className="shrink-0 text-xs text-slate-400 hover:text-jushi-accent"
+                        >
+                          定位
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await window.api.solution.removeFile(f.relativePath)
+                            await refresh()
+                          }}
+                          className="shrink-0 text-xs text-slate-300 hover:text-red-500"
+                        >
+                          删除
+                        </button>
+                      </div>
+                      {job && (
+                        <div className="mt-1.5 flex items-center gap-2 rounded bg-slate-50 px-2 py-1.5">
+                          <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400" />
+                          <span className="min-w-0 flex-1 truncate text-xs text-slate-500">{job.progress}</span>
+                          <button
+                            onClick={() => window.api.solution.transcribeCancel(job.jobId)}
+                            className="shrink-0 text-xs text-red-400 hover:text-red-600"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {files.requirement.length === 0 && (
+                  <p className="py-8 text-center text-xs text-slate-400">
+                    还没有需求文件——把钉钉会议导出的录音（mp3）或需求纪要（md/docx）传上来
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ============ 资料库 ============ */}
+          {tab === '资料库' && (
+            <div className="space-y-5">
+              {(
+                [
+                  {
+                    kind: 'productLib' as SolutionFileKind,
+                    title: '基础产品库',
+                    hint: '基础产品资料（手册/彩页/参数表）。注意：产品名称与参数的统一口径以 knowledge/products/ 为准，这里是补充材料。'
+                  },
+                  {
+                    kind: 'solutionLib' as SolutionFileKind,
+                    title: '基础解决方案库',
+                    hint: '历史方案 / 行业通用方案，生成新方案时供分身参考结构与打法。'
+                  }
+                ] as const
+              ).map(({ kind, title, hint }) => (
+                <section key={kind}>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-700">
+                      {title}（{files[kind].length}）
+                    </h3>
+                    <button
+                      onClick={() => handleUpload(kind, LIB_FILTERS)}
+                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                    >
+                      📎 上传
+                    </button>
+                  </div>
+                  <p className="mb-2 text-xs text-slate-400">{hint}</p>
+                  <div className="space-y-1">
+                    {files[kind].map((f) => (
+                      <div key={f.relativePath} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+                        <span className="min-w-0 flex-1 truncate text-xs text-slate-600">{f.fileName}</span>
+                        <span className="shrink-0 text-xs text-slate-300">
+                          {fmtSize(f.size)} · {fmtDate(f.mtimeMs)}
+                        </span>
+                        <button onClick={() => window.api.shell.showItemInFolder(f.path)} className="shrink-0 text-xs text-slate-400 hover:text-jushi-accent">
+                          定位
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await window.api.solution.removeFile(f.relativePath)
+                            await refresh()
+                          }}
+                          className="shrink-0 text-xs text-slate-300 hover:text-red-500"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    ))}
+                    {files[kind].length === 0 && <p className="py-3 text-center text-xs text-slate-300">暂无资料</p>}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+
+          {/* ============ 生成方案 ============ */}
+          {tab === '生成方案' && (
+            <>
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-0.5 block text-xs text-slate-400">项目名称</label>
+                  <input
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="如：XX市局智慧巡检项目"
+                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
+                  />
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-xs text-slate-400">方案模板（可选）</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedTemplate}
+                      onChange={(e) => setSelectedTemplate(e.target.value)}
+                      className="flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none"
+                    >
+                      <option value="">不用模板（标准方案结构）</option>
+                      {files.template.map((t) => (
+                        <option key={t.fileName} value={t.fileName}>
+                          {t.fileName}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => handleUpload('template', TEMPLATE_FILTERS)}
+                      className="shrink-0 rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                    >
+                      📎 上传模板
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <h3 className="mb-1.5 text-sm font-semibold text-slate-700">选择需求文件（可多选）</h3>
+              <div className="space-y-1">
+                {selectableReqs.map((f) => (
+                  <label key={f.relativePath} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedReqs.has(f.relativePath)}
+                      onChange={(e) => {
+                        setSelectedReqs((prev) => {
+                          const next = new Set(prev)
+                          if (e.target.checked) next.add(f.relativePath)
+                          else next.delete(f.relativePath)
+                          return next
+                        })
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-xs text-slate-600">{f.fileName}</span>
+                    {f.fileName.endsWith('_转写.md') && (
+                      <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">会议转写</span>
+                    )}
+                  </label>
+                ))}
+                {selectableReqs.length === 0 && (
+                  <p className="py-4 text-center text-xs text-slate-400">
+                    没有可选的需求文件——去「需求文件」页签上传 md/docx，或先把录音转写成文字
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-xs text-slate-400">
+                  取材范围：基础产品库 {files.productLib.length} 份 · 基础解决方案库 {files.solutionLib.length} 份 · knowledge/products/（口径基准）
+                </span>
+                <button
+                  disabled={selectedReqs.size === 0}
+                  onClick={handleGenerate}
+                  className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+                >
+                  ✍️ 生成解决方案
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-slate-400">
+                方案落在 outputs/02_解决方案_solution/，右侧产出面板点「转Word」得正式文件。
+              </p>
+            </>
+          )}
+        </div>
+
+        {notice && <div className="border-t border-slate-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</div>}
+      </div>
+
+      {/* 中：分身对话 */}
+      <div className="w-[400px] shrink-0">
+        <AgentChat agent={agent} pendingPrompt={pendingPrompt} onPendingPromptConsumed={() => setPendingPrompt(null)} />
+      </div>
+
+      {/* 右：产出面板 */}
+      <div className={`shrink-0 overflow-hidden border-l border-slate-200 bg-slate-50 transition-all ${showOutputs ? 'w-72' : 'w-10'}`}>
+        <button
+          onClick={() => setShowOutputs((v) => !v)}
+          className="flex w-full items-center justify-center py-3 text-slate-400 hover:text-jushi-accent"
+          title="产出文件"
+        >
+          {showOutputs ? '›' : '‹'}
+        </button>
+        {showOutputs && (
+          <>
+            <h3 className="px-3 pb-1 text-xs font-semibold text-slate-500">产出：outputs/solution</h3>
+            <div className="overflow-y-auto" style={{ maxHeight: 'calc(100% - 60px)' }}>
+              <OutputsPanel
+                agentName="solution"
+                refreshKey={outputsRefresh}
+                extraFileAction={(entry: OutputEntry) =>
+                  entry.name.endsWith('.md') ? (
+                    <button
+                      onClick={async () => {
+                        const docxPath = await window.api.docgen.exportMarkdownFile(entry.path)
+                        await window.api.shell.showItemInFolder(docxPath)
+                        setOutputsRefresh((k) => k + 1)
+                      }}
+                      className="shrink-0 rounded px-1.5 py-0.5 text-xs text-slate-400 opacity-0 hover:bg-slate-100 hover:text-jushi-accent group-hover:opacity-100"
+                      title="把这份 markdown 转成 Word 并在 Finder 里定位"
+                    >
+                      转Word
+                    </button>
+                  ) : null
+                }
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
