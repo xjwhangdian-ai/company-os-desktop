@@ -155,13 +155,22 @@ function writeProductDb(dataDir: string, db: ProductDb): void {
   writeJsonAtomic(join(dataDir, PRODUCT_DB_REL), db)
 }
 
+// 报价模板里的“说明/落款/示例行”常被误当产品导入（尤其走 AI 解析时）。
+// 这些行的“产品名称”有明显特征——在唯一入库口 sanitizeFields 一并挡掉，机械/AI 两条路都生效。
+const NON_PRODUCT_NAME =
+  /^\d+\s*[、.]|填写说明|价格口径|加盖公章|采购单位|采购对接人|采购部|致各位供应商|供应商报价清单|报价说明|^日期\s*[:：]|^序号$|^合\s*计|^【?示例/
+/** 示例行的备注通常写“示例行，正式填写时删除”；据此额外拦一道 */
+const isExampleRow = (备注: string): boolean => /示例行|正式(填写|报价)时删除/.test(备注)
+
 function sanitizeFields(raw: Record<string, unknown>): ProductFields | null {
   const fields = {} as Record<string, string>
   for (const key of PRODUCT_FIELD_KEYS) {
     const v = raw[key]
     fields[key] = typeof v === 'string' ? v.trim() : v === null || v === undefined ? '' : String(v).trim()
   }
-  if (!fields['产品名称']) return null
+  const name = fields['产品名称']
+  if (!name) return null
+  if (NON_PRODUCT_NAME.test(name) || isExampleRow(fields['备注'] ?? '')) return null
   return fields as unknown as ProductFields
 }
 

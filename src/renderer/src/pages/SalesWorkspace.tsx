@@ -22,13 +22,9 @@ import { useConfigStore } from '../stores/useConfigStore'
 
 type SalesTab = '产品库' | '选型' | '报价单' | '客户'
 type UploadMode = 'supplier' | 'bid'
-/** 产品库视图：卡片（SPS 选型式，默认）/ 列表（全字段表格）/ 比价（同款多供应商） */
-type ProductView = '卡片' | '列表' | '比价'
-/** 排序（对齐 SPS 的排序下拉）；毛利率按 (售-成本)/售 计算，仅内部参考 */
+/** 排序下拉；毛利率按 (售-成本)/售 计算，仅内部参考 */
 type SortMode = '默认排序' | '价格从低到高' | '价格从高到低' | '毛利率排序(内部)'
 const SORT_MODES: SortMode[] = ['默认排序', '价格从低到高', '价格从高到低', '毛利率排序(内部)']
-/** 参数对比上限（SPS 同款交互，超过并排看不过来） */
-const COMPARE_MAX = 4
 
 interface PreviewCard extends SupplierDocPreview {
   mode: UploadMode
@@ -99,11 +95,6 @@ function priceNum(s: string): number | null {
   return isFinite(n) && /\d/.test(s ?? '') ? n : null
 }
 
-/** 比价分组键：优先 品牌+型号（同一型号多家供货），否则按产品名称归并 */
-function compareKey(p: ProductEntry): string {
-  const bm = `${p.品牌}${p.型号}`.replace(/\s/g, '')
-  return bm || p.产品名称.replace(/\s/g, '')
-}
 
 /**
  * 选型匹配打分（纯前端，不消耗 AI 额度）：把需求拆成词元，
@@ -207,6 +198,7 @@ function buildParsePrompt(preview: PreviewCard): string {
     `解析这份供应商产品资料，提取产品条目写入暂存区。`,
     `资料文件：${readTarget}`,
     `要求：`,
+    `0. 只提取"产品明细表格里的真实产品行"（每行有型号/规格和价格）；表头行、标题、致供应商说明、填写说明/须知、示例行（备注写着"示例"）、公司落款、日期/联系人等一律不是产品，绝对不要提取。`,
     `1. 每个产品提取为一个 JSON 对象，字段名严格使用：产品名称、产品分类、品牌、型号、生产制造商、产地、技术参数、单位、税率、质保期、物料代码、成本价、建议销售价、投标报价、供应商名称、供应商联系人、供应商联系方式、备注、来源文件（来源文件统一填"${preview.fileName}"）。`,
     `2. 供应商报价表里的价格是给我们的进货价，填进"成本价"；资料里明确写了建议零售价/指导价才填"建议销售价"，没有就留空。品牌/型号/生产制造商/产地/单位/税率照资料原文填（质保期折算成月数，如"三年"填"36"）；注意区分：品牌是产品品牌（如海康威视），供应商名称是把货卖给我们的渠道公司，两者可能不同。技术参数把规格/关键参数拼成一段完整文字；所有价格保留资料原文写法（含单位、含税说明）；资料里没有的字段填空字符串""，禁止编造。`,
     `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身，不要包裹代码块或其它文字。`,
@@ -330,14 +322,9 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [products, setProducts] = useState<ProductEntry[]>([])
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('全部')
-  const [productView, setProductView] = useState<ProductView>('卡片')
   const [sortMode, setSortMode] = useState<SortMode>('默认排序')
   const [priceMin, setPriceMin] = useState('')
   const [priceMax, setPriceMax] = useState('')
-  const [detailId, setDetailId] = useState<string | null>(null)
-  const [detailQty, setDetailQty] = useState('1')
-  const [compareIds, setCompareIds] = useState<string[]>([])
-  const [showCompare, setShowCompare] = useState(false)
   const [bulkRate, setBulkRate] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -449,42 +436,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     else list.sort((a, b) => (marginRate(b) ?? -Infinity) - (marginRate(a) ?? -Infinity))
     return list
   }, [filteredProducts, sortMode])
-
-  function toggleCompare(id: string): void {
-    setCompareIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id)
-      if (prev.length >= COMPARE_MAX) {
-        flash(`最多同时对比 ${COMPARE_MAX} 个产品，先移掉一个`)
-        return prev
-      }
-      return [...prev, id]
-    })
-  }
-
-  const compareProducts = compareIds.map((id) => products.find((p) => p.id === id)).filter((p): p is ProductEntry => Boolean(p))
-
-  const detailProduct = detailId ? (products.find((p) => p.id === detailId) ?? null) : null
-  /** 详情弹层里的"同款其他供应商"（品牌+型号相同的其它记录），按进价升序 */
-  const detailSiblings = useMemo(() => {
-    if (!detailProduct) return []
-    return products
-      .filter((p) => p.id !== detailProduct.id && compareKey(p) === compareKey(detailProduct))
-      .sort((a, b) => (priceNum(a.成本价) ?? Infinity) - (priceNum(b.成本价) ?? Infinity))
-  }, [detailProduct, products])
-
-  /** 比价视图：同品牌+型号（或同名）的多供应商条目归组，最低进价供应商排前 */
-  const compareGroups = useMemo(() => {
-    const groups = new Map<string, ProductEntry[]>()
-    for (const p of filteredProducts) {
-      const k = compareKey(p)
-      groups.set(k, [...(groups.get(k) ?? []), p])
-    }
-    return Array.from(groups.values())
-      .map((items) =>
-        [...items].sort((a, b) => (priceNum(a.成本价) ?? Infinity) - (priceNum(b.成本价) ?? Infinity))
-      )
-      .sort((a, b) => b.length - a.length)
-  }, [filteredProducts])
 
   async function handleUploadDocs(mode: UploadMode): Promise<void> {
     const paths = await window.api.dialog.pickFiles(SUPPLIER_DOC_FILTERS)
@@ -769,34 +720,12 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     </option>
                   ))}
                 </select>
-                <div className="flex overflow-hidden rounded-lg border border-slate-300">
-                  {(['卡片', '列表', '比价'] as ProductView[]).map((v) => (
-                    <button
-                      key={v}
-                      onClick={() => setProductView(v)}
-                      title={v === '比价' ? '同一产品（品牌+型号相同）多家供应商归组对比进价' : v === '卡片' ? 'SPS 式选型卡片（图+价）' : '全字段表格'}
-                      className={`px-3 py-1.5 text-sm ${
-                        productView === v ? 'bg-jushi-accent text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {v === '卡片' ? '🗂️' : v === '列表' ? '☰' : '⚖️'} {v}
-                    </button>
-                  ))}
-                </div>
                 <button
                   onClick={() => handleUploadDocs('supplier')}
                   disabled={busy}
                   className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   📎 供应商资料
-                </button>
-                <button
-                  onClick={() => handleUploadDocs('bid')}
-                  disabled={busy}
-                  title="上传投标报价文件，识别各产品的投标报价并回填产品库"
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  🏷️ 投标报价文件
                 </button>
                 <button
                   onClick={() => {
@@ -907,147 +836,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 </div>
 
                 <div className="min-w-0 flex-1">
-              {productView === '卡片' && (
-                <>
-                  <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-3">
-                    {sortedProducts.map((p) => {
-                      const price = displayPrice(p)
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => {
-                            setDetailId(p.id)
-                            setDetailQty('1')
-                          }}
-                          className="cursor-pointer rounded-lg border border-slate-200 bg-white p-2.5 transition-shadow hover:border-jushi-accent/50 hover:shadow-sm"
-                        >
-                          <div className="flex gap-2.5">
-                            {p.图片 && dataDir ? (
-                              <img src={appfileUrl(`${dataDir}/${p.图片}`)} className="h-16 w-16 shrink-0 rounded object-cover" />
-                            ) : (
-                              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-slate-50 text-lg text-slate-300">
-                                📦
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-slate-700" title={p.产品名称}>
-                                {p.产品名称}
-                              </p>
-                              <p className="truncate text-xs text-slate-400" title={[p.品牌, p.型号].filter(Boolean).join(' ')}>
-                                {[p.品牌, p.型号].filter(Boolean).join(' · ') || '—'}
-                              </p>
-                              <p className="mt-0.5 truncate text-xs text-slate-400" title={p.技术参数}>
-                                {p.技术参数 || ''}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-1.5 flex items-center justify-between">
-                            <span className="text-sm font-semibold text-jushi-accent">
-                              {price ? `¥ ${price}` : '价格待定'}
-                            </span>
-                            <span className="max-w-24 truncate text-xs text-slate-300" title="供应商（采购侧）">
-                              {p.供应商名称 || ''}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleCompare(p.id)
-                                }}
-                                title="加入参数对比（最多 4 个）"
-                                className={`rounded-md border px-1.5 py-1 text-xs ${
-                                  compareIds.includes(p.id)
-                                    ? 'border-jushi-accent bg-jushi-accent/10 text-jushi-accent'
-                                    : 'border-slate-200 text-slate-400 hover:border-slate-300'
-                                }`}
-                              >
-                                对比
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  addToCart(p)
-                                }}
-                                className="rounded-md bg-jushi-accent px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
-                              >
-                                🛒 加入
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {filteredProducts.length === 0 && (
-                    <p className="py-8 text-center text-xs text-slate-400">
-                      {products.length === 0 ? '产品库为空——上传供应商资料或手动添加' : '没有匹配的产品，试试减少关键词或放宽价格区间'}
-                    </p>
-                  )}
-                  {filteredProducts.length > 0 && (
-                    <p className="mt-2 text-xs text-slate-400">
-                      共 {filteredProducts.length} 条{query.trim() ? '（按相关度排序，型号精确命中排最前）' : ''}；点卡片看详情与同款比价，🛒 直接加入报价单
-                    </p>
-                  )}
-                </>
-              )}
-
-              {productView === '比价' && (
-                <div className="space-y-2">
-                  {compareGroups.map((group) => {
-                    const first = group[0]
-                    const multi = group.length > 1
-                    const minCost = priceNum(first.成本价)
-                    return (
-                      <div key={first.id} className={`rounded-lg border bg-white ${multi ? 'border-jushi-accent/40' : 'border-slate-200'}`}>
-                        <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
-                          <span className="text-sm font-medium text-slate-700">{first.产品名称}</span>
-                          {(first.品牌 || first.型号) && (
-                            <span className="text-xs text-slate-400">{[first.品牌, first.型号].filter(Boolean).join(' · ')}</span>
-                          )}
-                          <span
-                            className={`ml-auto rounded-full px-2 py-0.5 text-xs ${
-                              multi ? 'bg-jushi-accent/10 text-jushi-accent' : 'bg-slate-100 text-slate-400'
-                            }`}
-                          >
-                            {group.length} 家供应商
-                          </span>
-                        </div>
-                        <table className="w-full text-xs">
-                          <tbody>
-                            {group.map((p, i) => (
-                              <tr key={p.id} className={i > 0 ? 'border-t border-slate-50' : ''}>
-                                <td className="w-40 px-3 py-1.5 text-slate-600">{p.供应商名称 || '（未填供应商）'}</td>
-                                <td className="w-32 whitespace-nowrap px-2 py-1.5">
-                                  <span className={i === 0 && multi && minCost !== null ? 'font-semibold text-emerald-600' : 'text-slate-500'}>
-                                    进价 {p.成本价 || '—'}
-                                  </span>
-                                  {i === 0 && multi && minCost !== null && <span className="ml-1 text-emerald-600">↓最低</span>}
-                                </td>
-                                <td className="w-28 whitespace-nowrap px-2 py-1.5 text-slate-600">售价 {p.建议销售价 || '—'}</td>
-                                <td className="w-28 whitespace-nowrap px-2 py-1.5 text-slate-500">投标 {p.投标报价 || '—'}</td>
-                                <td className="px-2 py-1.5 text-slate-400" title={p.技术参数}>
-                                  <span className="line-clamp-1">{p.技术参数 || ''}</span>
-                                </td>
-                                <td className="w-24 whitespace-nowrap px-2 py-1.5 text-right">
-                                  <button onClick={() => addToCart(p)} className="text-jushi-accent hover:underline">
-                                    加入报价单
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )
-                  })}
-                  {compareGroups.length === 0 && <p className="py-6 text-center text-xs text-slate-400">没有匹配的产品</p>}
-                  <p className="text-xs text-slate-400">
-                    进价为采购侧信息（仅内部可见）；同组内按进价从低到高排列。品牌+型号相同才会归为一组，老数据没填品牌/型号的按产品名称归组。
-                  </p>
-                </div>
-              )}
-
-              {productView === '列表' && (
               <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <table className="w-full text-xs">
                   <thead>
@@ -1108,12 +896,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                             加入报价单
                           </button>
                           <button
-                            onClick={() => toggleCompare(p.id)}
-                            className={`mr-1.5 ${compareIds.includes(p.id) ? 'text-jushi-accent' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            对比{compareIds.includes(p.id) ? '✓' : ''}
-                          </button>
-                          <button
                             onClick={() => {
                               setEditingId(p.id)
                               setShowAddForm(false)
@@ -1144,244 +926,9 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   </tbody>
                 </table>
               </div>
-              )}
                 </div>
               </div>
 
-              {/* 产品详情弹层（SPS 式）：全字段 + 大图 + 同款其他供应商比价 + 数量加购 */}
-              {detailProduct && (
-                <div
-                  className="fixed inset-0 z-40 flex items-center justify-center bg-black/30"
-                  onClick={() => setDetailId(null)}
-                >
-                  <div
-                    className="max-h-[85vh] w-[640px] overflow-y-auto rounded-xl bg-white p-4 shadow-xl"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-base font-semibold text-slate-800">{detailProduct.产品名称}</h3>
-                        <p className="mt-0.5 text-xs text-slate-400">
-                          {[detailProduct.品牌, detailProduct.型号].filter(Boolean).join(' · ') || '品牌/型号未填'}
-                        </p>
-                      </div>
-                      <button onClick={() => setDetailId(null)} className="text-slate-400 hover:text-slate-600">
-                        ✕
-                      </button>
-                    </div>
-
-                    <div className="mt-3 flex gap-3">
-                      {detailProduct.图片 && dataDir ? (
-                        <img
-                          src={appfileUrl(`${dataDir}/${detailProduct.图片}`)}
-                          className="h-40 w-40 shrink-0 cursor-pointer rounded-lg object-cover"
-                          title="点击更换图片"
-                          onClick={() => handleSetImage(detailProduct.id)}
-                        />
-                      ) : (
-                        <button
-                          onClick={() => handleSetImage(detailProduct.id)}
-                          className="flex h-40 w-40 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-300 hover:border-jushi-accent hover:text-jushi-accent"
-                        >
-                          + 上传产品图
-                        </button>
-                      )}
-                      <div className="min-w-0 flex-1 space-y-1 text-xs">
-                        {(
-                          [
-                            ['分类', detailProduct.产品分类],
-                            ['生产制造商', detailProduct.生产制造商],
-                            ['产地', detailProduct.产地],
-                            ['单位', detailProduct.单位],
-                            ['税率', detailProduct.税率],
-                            ['质保期', detailProduct.质保期 ? `${detailProduct.质保期} 个月` : ''],
-                            ['备注', detailProduct.备注 ?? '']
-                          ] as [string, string][]
-                        )
-                          .filter(([, v]) => v)
-                          .map(([k, v]) => (
-                            <p key={k} className="text-slate-600">
-                              <span className="mr-1 text-slate-400">{k}：</span>
-                              {v}
-                            </p>
-                          ))}
-                        <div className="mt-1.5 rounded-md bg-slate-50 p-2">
-                          <p className="text-sm font-semibold text-jushi-accent">
-                            {displayPrice(detailProduct) ? `对外报价参考 ¥ ${displayPrice(detailProduct)}` : '对外价格待定'}
-                          </p>
-                          <p className="mt-0.5 text-slate-400" title="采购侧信息，不会出现在对外报价里">
-                            进价 {detailProduct.成本价 || '—'} · 投标价 {detailProduct.投标报价 || '—'} · 供应商{' '}
-                            {detailProduct.供应商名称 || '—'}（内部）
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {detailProduct.技术参数 && (
-                      <div className="mt-3">
-                        <h4 className="mb-1 text-xs font-semibold text-slate-500">技术规格</h4>
-                        <p className="whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs leading-relaxed text-slate-600">
-                          {detailProduct.技术参数}
-                        </p>
-                      </div>
-                    )}
-
-                    {detailSiblings.length > 0 && (
-                      <div className="mt-3">
-                        <h4 className="mb-1 text-xs font-semibold text-slate-500">同款其他供应商（按进价升序，内部比价）</h4>
-                        <div className="space-y-1">
-                          {detailSiblings.map((s) => (
-                            <div key={s.id} className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-xs">
-                              <span className="text-slate-600">{s.供应商名称 || '（未填供应商）'}</span>
-                              <span className="text-slate-400">进价 {s.成本价 || '—'}</span>
-                              <span className="text-slate-400">售价 {s.建议销售价 || '—'}</span>
-                              <button
-                                onClick={() => {
-                                  setDetailId(s.id)
-                                  setDetailQty('1')
-                                }}
-                                className="ml-auto text-jushi-accent hover:underline"
-                              >
-                                看这家
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                      <div className="flex gap-2 text-xs">
-                        <button
-                          onClick={() => {
-                            setEditingId(detailProduct.id)
-                            setShowAddForm(false)
-                            setDetailId(null)
-                          }}
-                          className="text-slate-400 hover:text-slate-600"
-                        >
-                          编辑资料
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400">数量</span>
-                        <input
-                          value={detailQty}
-                          onChange={(e) => setDetailQty(e.target.value)}
-                          className="w-16 rounded-md border border-slate-300 px-2 py-1.5 text-center text-sm outline-none focus:border-jushi-accent"
-                        />
-                        <button
-                          onClick={() => {
-                            addToCart(detailProduct, detailQty || '1')
-                            setDetailId(null)
-                          }}
-                          className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-                        >
-                          🛒 加入报价单
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 对比浮条（SPS 式）：勾了产品就浮出来 */}
-              {compareIds.length > 0 && !showCompare && (
-                <div className="fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-lg">
-                  <span className="text-sm text-slate-600">已选 {compareIds.length} 个产品</span>
-                  <button
-                    onClick={() => setShowCompare(true)}
-                    disabled={compareIds.length < 2}
-                    className="rounded-full bg-jushi-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-                  >
-                    ⚖ 参数对比
-                  </button>
-                  <button onClick={() => setCompareIds([])} className="text-xs text-slate-400 hover:text-slate-600">
-                    清空
-                  </button>
-                </div>
-              )}
-
-              {/* 参数并排对比弹层 */}
-              {showCompare && compareProducts.length >= 2 && (
-                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30" onClick={() => setShowCompare(false)}>
-                  <div
-                    className="max-h-[85vh] w-[860px] overflow-y-auto rounded-xl bg-white p-4 shadow-xl"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="mb-3 flex items-center justify-between">
-                      <h3 className="text-base font-semibold text-slate-800">产品参数对比（{compareProducts.length}）</h3>
-                      <button onClick={() => setShowCompare(false)} className="text-slate-400 hover:text-slate-600">
-                        ✕
-                      </button>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <tbody>
-                          <tr>
-                            <td className="w-24 px-2 py-2 align-top text-slate-400"></td>
-                            {compareProducts.map((p) => (
-                              <td key={p.id} className="px-2 py-2 align-top">
-                                {p.图片 && dataDir ? (
-                                  <img src={appfileUrl(`${dataDir}/${p.图片}`)} className="h-20 w-20 rounded object-cover" />
-                                ) : (
-                                  <div className="flex h-20 w-20 items-center justify-center rounded bg-slate-50 text-lg text-slate-300">📦</div>
-                                )}
-                                <p className="mt-1 font-medium text-slate-700">{p.产品名称}</p>
-                                <button onClick={() => toggleCompare(p.id)} className="mt-0.5 text-slate-300 hover:text-red-500">
-                                  移出对比
-                                </button>
-                              </td>
-                            ))}
-                          </tr>
-                          {(
-                            [
-                              ['品牌', (p: ProductEntry) => p.品牌],
-                              ['型号', (p: ProductEntry) => p.型号],
-                              ['生产制造商', (p: ProductEntry) => p.生产制造商],
-                              ['产地', (p: ProductEntry) => p.产地],
-                              ['技术规格', (p: ProductEntry) => p.技术参数],
-                              ['单位', (p: ProductEntry) => p.单位],
-                              ['税率', (p: ProductEntry) => p.税率],
-                              ['质保期', (p: ProductEntry) => (p.质保期 ? `${p.质保期} 个月` : '')],
-                              ['对外报价参考', (p: ProductEntry) => (displayPrice(p) ? `¥ ${displayPrice(p)}` : '')],
-                              ['进价(内部)', (p: ProductEntry) => p.成本价],
-                              ['毛利率(内部)', (p: ProductEntry) => (marginRate(p) !== null ? `${marginRate(p)!.toFixed(1)}%` : '')],
-                              ['供应商(内部)', (p: ProductEntry) => p.供应商名称]
-                            ] as [string, (p: ProductEntry) => string][]
-                          ).map(([label, get]) => (
-                            <tr key={label} className="border-t border-slate-100">
-                              <td className="px-2 py-2 align-top font-medium text-slate-400">{label}</td>
-                              {compareProducts.map((p) => (
-                                <td
-                                  key={p.id}
-                                  className={`px-2 py-2 align-top ${label.includes('内部') ? 'text-slate-400' : 'text-slate-600'} ${label === '对外报价参考' ? 'font-semibold text-jushi-accent' : ''}`}
-                                >
-                                  <span className="whitespace-pre-wrap">{get(p) || '—'}</span>
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                          <tr className="border-t border-slate-100">
-                            <td className="px-2 py-2"></td>
-                            {compareProducts.map((p) => (
-                              <td key={p.id} className="px-2 py-2">
-                                <button
-                                  onClick={() => addToCart(p)}
-                                  className="rounded-md bg-jushi-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-                                >
-                                  🛒 加入报价单
-                                </button>
-                              </td>
-                            ))}
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                    <p className="mt-2 text-xs text-slate-400">标注（内部）的行是采购侧信息，不会出现在任何对外文件里。</p>
-                  </div>
-                </div>
-              )}
             </>
           )}
 
