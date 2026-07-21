@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type {
   AgentDisplayMeta,
   ContactRole,
@@ -36,12 +36,12 @@ interface CartLine {
   报价单价: string
 }
 
-/** 选型页：一条客户需求 + 匹配到的候选产品 */
+/** 选型页：一条客户需求 + 匹配到的候选产品（候选可单选/多选） */
 interface NeedMatch {
   need: string
   qty: string
   candidates: { product: ProductEntry; score: number }[]
-  chosenId: string | null
+  chosenIds: string[]
 }
 
 const EMPTY_PRODUCT_FORM: ProductFields = {
@@ -136,7 +136,7 @@ function searchScore(p: ProductEntry, tokens: string[]): number {
   return total
 }
 
-/** 卡片/详情展示价：建议售价优先（对外口径），无价则空 */
+/** 展示价：建议售价优先（对外口径），无价则空 */
 function displayPrice(p: ProductEntry): string {
   return p.建议销售价 || p.投标报价 || ''
 }
@@ -322,6 +322,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [products, setProducts] = useState<ProductEntry[]>([])
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('全部')
+  const [showCatNav, setShowCatNav] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [sortMode, setSortMode] = useState<SortMode>('默认排序')
   const [priceMin, setPriceMin] = useState('')
   const [priceMax, setPriceMax] = useState('')
@@ -530,21 +532,34 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       lines.map((line) => {
         const { need, qty } = parseNeedLine(line)
         const candidates = matchNeed(need, products)
-        return { need, qty, candidates, chosenId: candidates[0]?.product.id ?? null }
+        // 默认勾选相关度最高的一条；用户可再单选/多选
+        return { need, qty, candidates, chosenIds: candidates[0] ? [candidates[0].product.id] : [] }
       })
+    )
+  }
+
+  /** 切换某条需求下某个候选产品的勾选（多选） */
+  function toggleChosen(mi: number, id: string): void {
+    setNeedMatches((prev) =>
+      prev.map((x, xi) =>
+        xi === mi
+          ? { ...x, chosenIds: x.chosenIds.includes(id) ? x.chosenIds.filter((c) => c !== id) : [...x.chosenIds, id] }
+          : x
+      )
     )
   }
 
   const chosenTotal = useMemo(() => {
     let total = 0
     for (const m of needMatches) {
-      if (!m.chosenId) continue
-      const p = products.find((x) => x.id === m.chosenId)
-      if (!p) continue
-      const price = priceNum(defaultQuotePrice(p))
       const qty = parseFloat(m.qty)
-      if (price === null || !isFinite(qty)) return null
-      total += price * qty
+      for (const id of m.chosenIds) {
+        const p = products.find((x) => x.id === id)
+        if (!p) continue
+        const price = priceNum(defaultQuotePrice(p))
+        if (price === null || !isFinite(qty)) return null
+        total += price * qty
+      }
     }
     return total
   }, [needMatches, products])
@@ -556,11 +571,12 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     setCart((prev) => {
       let next = [...prev]
       for (const m of needMatches) {
-        if (!m.chosenId) continue
-        const p = products.find((x) => x.id === m.chosenId)
-        if (!p || next.some((l) => l.product.id === p.id)) continue
-        next = [...next, { product: p, 数量: m.qty, 报价单价: defaultQuotePrice(p) }]
-        added++
+        for (const id of m.chosenIds) {
+          const p = products.find((x) => x.id === id)
+          if (!p || next.some((l) => l.product.id === p.id)) continue
+          next = [...next, { product: p, 数量: m.qty, 报价单价: defaultQuotePrice(p) }]
+          added++
+        }
       }
       return next
     })
@@ -810,115 +826,175 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               )}
 
               <div className="flex items-start gap-3">
-                {/* SPS 式左侧分类导航 */}
-                <div className="w-44 shrink-0 rounded-lg border border-slate-200 bg-white p-1.5">
-                  <button
-                    onClick={() => setCategoryFilter('全部')}
-                    className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs ${
-                      categoryFilter === '全部' ? 'bg-jushi-accent/10 font-medium text-jushi-accent' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>全部产品</span>
-                    <span className="text-slate-400">{products.length}</span>
-                  </button>
-                  {categoryNav.map(([cat, count]) => (
+                {/* 左侧分类导航（可隐藏） */}
+                {showCatNav ? (
+                  <div className="w-44 shrink-0 rounded-lg border border-slate-200 bg-white p-1.5">
+                    <div className="mb-1 flex items-center justify-between px-1.5">
+                      <span className="text-[11px] font-medium text-slate-400">分类</span>
+                      <button
+                        onClick={() => setShowCatNav(false)}
+                        title="隐藏分类栏"
+                        className="text-slate-400 hover:text-jushi-accent"
+                      >
+                        «
+                      </button>
+                    </div>
                     <button
-                      key={cat}
-                      onClick={() => setCategoryFilter(cat)}
+                      onClick={() => setCategoryFilter('全部')}
                       className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs ${
-                        categoryFilter === cat ? 'bg-jushi-accent/10 font-medium text-jushi-accent' : 'text-slate-600 hover:bg-slate-50'
+                        categoryFilter === '全部' ? 'bg-jushi-accent/10 font-medium text-jushi-accent' : 'text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      <span className="truncate">{cat}</span>
-                      <span className="ml-1 shrink-0 text-slate-400">{count}</span>
+                      <span>全部产品</span>
+                      <span className="text-slate-400">{products.length}</span>
                     </button>
-                  ))}
-                </div>
+                    {categoryNav.map(([cat, count]) => (
+                      <button
+                        key={cat}
+                        onClick={() => setCategoryFilter(cat)}
+                        className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs ${
+                          categoryFilter === cat ? 'bg-jushi-accent/10 font-medium text-jushi-accent' : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="truncate">{cat}</span>
+                        <span className="ml-1 shrink-0 text-slate-400">{count}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowCatNav(true)}
+                    title="显示分类栏"
+                    className="shrink-0 self-start rounded-lg border border-slate-200 bg-white px-1.5 py-2 text-slate-400 hover:text-jushi-accent"
+                  >
+                    »
+                  </button>
+                )}
 
                 <div className="min-w-0 flex-1">
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full text-xs">
+                <table className="w-full min-w-[720px] text-xs">
                   <thead>
                     <tr className="bg-slate-50 text-left text-slate-500">
-                      <th className="px-2 py-2 font-medium">图</th>
-                      <th className="px-2 py-2 font-medium">产品名称</th>
-                      <th className="px-2 py-2 font-medium">分类</th>
-                      <th className="px-2 py-2 font-medium">技术参数</th>
-                      <th className="px-2 py-2 font-medium">成本价</th>
-                      <th className="px-2 py-2 font-medium">建议售价</th>
-                      <th className="px-2 py-2 font-medium">投标报价</th>
-                      <th className="px-2 py-2 font-medium">供应商</th>
-                      <th className="px-2 py-2 font-medium">操作</th>
+                      <th className="w-10 px-2 py-1.5 font-medium">图</th>
+                      <th className="px-2 py-1.5 font-medium">品牌 / 产品名称</th>
+                      <th className="w-24 px-2 py-1.5 font-medium">分类</th>
+                      <th className="px-2 py-1.5 font-medium">技术参数</th>
+                      <th className="w-20 px-2 py-1.5 font-medium">成本价</th>
+                      <th className="w-20 px-2 py-1.5 font-medium">建议售价</th>
+                      <th className="w-36 px-2 py-1.5 font-medium">操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedProducts.map((p) => (
-                      <tr key={p.id} className="border-t border-slate-100 align-top hover:bg-slate-50">
-                        <td className="px-2 py-1.5">
-                          {p.图片 && dataDir ? (
-                            <img
-                              src={appfileUrl(`${dataDir}/${p.图片}`)}
-                              className="h-9 w-9 cursor-pointer rounded object-cover"
-                              title="点击更换图片"
-                              onClick={() => handleSetImage(p.id)}
-                            />
-                          ) : (
-                            <button
-                              onClick={() => handleSetImage(p.id)}
-                              title="上传产品图片"
-                              className="flex h-9 w-9 items-center justify-center rounded border border-dashed border-slate-300 text-slate-300 hover:border-jushi-accent hover:text-jushi-accent"
-                            >
-                              +图
+                      <Fragment key={p.id}>
+                        <tr className="h-[20px] border-t border-slate-100 align-middle hover:bg-slate-50">
+                          <td className="px-2 py-0.5">
+                            {p.图片 && dataDir ? (
+                              <img
+                                src={appfileUrl(`${dataDir}/${p.图片}`)}
+                                className="h-7 w-7 cursor-pointer rounded object-cover"
+                                title="点击更换图片"
+                                onClick={() => handleSetImage(p.id)}
+                              />
+                            ) : (
+                              <button
+                                onClick={() => handleSetImage(p.id)}
+                                title="上传产品图片"
+                                className="flex h-7 w-7 items-center justify-center rounded border border-dashed border-slate-300 text-[10px] text-slate-300 hover:border-jushi-accent hover:text-jushi-accent"
+                              >
+                                +图
+                              </button>
+                            )}
+                          </td>
+                          <td className="max-w-56 truncate px-2 py-0.5" title={`${p.品牌} ${p.产品名称} ${p.型号}`.trim()}>
+                            {p.品牌 && <span className="text-slate-400">{p.品牌} · </span>}
+                            <span className="font-medium text-slate-700">{p.产品名称}</span>
+                            {p.型号 && <span className="text-slate-400"> {p.型号}</span>}
+                          </td>
+                          <td className="max-w-24 truncate px-2 py-0.5 text-slate-500" title={p.产品分类}>
+                            {p.产品分类 || '—'}
+                          </td>
+                          <td className="max-w-xs truncate px-2 py-0.5 text-slate-500" title={p.技术参数}>
+                            {p.技术参数 || '—'}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">{p.成本价 || '—'}</td>
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-700">{p.建议销售价 || '—'}</td>
+                          <td className="whitespace-nowrap px-2 py-0.5">
+                            <button onClick={() => addToCart(p)} className="mr-1.5 text-jushi-accent hover:underline">
+                              加入
                             </button>
-                          )}
-                        </td>
-                        <td className="max-w-40 px-2 py-2 font-medium text-slate-700">
-                          {p.产品名称}
-                          {(p.品牌 || p.型号) && (
-                            <span className="block font-normal text-slate-400">{[p.品牌, p.型号].filter(Boolean).join(' · ')}</span>
-                          )}
-                          {(p.供应商联系人 || p.供应商联系方式) && (
-                            <span className="block text-slate-400" title="供应商联系（采购侧信息，不进报价）">
-                              {[p.供应商联系人, p.供应商联系方式].filter(Boolean).join(' / ')}
-                            </span>
-                          )}
-                        </td>
-                        <td className="max-w-20 px-2 py-2 text-slate-500">{p.产品分类 || '—'}</td>
-                        <td className="max-w-52 px-2 py-2 text-slate-500" title={p.技术参数}>
-                          <span className="line-clamp-2">{p.技术参数 || '—'}</span>
-                        </td>
-                        <td className="whitespace-nowrap px-2 py-2 text-slate-500">{p.成本价 || '—'}</td>
-                        <td className="whitespace-nowrap px-2 py-2 text-slate-700">{p.建议销售价 || '—'}</td>
-                        <td className="whitespace-nowrap px-2 py-2 text-slate-700">{p.投标报价 || '—'}</td>
-                        <td className="max-w-28 px-2 py-2 text-slate-500">{p.供应商名称 || '—'}</td>
-                        <td className="whitespace-nowrap px-2 py-2">
-                          <button onClick={() => addToCart(p)} className="mr-1.5 text-jushi-accent hover:underline">
-                            加入报价单
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingId(p.id)
-                              setShowAddForm(false)
-                            }}
-                            className="mr-1.5 text-slate-400 hover:text-slate-600"
-                          >
-                            编辑
-                          </button>
-                          <button
-                            onClick={async () => {
-                              await window.api.sales.removeProduct(p.id)
-                              await refreshProducts()
-                            }}
-                            className="text-slate-300 hover:text-red-500"
-                          >
-                            删除
-                          </button>
-                        </td>
-                      </tr>
+                            <button
+                              onClick={() => setExpandedId((cur) => (cur === p.id ? null : p.id))}
+                              className={`mr-1.5 ${expandedId === p.id ? 'text-jushi-accent' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                              更多{expandedId === p.id ? '▴' : '▾'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingId(p.id)
+                                setShowAddForm(false)
+                              }}
+                              className="mr-1.5 text-slate-400 hover:text-slate-600"
+                            >
+                              编辑
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await window.api.sales.removeProduct(p.id)
+                                await refreshProducts()
+                              }}
+                              className="text-slate-300 hover:text-red-500"
+                            >
+                              删除
+                            </button>
+                          </td>
+                        </tr>
+                        {expandedId === p.id && (
+                          <tr className="border-t border-slate-100 bg-slate-50/60">
+                            <td colSpan={7} className="px-3 py-2">
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600 md:grid-cols-3">
+                                {(
+                                  [
+                                    ['生产制造商', p.生产制造商],
+                                    ['产地', p.产地],
+                                    ['单位', p.单位],
+                                    ['税率', p.税率],
+                                    ['质保期', p.质保期 ? `${p.质保期} 个月` : ''],
+                                    ['物料代码', p.物料代码],
+                                    ['投标报价', p.投标报价],
+                                    ['备注', p.备注 ?? '']
+                                  ] as [string, string][]
+                                )
+                                  .filter(([, v]) => v)
+                                  .map(([k, v]) => (
+                                    <p key={k}>
+                                      <span className="mr-1 text-slate-400">{k}：</span>
+                                      {v}
+                                    </p>
+                                  ))}
+                              </div>
+                              {(p.供应商名称 || p.供应商联系人 || p.供应商联系方式) && (
+                                <p className="mt-1.5 text-xs text-slate-400" title="采购侧信息，仅内部可见，绝不进对外报价">
+                                  供应商（内部）：{p.供应商名称 || '—'}
+                                  {(p.供应商联系人 || p.供应商联系方式) &&
+                                    ` · ${[p.供应商联系人, p.供应商联系方式].filter(Boolean).join(' / ')}`}
+                                </p>
+                              )}
+                              {p.技术参数 && (
+                                <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed text-slate-500">
+                                  <span className="text-slate-400">技术参数：</span>
+                                  {p.技术参数}
+                                </p>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                     {filteredProducts.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="px-2 py-6 text-center text-slate-400">
+                        <td colSpan={7} className="px-2 py-6 text-center text-slate-400">
                           {products.length === 0 ? '产品库为空——上传供应商资料或手动添加' : '没有匹配的产品'}
                         </td>
                       </tr>
@@ -989,7 +1065,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         </div>
                         <div className="space-y-1">
                           {m.candidates.map(({ product: p }) => {
-                            const chosen = m.chosenId === p.id
+                            const chosen = m.chosenIds.includes(p.id)
                             return (
                               <label
                                 key={p.id}
@@ -997,15 +1073,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                   chosen ? 'border-jushi-accent bg-jushi-accent/5' : 'border-slate-200 hover:border-slate-300'
                                 }`}
                               >
-                                <input
-                                  type="radio"
-                                  checked={chosen}
-                                  onChange={() =>
-                                    setNeedMatches((prev) =>
-                                      prev.map((x, xi) => (xi === mi ? { ...x, chosenId: p.id } : x))
-                                    )
-                                  }
-                                />
+                                <input type="checkbox" checked={chosen} onChange={() => toggleChosen(mi, p.id)} />
                                 <span className="font-medium text-slate-700">{p.产品名称}</span>
                                 <span className="text-slate-400">{[p.品牌, p.型号].filter(Boolean).join(' · ')}</span>
                                 <span className="ml-auto whitespace-nowrap text-slate-500">
@@ -1018,17 +1086,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                               </label>
                             )
                           })}
-                          {m.candidates.length > 0 && (
-                            <label className="flex cursor-pointer items-center gap-2 px-2 py-1 text-xs text-slate-400">
-                              <input
-                                type="radio"
-                                checked={m.chosenId === null}
-                                onChange={() =>
-                                  setNeedMatches((prev) => prev.map((x, xi) => (xi === mi ? { ...x, chosenId: null } : x)))
-                                }
-                              />
-                              这条不选
-                            </label>
+                          {m.candidates.length > 1 && (
+                            <p className="px-2 text-[11px] text-slate-400">可勾选多个（如同款多供应商都要报价），不勾则本条不加入</p>
                           )}
                         </div>
                       </div>
@@ -1054,10 +1113,10 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     </span>
                     <button
                       onClick={addChosenToCart}
-                      disabled={!needMatches.some((m) => m.chosenId)}
+                      disabled={!needMatches.some((m) => m.chosenIds.length > 0)}
                       className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
                     >
-                      ➕ 全部加入报价单
+                      ➕ 加入报价单
                     </button>
                   </div>
                 </>
@@ -1139,19 +1198,19 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               </div>
 
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full text-xs">
+                <table className="w-full min-w-[760px] text-xs">
                   <thead>
                     <tr className="bg-slate-50 text-left text-slate-500">
-                      <th className="px-2 py-2 font-medium">图</th>
-                      <th className="px-2 py-2 font-medium">产品名称</th>
-                      <th className="px-2 py-2 font-medium">品牌/供应商</th>
-                      <th className="w-20 px-2 py-2 font-medium">数量</th>
-                      <th className="w-24 px-2 py-2 font-medium" title="产品库建议销售价">标准价</th>
-                      <th className="w-20 px-2 py-2 font-medium" title="报价单价÷标准价，改折扣率自动算单价">折扣率</th>
-                      <th className="w-32 px-2 py-2 font-medium">报价单价</th>
-                      <th className="w-24 px-2 py-2 font-medium">成本参考</th>
-                      <th className="w-24 px-2 py-2 font-medium">小计</th>
-                      <th className="w-14 px-2 py-2 font-medium"></th>
+                      <th className="w-10 px-2 py-1.5 font-medium">图</th>
+                      <th className="px-2 py-1.5 font-medium">产品名称</th>
+                      <th className="px-2 py-1.5 font-medium">品牌/供应商</th>
+                      <th className="w-14 px-2 py-1.5 font-medium">数量</th>
+                      <th className="w-20 px-2 py-1.5 font-medium" title="产品库建议销售价">标准价</th>
+                      <th className="w-16 px-2 py-1.5 font-medium" title="报价单价÷标准价，改折扣率自动算单价">折扣率</th>
+                      <th className="w-24 px-2 py-1.5 font-medium">报价单价</th>
+                      <th className="w-16 px-2 py-1.5 font-medium">成本参考</th>
+                      <th className="w-20 px-2 py-1.5 font-medium">小计</th>
+                      <th className="w-12 px-2 py-1.5 font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1162,17 +1221,21 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       const std = priceNum(line.product.建议销售价)
                       const rate = std !== null && std > 0 && isFinite(price) ? (price / std) * 100 : null
                       return (
-                        <tr key={line.product.id} className="border-t border-slate-100">
-                          <td className="px-2 py-1.5">
+                        <tr key={line.product.id} className="h-[20px] border-t border-slate-100 align-middle">
+                          <td className="px-2 py-0.5">
                             {line.product.图片 && dataDir ? (
-                              <img src={appfileUrl(`${dataDir}/${line.product.图片}`)} className="h-8 w-8 rounded object-cover" />
+                              <img src={appfileUrl(`${dataDir}/${line.product.图片}`)} className="h-7 w-7 rounded object-cover" />
                             ) : (
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="px-2 py-2 font-medium text-slate-700">{line.product.产品名称}</td>
-                          <td className="px-2 py-2 text-slate-500">{line.product.供应商名称 || '—'}</td>
-                          <td className="px-2 py-1.5">
+                          <td className="max-w-40 truncate px-2 py-0.5 font-medium text-slate-700" title={line.product.产品名称}>
+                            {line.product.产品名称}
+                          </td>
+                          <td className="max-w-28 truncate px-2 py-0.5 text-slate-500">
+                            {[line.product.品牌, line.product.供应商名称].filter(Boolean).join(' / ') || '—'}
+                          </td>
+                          <td className="px-2 py-0.5">
                             <input
                               value={line.数量}
                               onChange={(e) =>
@@ -1180,11 +1243,11 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                   prev.map((l) => (l.product.id === line.product.id ? { ...l, 数量: e.target.value } : l))
                                 )
                               }
-                              className="w-16 rounded border border-slate-300 px-1.5 py-1 text-xs outline-none focus:border-jushi-accent"
+                              className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs outline-none focus:border-jushi-accent"
                             />
                           </td>
-                          <td className="whitespace-nowrap px-2 py-2 text-slate-400">{line.product.建议销售价 || '—'}</td>
-                          <td className="px-2 py-1.5">
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-400">{line.product.建议销售价 || '—'}</td>
+                          <td className="px-2 py-0.5">
                             {std !== null && std > 0 ? (
                               <div className="flex items-center gap-0.5">
                                 <input
@@ -1201,7 +1264,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                       )
                                     )
                                   }}
-                                  className="w-12 rounded border border-slate-300 px-1 py-1 text-right text-xs outline-none focus:border-jushi-accent"
+                                  className="w-10 rounded border border-slate-300 px-1 py-0.5 text-right text-xs outline-none focus:border-jushi-accent"
                                 />
                                 <span className="text-slate-400">%</span>
                               </div>
@@ -1211,7 +1274,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                               </span>
                             )}
                           </td>
-                          <td className="px-2 py-1.5">
+                          <td className="px-2 py-0.5">
                             <input
                               value={line.报价单价}
                               onChange={(e) =>
@@ -1219,14 +1282,14 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                   prev.map((l) => (l.product.id === line.product.id ? { ...l, 报价单价: e.target.value } : l))
                                 )
                               }
-                              className="w-28 rounded border border-slate-300 px-1.5 py-1 text-xs outline-none focus:border-jushi-accent"
+                              className="w-20 rounded border border-slate-300 px-1.5 py-0.5 text-xs outline-none focus:border-jushi-accent"
                             />
                           </td>
-                          <td className="px-2 py-2 text-slate-400" title="采购成本，仅内部参考，不会写进报价文件">
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-400" title="采购成本，仅内部参考，不会写进报价文件">
                             {line.product.成本价 || '—'}
                           </td>
-                          <td className="px-2 py-2 text-slate-600">{subtotal !== null ? subtotal.toFixed(2) : '—'}</td>
-                          <td className="px-2 py-2">
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-600">{subtotal !== null ? subtotal.toFixed(2) : '—'}</td>
+                          <td className="px-2 py-0.5">
                             <button
                               onClick={() => setCart((prev) => prev.filter((l) => l.product.id !== line.product.id))}
                               className="text-slate-300 hover:text-red-500"
