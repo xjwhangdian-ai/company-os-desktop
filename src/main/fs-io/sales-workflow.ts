@@ -103,12 +103,14 @@ const PRODUCT_FIELD_KEYS: (keyof ProductFields)[] = [
   '产品分类',
   '品牌',
   '型号',
+  '瑾智型号',
   '生产制造商',
   '产地',
   '技术参数',
   '单位',
   '税率',
   '质保期',
+  '交货期',
   '物料代码',
   '成本价',
   '建议销售价',
@@ -123,6 +125,8 @@ const PRODUCT_FIELD_KEYS: (keyof ProductFields)[] = [
 
 /** v3 新增的贸易型字段（对齐对外报价单列结构），老库就地迁移补空串 */
 const V3_NEW_KEYS = ['品牌', '型号', '生产制造商', '产地', '单位', '税率', '质保期', '物料代码'] as const
+/** v3.1 追加：我方自编型号与交货期（对外报价关键项），老库同样补空串 */
+const V3_1_NEW_KEYS = ['瑾智型号', '交货期'] as const
 
 /** v1（单价字段）→ v2（三档价格）→ v3（品牌/型号/制造商等贸易字段）就地迁移 */
 function readProductDb(dataDir: string): ProductDb {
@@ -135,7 +139,7 @@ function readProductDb(dataDir: string): ProductDb {
       delete p.单价
       changed = true
     }
-    for (const k of ['产品分类', '成本价', '建议销售价', '投标报价', ...V3_NEW_KEYS] as const) {
+    for (const k of ['产品分类', '成本价', '建议销售价', '投标报价', ...V3_NEW_KEYS, ...V3_1_NEW_KEYS] as const) {
       if (p[k] === undefined) {
         p[k] = ''
         changed = true
@@ -460,10 +464,12 @@ export async function generateQuoteExcel(
       产地: p.产地,
       品牌: p.品牌,
       型号: p.型号,
+      瑾智型号: p.瑾智型号,
       技术参数: p.技术参数,
       税率: p.税率,
       单位: p.单位,
       质保期: p.质保期,
+      交货期: p.交货期,
       物料代码: p.物料代码,
       备注: p.备注 ?? '',
       数量: parseNum(l.数量),

@@ -29,7 +29,9 @@ const SORT_MODES: SortMode[] = ['默认排序', '价格从低到高', '价格从
 /** 产品库表格列（key 与 colW 状态一一对应；支持拖拽调整列宽） */
 const PROD_COLS: { key: string; label: string }[] = [
   { key: '图', label: '图' },
-  { key: '名称', label: '品牌 / 产品名称' },
+  { key: '品牌', label: '品牌' },
+  { key: '名称', label: '产品名称' },
+  { key: '型号', label: '产品型号' },
   { key: '分类', label: '分类' },
   { key: '参数', label: '技术参数' },
   { key: '成本价', label: '成本价' },
@@ -67,6 +69,8 @@ const EMPTY_PRODUCT_FORM: ProductFields = {
   税率: '',
   质保期: '',
   物料代码: '',
+  瑾智型号: '',
+  交货期: '',
   成本价: '',
   建议销售价: '',
   投标报价: '',
@@ -194,7 +198,7 @@ function buildParsePrompt(preview: PreviewCard): string {
       `解析这份投标报价文件，提取各产品的投标报价写入暂存区。`,
       `文件：${readTarget}`,
       `要求：`,
-      `1. 每个产品提取为一个 JSON 对象，只填两个字段的值：产品名称、投标报价；其余字段（产品分类、品牌、型号、生产制造商、产地、技术参数、单位、税率、质保期、物料代码、成本价、建议销售价、供应商名称、供应商联系人、供应商联系方式、备注）一律填空字符串""，来源文件填"${preview.fileName}"。`,
+      `1. 每个产品提取为一个 JSON 对象，只填两个字段的值：产品名称、投标报价；其余字段（产品分类、品牌、型号、瑾智型号、生产制造商、产地、技术参数、单位、税率、质保期、交货期、物料代码、成本价、建议销售价、供应商名称、供应商联系人、供应商联系方式、备注）一律填空字符串""，来源文件填"${preview.fileName}"。`,
       `2. 产品名称照抄文件原文写法（App 会按名称匹配到产品库里的已有条目回填投标报价）；投标报价保留原文（含单位/含税说明）。`,
       `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身。`,
       `4. 不要修改 销售/产品库/产品库.json。`,
@@ -206,7 +210,7 @@ function buildParsePrompt(preview: PreviewCard): string {
     `资料文件：${readTarget}`,
     `要求：`,
     `0. 只提取"产品明细表格里的真实产品行"（每行有型号/规格和价格）；表头行、标题、致供应商说明、填写说明/须知、示例行（备注写着"示例"）、公司落款、日期/联系人等一律不是产品，绝对不要提取。`,
-    `1. 每个产品提取为一个 JSON 对象，字段名严格使用：产品名称、产品分类、品牌、型号、生产制造商、产地、技术参数、单位、税率、质保期、物料代码、成本价、建议销售价、投标报价、供应商名称、供应商联系人、供应商联系方式、备注、来源文件（来源文件统一填"${preview.fileName}"）。`,
+    `1. 每个产品提取为一个 JSON 对象，字段名严格使用：产品名称、产品分类、品牌、型号、瑾智型号、生产制造商、产地、技术参数、单位、税率、质保期、交货期、物料代码、成本价、建议销售价、投标报价、供应商名称、供应商联系人、供应商联系方式、备注、来源文件（来源文件统一填"${preview.fileName}"）。瑾智型号是我方自编型号（资料里通常没有，留空）；交货期照原文（如"30天/现货"）。`,
     `2. 供应商报价表里的价格是给我们的进货价，填进"成本价"；资料里明确写了建议零售价/指导价才填"建议销售价"，没有就留空。品牌/型号/生产制造商/产地/单位/税率照资料原文填（质保期折算成月数，如"三年"填"36"）；注意区分：品牌是产品品牌（如海康威视），供应商名称是把货卖给我们的渠道公司，两者可能不同。技术参数把规格/关键参数拼成一段完整文字；所有价格保留资料原文写法（含单位、含税说明）；资料里没有的字段填空字符串""，禁止编造。`,
     `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身，不要包裹代码块或其它文字。`,
     `4. 不要修改 销售/产品库/产品库.json——那是桌面 App 托管的规范库，你写的暂存文件会由 App 校验后合并进去。`,
@@ -239,6 +243,8 @@ function ProductForm({
     { key: '税率', label: '税率' },
     { key: '质保期', label: '质保期（月）' },
     { key: '物料代码', label: '物料代码' },
+    { key: '瑾智型号', label: '瑾智型号（我方自编，对外报价用）' },
+    { key: '交货期', label: '交货期（如 30天/现货）' },
     { key: '成本价', label: '成本价（采购侧，不进报价）' },
     { key: '建议销售价', label: '建议销售价' },
     { key: '投标报价', label: '投标报价' },
@@ -313,13 +319,18 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   // 产品库列宽（px，可拖拽调整）——键与表头列一一对应
   const [colW, setColW] = useState<Record<string, number>>({
     图: 44,
-    名称: 240,
+    品牌: 84,
+    名称: 168,
+    型号: 132,
     分类: 96,
-    参数: 320,
+    参数: 300,
     成本价: 80,
     建议售价: 80,
     操作: 150
   })
+  // 技术参数内联编辑
+  const [editingParamId, setEditingParamId] = useState<string | null>(null)
+  const [paramDraft, setParamDraft] = useState('')
 
   const [customers, setCustomers] = useState<CustomerEntry[]>([])
   const [customerFilter, setCustomerFilter] = useState<'全部' | CustomerStatus>('全部')
@@ -473,6 +484,16 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     const paths = await window.api.dialog.pickFiles(IMAGE_FILTERS)
     if (paths.length === 0) return
     await window.api.sales.setProductImage(productId, paths[0])
+    await refreshProducts()
+  }
+
+  /** 内联保存技术参数（只改这一个字段，其余原样回写） */
+  async function commitParamEdit(p: ProductEntry): Promise<void> {
+    const next = paramDraft
+    setEditingParamId(null)
+    if (next === p.技术参数) return
+    const { id: _id, 更新时间: _t, ...fields } = p
+    await window.api.sales.saveProduct({ ...fields, 技术参数: next }, p.id)
     await refreshProducts()
   }
 
@@ -905,16 +926,43 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                               </button>
                             )}
                           </td>
-                          <td className="max-w-56 truncate px-2 py-0.5" title={`${p.品牌} ${p.产品名称} ${p.型号}`.trim()}>
-                            {p.品牌 && <span className="text-slate-400">{p.品牌} · </span>}
-                            <span className="font-medium text-slate-700">{p.产品名称}</span>
-                            {p.型号 && <span className="text-slate-400"> {p.型号}</span>}
+                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.品牌}>
+                            {p.品牌 || '—'}
                           </td>
-                          <td className="max-w-24 truncate px-2 py-0.5 text-slate-500" title={p.产品分类}>
+                          <td className="truncate px-2 py-0.5" title={p.产品名称}>
+                            <span className="font-medium text-slate-700">{p.产品名称}</span>
+                          </td>
+                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.型号}>
+                            {p.型号 || '—'}
+                          </td>
+                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.产品分类}>
                             {p.产品分类 || '—'}
                           </td>
-                          <td className="max-w-xs truncate px-2 py-0.5 text-slate-500" title={p.技术参数}>
-                            {p.技术参数 || '—'}
+                          <td className="px-1 py-0.5">
+                            {editingParamId === p.id ? (
+                              <input
+                                autoFocus
+                                value={paramDraft}
+                                onChange={(e) => setParamDraft(e.target.value)}
+                                onBlur={() => commitParamEdit(p)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                                  else if (e.key === 'Escape') setEditingParamId(null)
+                                }}
+                                className="w-full rounded border border-jushi-accent px-1 py-0.5 text-xs outline-none"
+                              />
+                            ) : (
+                              <div
+                                onClick={() => {
+                                  setEditingParamId(p.id)
+                                  setParamDraft(p.技术参数)
+                                }}
+                                title="点击编辑技术参数"
+                                className="cursor-text truncate text-slate-500 hover:text-slate-700"
+                              >
+                                {p.技术参数 || <span className="text-slate-300">点击填写</span>}
+                              </div>
+                            )}
                           </td>
                           <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">{p.成本价 || '—'}</td>
                           <td className="whitespace-nowrap px-2 py-0.5 text-slate-700">{p.建议销售价 || '—'}</td>
@@ -950,15 +998,17 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         </tr>
                         {expandedId === p.id && (
                           <tr className="border-t border-slate-100 bg-slate-50/60">
-                            <td colSpan={7} className="px-3 py-2">
+                            <td colSpan={9} className="px-3 py-2">
                               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600 md:grid-cols-3">
                                 {(
                                   [
+                                    ['瑾智型号', p.瑾智型号],
                                     ['生产制造商', p.生产制造商],
                                     ['产地', p.产地],
                                     ['单位', p.单位],
                                     ['税率', p.税率],
                                     ['质保期', p.质保期 ? `${p.质保期} 个月` : ''],
+                                    ['交货期', p.交货期],
                                     ['物料代码', p.物料代码],
                                     ['投标报价', p.投标报价],
                                     ['备注', p.备注 ?? '']
@@ -992,7 +1042,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     ))}
                     {filteredProducts.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-2 py-6 text-center text-slate-400">
+                        <td colSpan={9} className="px-2 py-6 text-center text-slate-400">
                           {products.length === 0 ? '产品库为空——上传供应商资料或手动添加' : '没有匹配的产品'}
                         </td>
                       </tr>

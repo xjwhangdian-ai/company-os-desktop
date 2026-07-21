@@ -225,29 +225,48 @@ function getConfigPath(): string {
   return join(dir, 'company-os-desktop-config.json')
 }
 
+/**
+ * 单公司收敛：本工作台已改为「只服务一家公司」。历史配置可能残留多家公司，
+ * 这里统一收敛成一条——保留当前激活的那家（没有激活标记则保留第一家），其余丢弃。
+ * 返回是否发生了收敛，用于决定要不要写回配置文件。
+ */
+function collapseToSingleCompany(schema: StoreSchemaV4): { schema: StoreSchemaV4; changed: boolean } {
+  const { companies, activeCompanyId } = schema
+  if (companies.length <= 1) {
+    // 仅剩一家时把 activeCompanyId 对齐到它，避免悬空
+    const only = companies[0] ?? null
+    const fixedActive = only ? only.id : null
+    if (fixedActive === activeCompanyId) return { schema, changed: false }
+    return { schema: { ...schema, activeCompanyId: fixedActive }, changed: true }
+  }
+  const kept = companies.find((c) => c.id === activeCompanyId) ?? companies[0]
+  return { schema: { ...schema, companies: [kept], activeCompanyId: kept.id }, changed: true }
+}
+
 function readAll(): StoreSchemaV4 {
   const path = getConfigPath()
   if (!existsSync(path)) return structuredClone(DEFAULTS)
   try {
     const raw = JSON.parse(readFileSync(path, 'utf-8'))
+    let schema: StoreSchemaV4
+    let migrated = false
     if (isV1Schema(raw)) {
-      const migrated = migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(raw)))
-      writeAll(migrated)
-      return migrated
+      schema = migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(raw)))
+      migrated = true
+    } else if (isV2Schema(raw)) {
+      schema = migrateV3ToV4(migrateV2ToV3(raw))
+      migrated = true
+    } else if (isV3Schema(raw)) {
+      schema = migrateV3ToV4(raw)
+      migrated = true
+    } else {
+      // 补全新增供应商预设（用户配置文件可能是旧版本 app 写入的，缺新供应商的默认槽位）
+      const providers = { ...structuredClone(DEFAULT_PROVIDERS), ...raw.providers }
+      schema = { ...structuredClone(DEFAULTS), ...raw, providers }
     }
-    if (isV2Schema(raw)) {
-      const migrated = migrateV3ToV4(migrateV2ToV3(raw))
-      writeAll(migrated)
-      return migrated
-    }
-    if (isV3Schema(raw)) {
-      const migrated = migrateV3ToV4(raw)
-      writeAll(migrated)
-      return migrated
-    }
-    // 补全新增供应商预设（用户配置文件可能是旧版本 app 写入的，缺新供应商的默认槽位）
-    const providers = { ...structuredClone(DEFAULT_PROVIDERS), ...raw.providers }
-    return { ...structuredClone(DEFAULTS), ...raw, providers }
+    const { schema: single, changed } = collapseToSingleCompany(schema)
+    if (migrated || changed) writeAll(single)
+    return single
   } catch {
     return structuredClone(DEFAULTS)
   }

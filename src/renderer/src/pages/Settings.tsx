@@ -27,14 +27,12 @@ const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
 }
 
 export function Settings(): React.JSX.Element {
-  const { config, addCompany, removeCompany, pickCompanyDataDir, setActiveCompany, setActiveProvider, saveProviderConfig } =
-    useConfigStore()
+  const { config, pickCompanyDataDir, setActiveProvider, saveProviderConfig } = useConfigStore()
   const [viewingId, setViewingId] = useState<ProviderId>('anthropic')
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [baseUrlInput, setBaseUrlInput] = useState('')
   const [mapping, setMapping] = useState<ModelMapping>({ opus: '', sonnet: '', haiku: '' })
   const [savedHint, setSavedHint] = useState<string | null>(null)
-  const [newCompanyName, setNewCompanyName] = useState('')
 
   useEffect(() => {
     if (config) setViewingId(config.activeProviderId)
@@ -78,6 +76,7 @@ export function Settings(): React.JSX.Element {
 
   const doc = PROVIDER_DOCS[viewingId]
   const hint = PROVIDER_HINTS[viewingId]
+  const company = config.companies[0] ?? null
 
   return (
     // 外层负责滚动：main 区域是 overflow-hidden，设置页内容超一屏时必须自己滚，
@@ -95,76 +94,37 @@ export function Settings(): React.JSX.Element {
       </div>
 
       <section className="space-y-2">
-        <h3 className="text-sm font-medium text-slate-700">公司管理</h3>
+        <h3 className="text-sm font-medium text-slate-700">数据目录</h3>
         <p className="text-xs text-slate-400">
-          每家公司对应一个独立的 company-os 数据目录（含 knowledge/、bidding/、outputs/、法务/、.claude/）。登录页可以下拉切换公司，模型供应商/团队成员配置是全局共用的，不按公司区分。
+          工作台的全部数据都存在这个 company-os 目录里（含 knowledge/、bidding/、outputs/、法务/、.claude/）。模型供应商/团队成员配置全局共用。
         </p>
-        <div className="space-y-2">
-          {config.companies.map((c) => (
-            <div
-              key={c.id}
-              className={`flex items-center gap-2 rounded-lg border p-2 ${
-                config.activeCompanyId === c.id ? 'border-jushi-accent bg-blue-50' : 'border-slate-200 bg-white'
-              }`}
+        {company ? (
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2">
+            <span className="w-28 shrink-0 truncate text-sm font-medium text-slate-700">{company.name}</span>
+            <span className="flex-1 truncate text-xs text-slate-400">{company.dataDir ?? '尚未配置数据目录'}</span>
+            <button
+              onClick={() => pickCompanyDataDir(company.id)}
+              className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
             >
+              选择目录
+            </button>
+            {!company.dataDir && (
               <button
-                onClick={() => setActiveCompany(c.id)}
-                className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${
-                  config.activeCompanyId === c.id ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
-                }`}
+                onClick={async () => {
+                  const r = await window.api.config.initDataDir(company.id)
+                  flashSaved(r.说明)
+                  if (r.ok) await useConfigStore.getState().load()
+                }}
+                title="没有现成的 company-os 文件夹？从安装包内置模板初始化一个全新数据目录（含 knowledge/9个分身定义/目录骨架）"
+                className="shrink-0 rounded-md border border-jushi-accent px-2 py-1 text-xs text-jushi-accent hover:bg-jushi-accent/5"
               >
-                {config.activeCompanyId === c.id ? '当前使用中' : '设为当前'}
+                初始化目录
               </button>
-              <span className="w-28 shrink-0 truncate text-sm font-medium text-slate-700">{c.name}</span>
-              <span className="flex-1 truncate text-xs text-slate-400">{c.dataDir ?? '尚未配置数据目录'}</span>
-              <button
-                onClick={() => pickCompanyDataDir(c.id)}
-                className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                选择目录
-              </button>
-              {!c.dataDir && (
-                <button
-                  onClick={async () => {
-                    const r = await window.api.config.initDataDir(c.id)
-                    flashSaved(r.说明)
-                    if (r.ok) await useConfigStore.getState().load()
-                  }}
-                  title="没有现成的 company-os 文件夹？从安装包内置模板初始化一个全新数据目录（含 knowledge/9个分身定义/目录骨架）"
-                  className="shrink-0 rounded-md border border-jushi-accent px-2 py-1 text-xs text-jushi-accent hover:bg-jushi-accent/5"
-                >
-                  初始化目录
-                </button>
-              )}
-              <button
-                onClick={() => removeCompany(c.id)}
-                className="shrink-0 text-xs text-slate-300 hover:text-red-500"
-                title="从列表移除（不会删除实际文件夹）"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-          {config.companies.length === 0 && <p className="py-3 text-center text-xs text-slate-400">还没有添加任何公司</p>}
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            value={newCompanyName}
-            onChange={(e) => setNewCompanyName(e.target.value)}
-            placeholder="新公司名称"
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
-          />
-          <button
-            onClick={() => {
-              if (!newCompanyName.trim()) return
-              addCompany(newCompanyName.trim())
-              setNewCompanyName('')
-            }}
-            className="shrink-0 rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-          >
-            ＋ 添加公司
-          </button>
-        </div>
+            )}
+          </div>
+        ) : (
+          <p className="py-3 text-center text-xs text-slate-400">还没有数据目录——请回登录页创建公司后再来配置</p>
+        )}
       </section>
 
       <section className="space-y-3">

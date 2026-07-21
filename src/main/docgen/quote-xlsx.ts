@@ -15,10 +15,12 @@ export interface QuoteRow {
   产地: string
   品牌: string
   型号: string
+  瑾智型号: string
   技术参数: string
   税率: string
   单位: string
   质保期: string
+  交货期: string
   物料代码: string
   备注: string
   数量: number | null
@@ -39,12 +41,14 @@ const QUOTE_COL_SYNONYMS: Record<string, string[]> = {
   序号: ['序号'],
   产品名称: ['产品名称', '品名', '货名', '设备名称', '名称', '产品'],
   型号: ['型号', '规格型号', '开票型号'],
+  瑾智型号: ['瑾智型号', '我方型号', '自编型号', '本司型号'],
   品牌: ['品牌'],
   生产制造商: ['生产制造商', '制造商', '生产厂家', '厂家', '厂商'],
   产地: ['产地'],
   单位: ['计量单位', '单位'],
   税率: ['税率'],
   质保期: ['质保期', '质保', '保修期'],
+  交货期: ['交货期', '交货周期', '货期', '交期'],
   物料代码: ['物料代码', '物料编码'],
   技术参数: ['技术规格', '技术参数', '规格参数', '规格', '参数', '配置'],
   数量: ['数量'],
@@ -124,10 +128,12 @@ function fillRow(
   set('产地', line.产地)
   set('品牌', line.品牌)
   set('型号', line.型号)
+  set('瑾智型号', line.瑾智型号)
   set('技术参数', line.技术参数)
   set('税率', line.税率)
   set('单位', line.单位)
   set('质保期', line.质保期)
+  set('交货期', line.交货期)
   set('物料代码', line.物料代码)
   set('备注', line.备注)
   set('数量', line.数量 ?? line.数量原文)
@@ -269,23 +275,24 @@ async function buildStandard(
   const COLS = [
     { field: '序号', w: 6 },
     { field: '图', w: 8 },
-    { field: '产品名称', w: 20 },
-    { field: '生产制造商', w: 14 },
-    { field: '产地', w: 8 },
     { field: '品牌', w: 10 },
-    { field: '型号', w: 22 },
-    { field: '技术参数', w: 40 },
-    { field: '税率', w: 10 },
+    { field: '产品名称', w: 20 },
+    { field: '瑾智型号', w: 16 },
+    { field: '型号', w: 20 },
+    { field: '技术参数', w: 38 },
+    { field: '税率', w: 8 },
     { field: '单位', w: 6 },
     { field: '数量', w: 8 },
     { field: '单价', w: 12 },
+    { field: '交货期', w: 10 },
     { field: '质保期', w: 10 },
     { field: '合价', w: 14 },
     { field: '备注', w: 10 }
   ]
   const HEADER_LABEL: Record<string, string> = {
     技术参数: '技术规格',
-    单价: '单价(元)',
+    单价: '销售价(元)',
+    瑾智型号: '瑾智型号',
     质保期: '质保期(月)',
     合价: '合价(元)'
   }

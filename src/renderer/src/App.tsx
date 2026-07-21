@@ -21,7 +21,7 @@ import { OpsPolicyWorkspace } from './pages/OpsPolicyWorkspace'
 type View = 'settings' | { agent: AgentName }
 
 export default function App(): React.JSX.Element {
-  const { config, loading, load, setActiveCompany } = useConfigStore()
+  const { config, loading, load } = useConfigStore()
   const { list, loaded, load: loadAgents } = useAgentsStore()
   const currentUser = useIdentityStore((s) => s.currentUser)
   const logout = useIdentityStore((s) => s.logout)
@@ -118,20 +118,6 @@ export default function App(): React.JSX.Element {
             <p className="text-xs text-slate-400">Agent 工作台</p>
           </div>
         </div>
-
-        {config && config.companies.length > 1 && (
-          <select
-            value={config.activeCompanyId ?? ''}
-            onChange={(e) => setActiveCompany(e.target.value)}
-            className="app-no-drag mb-3 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none focus:border-jushi-accent"
-          >
-            {config.companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        )}
 
         <div className="flex-1 overflow-y-auto">
           {!ready ? (

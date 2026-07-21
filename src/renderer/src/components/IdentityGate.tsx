@@ -4,52 +4,39 @@ import { useConfigStore } from '../stores/useConfigStore'
 import type { TeamMember } from '@shared/agent-types'
 
 interface CompanyPickerProps {
-  selectedCompanyId: string
   onSelect: (id: string) => void
 }
 
-function CompanyPicker({ selectedCompanyId, onSelect }: CompanyPickerProps): React.JSX.Element {
+function CompanyPicker({ onSelect }: CompanyPickerProps): React.JSX.Element {
   const { config, addCompany } = useConfigStore()
   const [newName, setNewName] = useState('')
 
   if (!config) return <></>
 
-  if (config.companies.length === 0) {
-    return (
-      <div className="flex items-center gap-2">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="第一次用，先输入公司名称"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-jushi-accent"
-        />
-        <button
-          onClick={async () => {
-            if (!newName.trim()) return
-            const company = await addCompany(newName.trim())
-            onSelect(company.id)
-            setNewName('')
-          }}
-          className="rounded-lg bg-jushi-accent px-3 py-1.5 text-sm font-medium text-white"
-        >
-          创建
-        </button>
-      </div>
-    )
-  }
+  // 工作台只服务一家公司：已存在公司时不再显示公司选择器（自动使用唯一那家）；
+  // 仅在全新安装（0 家公司）时让用户创建第一家。
+  if (config.companies.length > 0) return <></>
 
   return (
-    <select
-      value={selectedCompanyId}
-      onChange={(e) => onSelect(e.target.value)}
-      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-jushi-accent"
-    >
-      {config.companies.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.name}
-        </option>
-      ))}
-    </select>
+    <div className="flex items-center gap-2">
+      <input
+        value={newName}
+        onChange={(e) => setNewName(e.target.value)}
+        placeholder="第一次用，先输入公司名称"
+        className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-jushi-accent"
+      />
+      <button
+        onClick={async () => {
+          if (!newName.trim()) return
+          const company = await addCompany(newName.trim())
+          onSelect(company.id)
+          setNewName('')
+        }}
+        className="rounded-lg bg-jushi-accent px-3 py-1.5 text-sm font-medium text-white"
+      >
+        创建
+      </button>
+    </div>
   )
 }
 
@@ -267,10 +254,10 @@ export function IdentityGate(): React.JSX.Element {
       <div className="flex min-h-full flex-col items-center justify-center gap-6 py-12">
       <div className="text-center">
         <h1 className="text-lg font-bold text-jushi-blue">Agent 工作台</h1>
-        <p className="mt-1 text-sm text-slate-400">选择公司和身份继续</p>
+        <p className="mt-1 text-sm text-slate-400">选择身份继续</p>
       </div>
 
-      <CompanyPicker selectedCompanyId={selectedCompanyId} onSelect={setSelectedCompanyId} />
+      <CompanyPicker onSelect={setSelectedCompanyId} />
 
       {members.length === 0 ? (
         <AddMemberForm onBeforeLogin={commitCompany} onDone={noop} />
