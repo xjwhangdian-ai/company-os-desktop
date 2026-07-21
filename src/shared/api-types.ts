@@ -231,7 +231,12 @@ export interface CompanyOsApi {
     /** 把报价单产品的图片导出到 outputs 报价目录的 图片/ 子文件夹 */
     exportQuoteImages(productIds: string[], customerName: string): Promise<{ dir: string; exported: number; missing: string[] }>
     /** 机械生成对外报价单 Excel（不经过 AI）：xlsx 模板填充或内置版式，登记报价台账并自动关联同名客户 */
-    generateQuoteXlsx(lines: QuoteLineInput[], customerName: string, templateFileName: string | null): Promise<QuoteXlsxResult>
+    generateQuoteXlsx(
+      lines: QuoteLineInput[],
+      customerName: string,
+      templateFileName: string | null,
+      projectName: string
+    ): Promise<QuoteXlsxResult>
     listTemplates(): Promise<QuotationTemplate[]>
     uploadTemplate(sourcePath: string): Promise<QuotationTemplate>
     listCustomers(): Promise<CustomerEntry[]>

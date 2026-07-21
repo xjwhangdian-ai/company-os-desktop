@@ -26,6 +26,17 @@ type UploadMode = 'supplier' | 'bid'
 type SortMode = '默认排序' | '价格从低到高' | '价格从高到低' | '毛利率排序(内部)'
 const SORT_MODES: SortMode[] = ['默认排序', '价格从低到高', '价格从高到低', '毛利率排序(内部)']
 
+/** 产品库表格列（key 与 colW 状态一一对应；支持拖拽调整列宽） */
+const PROD_COLS: { key: string; label: string }[] = [
+  { key: '图', label: '图' },
+  { key: '名称', label: '品牌 / 产品名称' },
+  { key: '分类', label: '分类' },
+  { key: '参数', label: '技术参数' },
+  { key: '成本价', label: '成本价' },
+  { key: '建议售价', label: '建议售价' },
+  { key: '操作', label: '操作' }
+]
+
 interface PreviewCard extends SupplierDocPreview {
   mode: UploadMode
 }
@@ -75,10 +86,6 @@ function fmtTime(ms: number): string {
   const d = new Date(ms)
   const pad = (n: number): string => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-function today(): string {
-  return fmtTime(Date.now())
 }
 
 function appfileUrl(absPath: string): string {
@@ -207,48 +214,6 @@ function buildParsePrompt(preview: PreviewCard): string {
   ].join('\n')
 }
 
-/** 构造"生成对外报价文件"的提示词 */
-function buildQuotationPrompt(
-  lines: CartLine[],
-  customerName: string,
-  template: QuotationTemplate | null,
-  imagesExported: number
-): string {
-  const customer = customerName.trim() || '通用'
-  const rows = lines
-    .map(
-      (l) =>
-        `| ${l.product.产品名称} | ${l.product.品牌 || '（未填，留空）'} | ${l.product.型号} | ${l.product.技术参数.replace(/\|/g, '，').slice(0, 200)} | ${l.数量} | ${l.报价单价} |`
-    )
-    .join('\n')
-  const templatePart = template
-    ? `参考模板：${template.relativePath}${template.companionRelativePath ? `（二进制格式请读提取文本 ${template.companionRelativePath}）` : ''}——严格按模板的章节与表格结构组织内容。`
-    : `没有指定模板，用标准报价单结构：公司抬头 → 报价日期与编号 → 客户名称 → 产品明细表 → 合计 → 税率与含税说明 → 报价有效期 → 交付与质保 → 我方联系方式。`
-  const dir = `outputs/01_销售_sales/${today()}_${customer}_报价`
-  const imagePart =
-    imagesExported > 0
-      ? `产品图片：App 已把 ${imagesExported} 张产品图导出到 ${dir}/图片/（文件名=产品名称）。在报价文件末尾加一节「产品图片清单」，逐行列出 产品名称 → 对应图片文件名。`
-      : ''
-  return [
-    `生成一份对外报价文件（markdown）。`,
-    ``,
-    `客户名称：${customerName.trim() || '（未指定，做通用版，客户名留占位）'}`,
-    `产品明细（共 ${lines.length} 项；品牌列取产品库"品牌"字段，未填的留空，不要用供应商名称顶替——供应商是采购渠道，属采购侧信息）：`,
-    `| 产品名称 | 品牌 | 型号 | 技术参数 | 数量 | 单价（元） |`,
-    `|---|---|---|---|---|---|`,
-    rows,
-    ``,
-    templatePart,
-    imagePart,
-    `如各行单价均为纯数字，计算每行小计与总计；否则合计处标注"以最终商务确认为准"。`,
-    `红线：这是对外文件——除"品牌"外，严禁出现任何采购侧信息（供应商联系人/联系方式/成本价/进货口径）；公司抬头与联系方式以 knowledge/company/facts.md 为准，不臆造。`,
-    `产出路径：${dir}/${today()}_${customer}_报价单.md`,
-    `完成后一句话总结：共几项、合计金额（如可计算）、有哪些"待确认"占位需要人工补。`
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
-
 // ============ 产品表单 ============
 
 function ProductForm({
@@ -338,10 +303,23 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [templates, setTemplates] = useState<QuotationTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [quoteCustomer, setQuoteCustomer] = useState('')
+  const [quoteProject, setQuoteProject] = useState('')
   const [budget, setBudget] = useState('')
 
   const [needsText, setNeedsText] = useState('')
   const [needMatches, setNeedMatches] = useState<NeedMatch[]>([])
+  const [onlyInBudget, setOnlyInBudget] = useState(false)
+
+  // 产品库列宽（px，可拖拽调整）——键与表头列一一对应
+  const [colW, setColW] = useState<Record<string, number>>({
+    图: 44,
+    名称: 240,
+    分类: 96,
+    参数: 320,
+    成本价: 80,
+    建议售价: 80,
+    操作: 150
+  })
 
   const [customers, setCustomers] = useState<CustomerEntry[]>([])
   const [customerFilter, setCustomerFilter] = useState<'全部' | CustomerStatus>('全部')
@@ -362,6 +340,23 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   function flash(text: string): void {
     setNotice(text)
     setTimeout(() => setNotice(null), 4500)
+  }
+
+  /** 拖拽表头右缘调整列宽（最小 40px） */
+  function startResize(key: string, e: React.MouseEvent): void {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startW = colW[key] ?? 100
+    const onMove = (ev: MouseEvent): void => {
+      setColW((w) => ({ ...w, [key]: Math.max(40, startW + (ev.clientX - startX)) }))
+    }
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
   }
 
   async function refreshProducts(): Promise<void> {
@@ -528,14 +523,32 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       flash('先在需求清单里输入采购需求，一行一条（行尾可加 x数量）')
       return
     }
+    const bNum = priceNum(budget)
     setNeedMatches(
       lines.map((line) => {
         const { need, qty } = parseNeedLine(line)
         const candidates = matchNeed(need, products)
-        // 默认勾选相关度最高的一条；用户可再单选/多选
-        return { need, qty, candidates, chosenIds: candidates[0] ? [candidates[0].product.id] : [] }
+        const q = parseFloat(qty) || 1
+        // 有预算时默认勾选"相关度高且预算内"的第一条；没有预算内的就退相关度最高
+        let pick = candidates[0]
+        if (bNum !== null) {
+          const inBudget = candidates.find(({ product }) => {
+            const u = priceNum(defaultQuotePrice(product))
+            return u !== null && u * q <= bNum
+          })
+          if (inBudget) pick = inBudget
+        }
+        return { need, qty, candidates, chosenIds: pick ? [pick.product.id] : [] }
       })
     )
+  }
+
+  /** 某候选按"报价参考单价 × 本条数量"是否落在采购预算内（预算未填时返回 null=不判断） */
+  function candidateInBudget(p: ProductEntry, qty: string): boolean | null {
+    if (budgetNum === null) return null
+    const u = priceNum(defaultQuotePrice(p))
+    if (u === null) return null
+    return u * (parseFloat(qty) || 1) <= budgetNum
   }
 
   /** 切换某条需求下某个候选产品的勾选（多选） */
@@ -599,7 +612,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       .join('\n')
   }
 
-  /** 机械生成 Excel 报价单（秒出，不经过 AI） */
+  /** 机械生成报价单（秒出，不经过 AI）：填 Excel + 自动导出产品图 */
   async function handleGenerateQuoteXlsx(): Promise<void> {
     setBusy(true)
     try {
@@ -607,10 +620,13 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       const r = await window.api.sales.generateQuoteXlsx(
         cart.map((l) => ({ productId: l.product.id, 数量: l.数量, 单价: l.报价单价 })),
         quoteCustomer,
-        template && template.fileName.toLowerCase().endsWith('.xlsx') ? template.fileName : null
+        template && template.fileName.toLowerCase().endsWith('.xlsx') ? template.fileName : null,
+        quoteProject
       )
       flash(
-        `报价单已生成（${r.单号}${r.合计 !== null ? `，合计 ¥${r.合计.toLocaleString()}` : ''}）` +
+        `报价单已生成（${r.单号}${r.合计 !== null ? `，合计 ¥${r.合计.toLocaleString()}` : ''}` +
+          (r.导出图片 > 0 ? `，随附 ${r.导出图片} 张产品图` : '') +
+          `）` +
           (r.warnings.length > 0 ? ` ⚠ ${r.warnings[0]}` : '')
       )
       await window.api.shell.showItemInFolder(r.outPath)
@@ -620,35 +636,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     } finally {
       setBusy(false)
     }
-  }
-
-  async function handleGenerateQuotation(): Promise<void> {
-    const template = templates.find((t) => t.fileName === selectedTemplate) ?? null
-    const withImages = cart.filter((l) => l.product.图片)
-    let exported = 0
-    if (withImages.length > 0) {
-      const r = await window.api.sales.exportQuoteImages(
-        withImages.map((l) => l.product.id),
-        quoteCustomer
-      )
-      exported = r.exported
-      if (r.exported > 0) flash(`已导出 ${r.exported} 张产品图到报价目录的 图片/ 文件夹`)
-    }
-    setPendingPrompt(buildQuotationPrompt(cart, quoteCustomer, template, exported))
-  }
-
-  async function handleExportImagesOnly(): Promise<void> {
-    const withImages = cart.filter((l) => l.product.图片)
-    if (withImages.length === 0) {
-      flash('报价单里的产品都还没有关联图片')
-      return
-    }
-    const r = await window.api.sales.exportQuoteImages(
-      withImages.map((l) => l.product.id),
-      quoteCustomer
-    )
-    flash(`已导出 ${r.exported} 张产品图` + (r.missing.length > 0 ? `；缺图：${r.missing.join('、')}` : ''))
-    await window.api.shell.showItemInFolder(r.dir)
   }
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) ?? null
@@ -873,16 +860,27 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
 
                 <div className="min-w-0 flex-1">
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full min-w-[720px] text-xs">
+                <table
+                  className="table-fixed text-xs"
+                  style={{ width: PROD_COLS.reduce((s, c) => s + (colW[c.key] ?? 100), 0) }}
+                >
+                  <colgroup>
+                    {PROD_COLS.map((c) => (
+                      <col key={c.key} style={{ width: colW[c.key] ?? 100 }} />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr className="bg-slate-50 text-left text-slate-500">
-                      <th className="w-10 px-2 py-1.5 font-medium">图</th>
-                      <th className="px-2 py-1.5 font-medium">品牌 / 产品名称</th>
-                      <th className="w-24 px-2 py-1.5 font-medium">分类</th>
-                      <th className="px-2 py-1.5 font-medium">技术参数</th>
-                      <th className="w-20 px-2 py-1.5 font-medium">成本价</th>
-                      <th className="w-20 px-2 py-1.5 font-medium">建议售价</th>
-                      <th className="w-36 px-2 py-1.5 font-medium">操作</th>
+                      {PROD_COLS.map((c) => (
+                        <th key={c.key} className="relative select-none px-2 py-1.5 font-medium">
+                          {c.label}
+                          <span
+                            onMouseDown={(e) => startResize(c.key, e)}
+                            title="拖拽调整列宽"
+                            className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-jushi-accent/40"
+                          />
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -1032,6 +1030,20 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     placeholder="如 200000"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
                   />
+                  <label
+                    className={`mt-1.5 flex items-center gap-1.5 text-xs ${
+                      budgetNum === null ? 'text-slate-300' : 'cursor-pointer text-slate-500'
+                    }`}
+                    title="按候选的报价参考单价×本条数量与预算比对，只保留预算内的候选"
+                  >
+                    <input
+                      type="checkbox"
+                      disabled={budgetNum === null}
+                      checked={onlyInBudget}
+                      onChange={(e) => setOnlyInBudget(e.target.checked)}
+                    />
+                    只看预算内候选
+                  </label>
                   <div className="mt-2 flex flex-col gap-1.5">
                     <button
                       onClick={handleMatchNeeds}
@@ -1056,40 +1068,67 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   <div className="space-y-2">
                     {needMatches.map((m, mi) => (
                       <div key={mi} className="rounded-lg border border-slate-200 bg-white p-3">
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-700">{m.need}</span>
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">x{m.qty}</span>
-                          {m.candidates.length === 0 && (
-                            <span className="text-xs text-amber-600">产品库里没匹配到——换个关键词，或点「让分身推荐」</span>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          {m.candidates.map(({ product: p }) => {
-                            const chosen = m.chosenIds.includes(p.id)
-                            return (
-                              <label
-                                key={p.id}
-                                className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${
-                                  chosen ? 'border-jushi-accent bg-jushi-accent/5' : 'border-slate-200 hover:border-slate-300'
-                                }`}
-                              >
-                                <input type="checkbox" checked={chosen} onChange={() => toggleChosen(mi, p.id)} />
-                                <span className="font-medium text-slate-700">{p.产品名称}</span>
-                                <span className="text-slate-400">{[p.品牌, p.型号].filter(Boolean).join(' · ')}</span>
-                                <span className="ml-auto whitespace-nowrap text-slate-500">
-                                  报价参考 {defaultQuotePrice(p) || '—'}
-                                </span>
-                                <span className="whitespace-nowrap text-slate-400" title="进价，仅内部参考">
-                                  进价 {p.成本价 || '—'}
-                                </span>
-                                <span className="whitespace-nowrap text-slate-400">{p.供应商名称 || ''}</span>
-                              </label>
-                            )
-                          })}
-                          {m.candidates.length > 1 && (
-                            <p className="px-2 text-[11px] text-slate-400">可勾选多个（如同款多供应商都要报价），不勾则本条不加入</p>
-                          )}
-                        </div>
+                        {(() => {
+                          const shown = onlyInBudget
+                            ? m.candidates.filter(({ product }) => candidateInBudget(product, m.qty) !== false)
+                            : m.candidates
+                          const hidden = m.candidates.length - shown.length
+                          return (
+                            <>
+                              <div className="mb-1.5 flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-700">{m.need}</span>
+                                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">x{m.qty}</span>
+                                {m.candidates.length === 0 && (
+                                  <span className="text-xs text-amber-600">产品库里没匹配到——换个关键词，或点「让分身推荐」</span>
+                                )}
+                                {hidden > 0 && (
+                                  <span className="text-xs text-slate-400">已按预算隐藏 {hidden} 个超预算候选</span>
+                                )}
+                              </div>
+                              <div className="space-y-1">
+                                {shown.map(({ product: p }) => {
+                                  const chosen = m.chosenIds.includes(p.id)
+                                  const inBudget = candidateInBudget(p, m.qty)
+                                  return (
+                                    <label
+                                      key={p.id}
+                                      className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${
+                                        chosen ? 'border-jushi-accent bg-jushi-accent/5' : 'border-slate-200 hover:border-slate-300'
+                                      }`}
+                                    >
+                                      <input type="checkbox" checked={chosen} onChange={() => toggleChosen(mi, p.id)} />
+                                      <span className="font-medium text-slate-700">{p.产品名称}</span>
+                                      <span className="text-slate-400">{[p.品牌, p.型号].filter(Boolean).join(' · ')}</span>
+                                      {inBudget !== null && (
+                                        <span
+                                          className={`rounded px-1 py-0.5 text-[10px] ${
+                                            inBudget ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+                                          }`}
+                                          title="按报价参考单价×本条数量与采购预算比对"
+                                        >
+                                          {inBudget ? '预算内' : '超预算'}
+                                        </span>
+                                      )}
+                                      <span className="ml-auto whitespace-nowrap text-slate-500">
+                                        报价参考 {defaultQuotePrice(p) || '—'}
+                                      </span>
+                                      <span className="whitespace-nowrap text-slate-400" title="进价，仅内部参考">
+                                        进价 {p.成本价 || '—'}
+                                      </span>
+                                      <span className="whitespace-nowrap text-slate-400">{p.供应商名称 || ''}</span>
+                                    </label>
+                                  )
+                                })}
+                                {shown.length === 0 && m.candidates.length > 0 && (
+                                  <p className="px-2 text-[11px] text-amber-600">这条需求下没有预算内候选——放宽预算或取消「只看预算内」</p>
+                                )}
+                                {m.candidates.length > 1 && (
+                                  <p className="px-2 text-[11px] text-slate-400">可勾选多个（如同款多供应商都要报价），不勾则本条不加入</p>
+                                )}
+                              </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -1132,7 +1171,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
           {/* ============ 报价单 ============ */}
           {tab === '报价单' && (
             <>
-              <div className="mb-3 grid grid-cols-3 gap-2">
+              <div className="mb-3 grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-0.5 block text-xs text-slate-400">关联客户（可选，也可直接手填）</label>
                   <div className="flex gap-2">
@@ -1155,6 +1194,15 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
                     />
                   </div>
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-xs text-slate-400">项目名称（可选，会写进报价单抬头）</label>
+                  <input
+                    value={quoteProject}
+                    onChange={(e) => setQuoteProject(e.target.value)}
+                    placeholder="如 市公安局巡特警智能化装备采购"
+                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
+                  />
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-slate-400">报价模板（可选）</label>
@@ -1372,34 +1420,18 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     </div>
                   )}
                   <button
-                    disabled={cart.length === 0}
-                    onClick={handleExportImagesOnly}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                    title="把报价单里各产品的图片导出到报价产出目录的 图片/ 文件夹"
-                  >
-                    🖼️ 导出产品图片
-                  </button>
-                  <button
                     disabled={cart.length === 0 || busy}
                     onClick={handleGenerateQuoteXlsx}
-                    title="不经过 AI，秒出 Excel：选了 .xlsx 模板就往模板里填行（保留模板抬头/报价说明/落款），否则用内置标准版式；同时登记报价台账并自动关联同名客户"
+                    title="不经过 AI，秒出 Excel：选了 .xlsx 模板就往模板里填行（保留模板抬头/报价说明/落款），否则用内置标准版式；自动随附产品图、登记报价台账并关联同名客户"
                     className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
                   >
-                    ⚡ 生成报价单 Excel
-                  </button>
-                  <button
-                    disabled={cart.length === 0}
-                    onClick={handleGenerateQuotation}
-                    title="让 sales 分身写 markdown 版报价文件（可转 Word），适合需要话术包装或非 xlsx 模板的场景"
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                  >
-                    ✍️ AI 生成报价文件
+                    ⚡ 生成报价单
                   </button>
                 </div>
               </div>
               <p className="mt-2 text-xs text-slate-400">
-                报价单价默认取建议销售价（缺失时退投标报价/成本价，注意核对加价）。⚡Excel 版：品牌列只取产品的「品牌」字段；
-                成本价与供应商信息绝不会写进对外报价。每张 Excel 报价单自动登记进 销售/报价台账.json（进销存的单据源头）。
+                报价单价默认取建议销售价（缺失时退投标报价/成本价，注意核对加价）。品牌列只取产品的「品牌」字段，成本价与供应商信息绝不会写进对外报价。
+                内置版式会内嵌产品缩略图，并把原图导出到报价目录的 图片/ 子文件夹；每张报价单自动登记进 销售/报价台账.json（进销存的单据源头）。
               </p>
             </>
           )}

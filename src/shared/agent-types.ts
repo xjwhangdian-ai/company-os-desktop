@@ -385,6 +385,8 @@ export interface QuoteXlsxResult {
   单号: string
   /** 可计算时的合计金额（元），含非数字单价时为 null */
   合计: number | null
+  /** 随报价自动导出到 图片/ 子文件夹的产品图数量 */
+  导出图片: number
   /** 需人工注意的事项（缺品牌、模板没识别到某列等） */
   warnings: string[]
 }

@@ -353,8 +353,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   )
   ipcMain.handle(
     IPC.salesGenerateQuoteXlsx,
-    (_e, lines: QuoteLineInput[], customerName: string, templateFileName: string | null) =>
-      generateQuoteExcel(getDataDir(), lines, customerName, templateFileName)
+    (_e, lines: QuoteLineInput[], customerName: string, templateFileName: string | null, projectName: string) =>
+      generateQuoteExcel(getDataDir(), lines, customerName, templateFileName, projectName)
   )
 
   ipcMain.handle(IPC.salesListCustomers, () => listCustomers(getDataDir()))

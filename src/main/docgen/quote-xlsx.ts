@@ -25,6 +25,8 @@ export interface QuoteRow {
   数量原文: string
   单价: number | null
   单价原文: string
+  /** 产品图片绝对路径（jpg/png 才能内嵌进内置版式；空=无图/格式不支持） */
+  图片路径?: string
 }
 
 export interface QuoteXlsxOutput {
@@ -155,7 +157,8 @@ async function fillTemplate(
   templatePath: string,
   outPath: string,
   lines: QuoteRow[],
-  customerName: string
+  customerName: string,
+  projectName: string
 ): Promise<QuoteXlsxOutput> {
   const warnings: string[] = []
   const wb = new ExcelJS.Workbook()
@@ -226,7 +229,10 @@ async function fillTemplate(
     row.eachCell((cell) => {
       const t = cellText(cell.value)
       if (t.includes('{{')) {
-        cell.value = t.replace(/\{\{客户名称\}\}/g, customerName).replace(/\{\{日期\}\}/g, dateStr)
+        cell.value = t
+          .replace(/\{\{客户名称\}\}/g, customerName)
+          .replace(/\{\{日期\}\}/g, dateStr)
+          .replace(/\{\{项目名称\}\}/g, projectName)
       }
     })
   })
@@ -241,13 +247,28 @@ async function fillTemplate(
   return { 合计: total, warnings }
 }
 
+/** 图片扩展名 → exceljs 可内嵌的格式（heic/webp 等不支持则返回 null，跳过内嵌但仍导出到 图片/） */
+function embeddableExt(absPath: string): 'jpeg' | 'png' | 'gif' | null {
+  const e = absPath.split('.').pop()?.toLowerCase()
+  if (e === 'jpg' || e === 'jpeg') return 'jpeg'
+  if (e === 'png') return 'png'
+  if (e === 'gif') return 'gif'
+  return null
+}
+
 /** 路径二：内置标准版式（无模板时） */
-async function buildStandard(outPath: string, lines: QuoteRow[], customerName: string): Promise<QuoteXlsxOutput> {
+async function buildStandard(
+  outPath: string,
+  lines: QuoteRow[],
+  customerName: string,
+  projectName: string
+): Promise<QuoteXlsxOutput> {
   const warnings: string[] = []
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('报价单')
   const COLS = [
     { field: '序号', w: 6 },
+    { field: '图', w: 8 },
     { field: '产品名称', w: 20 },
     { field: '生产制造商', w: 14 },
     { field: '产地', w: 8 },
@@ -281,6 +302,9 @@ async function buildStandard(outPath: string, lines: QuoteRow[], customerName: s
     right: { style: 'thin' }
   }
 
+  const today = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+
   // 标题
   ws.mergeCells(1, 1, 2, COLS.length)
   const title = ws.getCell(1, 1)
@@ -288,18 +312,28 @@ async function buildStandard(outPath: string, lines: QuoteRow[], customerName: s
   title.font = { name: '微软雅黑', size: 16, bold: true }
   title.alignment = { horizontal: 'center', vertical: 'middle' }
 
+  // 项目名称行（有才写；顶到表头之前，整行居中）
+  let cursor = 3
+  if (projectName.trim()) {
+    ws.mergeCells(cursor, 1, cursor, COLS.length)
+    const pc = ws.getCell(cursor, 1)
+    pc.value = `项目名称：${projectName.trim()}`
+    pc.font = { name: '微软雅黑', size: 11, bold: true }
+    pc.alignment = { horizontal: 'center', vertical: 'middle' }
+    cursor++
+  }
+
   // 客户与日期行
-  const today = new Date()
-  const pad = (n: number): string => String(n).padStart(2, '0')
-  ws.mergeCells(3, 1, 3, Math.floor(COLS.length / 2))
-  ws.getCell(3, 1).value = `致：${customerName || '〔待确认——填客户单位全称〕'}`
-  ws.mergeCells(3, Math.floor(COLS.length / 2) + 1, 3, COLS.length)
-  const dateCell = ws.getCell(3, Math.floor(COLS.length / 2) + 1)
+  ws.mergeCells(cursor, 1, cursor, Math.floor(COLS.length / 2))
+  ws.getCell(cursor, 1).value = `致：${customerName || '〔待确认——填客户单位全称〕'}`
+  ws.mergeCells(cursor, Math.floor(COLS.length / 2) + 1, cursor, COLS.length)
+  const dateCell = ws.getCell(cursor, Math.floor(COLS.length / 2) + 1)
   dateCell.value = `报价日期：${today.getFullYear()}年${pad(today.getMonth() + 1)}月${pad(today.getDate())}日`
   dateCell.alignment = { horizontal: 'right' }
+  cursor++
 
   // 表头
-  const headerRow = 4
+  const headerRow = cursor
   const hr = ws.getRow(headerRow)
   COLS.forEach((c, i) => {
     const cell = hr.getCell(i + 1)
@@ -323,14 +357,29 @@ async function buildStandard(outPath: string, lines: QuoteRow[], customerName: s
     }
     row.getCell(colMap['单价']).numFmt = '#,##0.00'
     row.getCell(colMap['合价']).numFmt = '#,##0.00'
+    // 内嵌产品缩略图（jpg/png/gif 才能内嵌；行高调大以容纳）
+    const ext = line.图片路径 ? embeddableExt(line.图片路径) : null
+    if (line.图片路径 && ext) {
+      try {
+        const imgId = wb.addImage({ filename: line.图片路径, extension: ext })
+        ws.addImage(imgId, {
+          tl: { col: colMap['图'] - 1 + 0.12, row: r - 1 + 0.08 },
+          ext: { width: 40, height: 40 },
+          editAs: 'oneCell'
+        })
+        row.height = 34
+      } catch {
+        /* 图片读取失败不影响报价单生成 */
+      }
+    }
   })
 
   // 合计行
   const total = sumTotal(lines)
   const totalRowIdx = headerRow + 1 + lines.length
   const tr = ws.getRow(totalRowIdx)
-  tr.getCell(2).value = '合计(元)'
-  tr.getCell(2).font = { name: '微软雅黑', size: 10, bold: true }
+  tr.getCell(colMap['产品名称']).value = '合计(元)'
+  tr.getCell(colMap['产品名称']).font = { name: '微软雅黑', size: 10, bold: true }
   const L = colLetter(colMap['合价'])
   tr.getCell(colMap['合价']).value =
     total !== null
@@ -374,9 +423,10 @@ export async function generateQuoteXlsx(opts: {
   outPath: string
   lines: QuoteRow[]
   customerName: string
+  projectName: string
 }): Promise<QuoteXlsxOutput> {
   if (opts.lines.length === 0) throw new Error('报价单没有产品行')
   return opts.templatePath
-    ? fillTemplate(opts.templatePath, opts.outPath, opts.lines, opts.customerName)
-    : buildStandard(opts.outPath, opts.lines, opts.customerName)
+    ? fillTemplate(opts.templatePath, opts.outPath, opts.lines, opts.customerName, opts.projectName)
+    : buildStandard(opts.outPath, opts.lines, opts.customerName, opts.projectName)
 }

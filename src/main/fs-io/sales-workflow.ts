@@ -402,6 +402,7 @@ const QUOTE_LOG_REL = join('销售', '报价台账.json')
 interface QuoteLogEntry {
   单号: string
   客户: string
+  项目?: string
   条目数: number
   /** 含非数字单价时为 null */
   合计: number | null
@@ -444,13 +445,15 @@ export async function generateQuoteExcel(
   dataDir: string,
   lines: QuoteLineInput[],
   customerName: string,
-  templateFileName: string | null
+  templateFileName: string | null,
+  projectName = ''
 ): Promise<QuoteXlsxResult> {
   const db = readProductDb(dataDir)
   const rows: QuoteRow[] = []
   for (const l of lines) {
     const p = db.products.find((x) => x.id === l.productId)
     if (!p) continue
+    const imgAbs = p.图片 ? join(dataDir, p.图片) : ''
     rows.push({
       产品名称: p.产品名称,
       生产制造商: p.生产制造商,
@@ -466,7 +469,8 @@ export async function generateQuoteExcel(
       数量: parseNum(l.数量),
       数量原文: l.数量,
       单价: parseNum(l.单价),
-      单价原文: l.单价
+      单价原文: l.单价,
+      图片路径: imgAbs && existsSync(imgAbs) ? imgAbs : ''
     })
   }
   if (rows.length === 0) throw new Error('报价单里的产品在产品库里都不存在了，请刷新产品库')
@@ -489,11 +493,27 @@ export async function generateQuoteExcel(
   mkdirSync(dir, { recursive: true })
   const outPath = join(dir, `${date}_${customer}_报价单.xlsx`)
 
-  const { 合计, warnings } = await generateQuoteXlsx({ templatePath, outPath, lines: rows, customerName: customer })
+  const { 合计, warnings } = await generateQuoteXlsx({
+    templatePath,
+    outPath,
+    lines: rows,
+    customerName: customer,
+    projectName
+  })
+
+  // 随报价自动把产品图导出到同目录 图片/ 子文件夹（文件名=产品名称），不再需要手动点「导出图片」
+  const { exported: 导出图片 } = exportQuoteImages(dataDir, lines.map((l) => l.productId), customer)
 
   const logEntry = appendQuoteLog(
     dataDir,
-    { 客户: customer, 条目数: rows.length, 合计, 文件: relative(resolve(dataDir), resolve(outPath)), 时间: Date.now() },
+    {
+      客户: customer,
+      项目: projectName.trim() || undefined,
+      条目数: rows.length,
+      合计,
+      文件: relative(resolve(dataDir), resolve(outPath)),
+      时间: Date.now()
+    },
     dateCode
   )
 
@@ -501,7 +521,7 @@ export async function generateQuoteExcel(
   const matched = readCustomerDb(dataDir).customers.find((c) => c.客户名称 === customer)
   if (matched) linkCustomerFile(dataDir, matched.id, '报价文件', outPath)
 
-  return { outPath, dir, 单号: logEntry.单号, 合计, warnings }
+  return { outPath, dir, 单号: logEntry.单号, 合计, 导出图片, warnings }
 }
 
 export function listQuotationTemplates(dataDir: string): QuotationTemplate[] {
