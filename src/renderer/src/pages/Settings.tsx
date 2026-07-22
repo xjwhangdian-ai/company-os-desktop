@@ -34,7 +34,9 @@ export function Settings(): React.JSX.Element {
   const [savedHint, setSavedHint] = useState<string | null>(null)
 
   useEffect(() => {
-    if (config) setViewingId(config.activeProviderId)
+    // activeProviderId 可能指向本端不认识的供应商（如已下线的 minimax-intl、或主进程还没重启）
+    // ——回退到 anthropic 展示，避免设置页卡在"加载中"或白屏
+    if (config) setViewingId(config.providers[config.activeProviderId] ? config.activeProviderId : 'anthropic')
   }, [config?.activeProviderId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewingProvider = config?.providers[viewingId]
@@ -138,6 +140,9 @@ export function Settings(): React.JSX.Element {
         <div className="flex flex-wrap gap-2">
           {PROVIDER_ORDER.map((id) => {
             const p = config.providers[id]
+            // 主进程与渲染端版本可能短暂不一致（如更新后没完全重启、主进程还没补全新供应商）
+            // ——缺的供应商跳过不渲染，绝不让整个设置页崩成白屏
+            if (!p) return null
             const active = config.activeProviderId === id
             const viewing = viewingId === id
             return (
