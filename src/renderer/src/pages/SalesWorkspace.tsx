@@ -333,7 +333,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [paramDraft, setParamDraft] = useState('')
 
   const [customers, setCustomers] = useState<CustomerEntry[]>([])
-  const [customerFilter, setCustomerFilter] = useState<'全部' | CustomerStatus>('全部')
+  const [customerFilter, setCustomerFilter] = useState<'全部' | '待跟进' | CustomerStatus>('全部')
+  const [customerQuery, setCustomerQuery] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
   const [showCustomerForm, setShowCustomerForm] = useState(false)
   const [followUpInput, setFollowUpInput] = useState('')
@@ -660,7 +661,38 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   }
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) ?? null
-  const filteredCustomers = customers.filter((c) => customerFilter === '全部' || c.状态 === customerFilter)
+  const todayStr = fmtTime(Date.now())
+  const isDue = (c: CustomerEntry): boolean => !!c.下次跟进日期 && c.下次跟进日期 <= todayStr
+  /** 各状态客户数 + 待跟进数，用于过滤条上的角标 */
+  const customerCounts = useMemo(() => {
+    const m: Record<string, number> = { 待跟进: 0 }
+    for (const c of customers) {
+      m[c.状态] = (m[c.状态] ?? 0) + 1
+      if (isDue(c)) m.待跟进 += 1
+    }
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, todayStr])
+  const filteredCustomers = customers.filter((c) => {
+    if (customerFilter === '待跟进') {
+      if (!isDue(c)) return false
+    } else if (customerFilter !== '全部' && c.状态 !== customerFilter) {
+      return false
+    }
+    const q = customerQuery.trim().toLowerCase()
+    if (q) {
+      const hay = [
+        c.客户名称,
+        c.项目名称,
+        c.备注 ?? '',
+        ...c.联系人列表.flatMap((x) => [x.姓名, x.联系方式])
+      ]
+        .join(' ')
+        .toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
 
   function draftFollowUpPrompt(c: CustomerEntry): string {
     const contacts = c.联系人列表.map((x) => `${x.角色}${x.姓名}${x.联系方式 ? `(${x.联系方式})` : ''}`).join('、')
@@ -1489,18 +1521,13 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
           {/* ============ 客户（CRM） ============ */}
           {tab === '客户' && (
             <>
-              <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                {(['全部', ...CUSTOMER_STATUSES] as const).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setCustomerFilter(s as '全部' | CustomerStatus)}
-                    className={`rounded-full border px-2.5 py-1 text-xs ${
-                      customerFilter === s ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <input
+                  value={customerQuery}
+                  onChange={(e) => setCustomerQuery(e.target.value)}
+                  placeholder="搜客户 / 项目 / 联系人…"
+                  className="w-52 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-jushi-accent"
+                />
                 <button
                   onClick={() => {
                     setShowCustomerForm((v) => !v)
@@ -1510,6 +1537,33 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 >
                   ＋ 新客户
                 </button>
+              </div>
+              <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                <button
+                  onClick={() => setCustomerFilter('待跟进')}
+                  className={`rounded-full border px-2.5 py-1 text-xs ${
+                    customerFilter === '待跟进'
+                      ? 'border-amber-500 bg-amber-500 text-white'
+                      : customerCounts.待跟进 > 0
+                        ? 'border-amber-400 text-amber-600'
+                        : 'border-slate-300 text-slate-400'
+                  }`}
+                >
+                  🔔 待跟进{customerCounts.待跟进 > 0 ? ` ${customerCounts.待跟进}` : ''}
+                </button>
+                {(['全部', ...CUSTOMER_STATUSES] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setCustomerFilter(s as '全部' | CustomerStatus)}
+                    className={`rounded-full border px-2.5 py-1 text-xs ${
+                      customerFilter === s ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
+                    }`}
+                  >
+                    {s}
+                    {s !== '全部' && customerCounts[s] ? ` ${customerCounts[s]}` : ''}
+                    {s === '全部' ? ` ${customers.length}` : ''}
+                  </button>
+                ))}
               </div>
 
               {showCustomerForm && (
@@ -1537,6 +1591,20 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       <div className="flex items-center gap-2">
                         <span className="truncate text-sm font-medium text-slate-700">{c.客户名称}</span>
                         <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{c.状态}</span>
+                        {c.下次跟进日期 && (
+                          <span
+                            className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
+                              c.下次跟进日期 < todayStr
+                                ? 'bg-red-50 text-red-600'
+                                : c.下次跟进日期 === todayStr
+                                  ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-slate-50 text-slate-400'
+                            }`}
+                            title="下次跟进日期"
+                          >
+                            📅 {c.下次跟进日期 < todayStr ? '逾期 ' : c.下次跟进日期 === todayStr ? '今天' : c.下次跟进日期.slice(5)}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-0.5 truncate text-xs text-slate-400">
                         {c.项目名称 || '未填项目'} · {c.联系人列表[0] ? `${c.联系人列表[0].角色}${c.联系人列表[0].姓名}` : '未填联系人'} ·{' '}
@@ -1726,6 +1794,7 @@ function CustomerForm({
     招采网址: initial?.招采网址 ?? '',
     状态: initial?.状态 ?? '线索',
     联系人列表: initial?.联系人列表 ?? [],
+    下次跟进日期: initial?.下次跟进日期 ?? '',
     备注: initial?.备注 ?? ''
   })
   return (
@@ -1767,6 +1836,15 @@ function CustomerForm({
             value={form.招采网址}
             onChange={(e) => setForm((f) => ({ ...f, 招采网址: e.target.value }))}
             placeholder="https://…"
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
+          />
+        </div>
+        <div>
+          <label className="mb-0.5 block text-xs text-slate-400">下次跟进日期</label>
+          <input
+            type="date"
+            value={form.下次跟进日期 ?? ''}
+            onChange={(e) => setForm((f) => ({ ...f, 下次跟进日期: e.target.value }))}
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
           />
         </div>
@@ -1825,6 +1903,18 @@ function CustomerDetail({
   const [editing, setEditing] = useState(false)
   const quoteLinked = customer.关联文件.some((f) => f.类型 === '报价文件')
   const contractLinked = customer.关联文件.some((f) => f.类型 === '合同文件')
+  const todayStr = fmtTime(Date.now())
+  /** 从当前客户构造可保存字段（用于内联改"下次跟进日期"等，不进编辑态） */
+  const fieldsWith = (over: Partial<CustomerFields>): CustomerFields => ({
+    客户名称: customer.客户名称,
+    项目名称: customer.项目名称,
+    招采网址: customer.招采网址,
+    状态: customer.状态,
+    联系人列表: customer.联系人列表,
+    下次跟进日期: customer.下次跟进日期 ?? '',
+    备注: customer.备注 ?? '',
+    ...over
+  })
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
@@ -1859,6 +1949,23 @@ function CustomerDetail({
                 <a href={customer.招采网址} target="_blank" rel="noreferrer" className="text-jushi-accent hover:underline">
                   招采网址 ↗
                 </a>
+              </>
+            )}
+            {customer.下次跟进日期 && (
+              <>
+                {' · '}
+                <span
+                  className={
+                    customer.下次跟进日期 < todayStr
+                      ? 'text-red-600'
+                      : customer.下次跟进日期 === todayStr
+                        ? 'text-amber-600'
+                        : 'text-slate-500'
+                  }
+                >
+                  下次跟进 {customer.下次跟进日期}
+                  {customer.下次跟进日期 < todayStr ? '（已逾期）' : customer.下次跟进日期 === todayStr ? '（今天）' : ''}
+                </span>
               </>
             )}
           </p>
@@ -1946,6 +2053,24 @@ function CustomerDetail({
         <button onClick={onAddFollowUp} className="rounded-md border border-slate-300 px-2.5 text-xs text-slate-600 hover:bg-slate-50">
           记录
         </button>
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+        <span>下次跟进</span>
+        <input
+          type="date"
+          value={customer.下次跟进日期 ?? ''}
+          onChange={(e) => onSave(fieldsWith({ 下次跟进日期: e.target.value }))}
+          className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 outline-none focus:border-jushi-accent"
+        />
+        {customer.下次跟进日期 && (
+          <button
+            onClick={() => onSave(fieldsWith({ 下次跟进日期: '' }))}
+            className="text-slate-300 hover:text-red-500"
+            title="清除下次跟进日期"
+          >
+            清除
+          </button>
+        )}
       </div>
     </div>
   )

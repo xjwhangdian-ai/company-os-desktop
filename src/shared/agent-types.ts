@@ -358,6 +358,8 @@ export interface CustomerEntry {
   /** 已报价→关联报价文件；已成交→关联合同文件（不强制，UI 只做提示） */
   关联文件: LinkedFile[]
   备注?: string
+  /** 下次跟进日期 YYYY-MM-DD（空=未安排）；到期/逾期在客户列表里高亮提醒 */
+  下次跟进日期?: string
   跟进记录: FollowUpRecord[]
   更新时间: number
 }
