@@ -1,5 +1,4 @@
 import { app, shell, type BrowserWindow } from 'electron'
-import { getGithubToken } from '../config/store'
 import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -54,9 +53,8 @@ async function getRoutes(): Promise<{ name: string; f: typeof fetch }[]> {
 async function fetchAny(url: string, accept = 'application/vnd.github+json'): Promise<Response> {
   let lastErr: unknown = null
   let last: Response | null = null
-  const token = getGithubToken()
+  // 仓库已设为 Public：不再携带 GitHub Token（本机残留的过期 Token 反而会让公开端点返回 401）
   const headers: Record<string, string> = { 'User-Agent': UA, Accept: accept }
-  if (token) headers.Authorization = `Bearer ${token}`
   for (const r of await getRoutes()) {
     try {
       const resp = await r.f(url, { headers, redirect: 'follow' })
@@ -116,12 +114,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
   try {
     const resp = await fetchAny(API_RELEASES)
     if (!resp.ok) {
-      const hint =
-        resp.status === 404 || resp.status === 401 || resp.status === 403
-          ? getGithubToken()
-            ? '检查失败：Token 无效或无该仓库权限，请在设置页更新 GitHub Token'
-            : '仓库为私有——请管理员在「设置 → 关于与更新」里粘贴一枚只读 GitHub Token'
-          : `检查失败（GitHub 返回 ${resp.status}）`
+      const hint = `检查失败（GitHub 返回 ${resp.status}）——请确认网络可以访问 github.com`
       return { ...base, 说明: hint }
     }
     const list = (await resp.json()) as { tag_name?: string; body?: string; html_url?: string; assets?: GhAsset[]; draft?: boolean; prerelease?: boolean }[]
@@ -142,7 +135,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
       latest,
       notes,
       assetName: asset?.name ?? null,
-      assetUrl: (getGithubToken() ? asset?.url : asset?.browser_download_url) ?? null,
+      assetUrl: asset?.browser_download_url ?? null,
       assetSize: asset?.size ?? 0,
       releaseUrl: rel.html_url ?? base.releaseUrl,
       说明: hasUpdate ? `发现新版本 v${latest}（当前 v${current}）` : `已是最新版本（v${current}）`

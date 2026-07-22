@@ -39,6 +39,20 @@ const PROD_COLS: { key: string; label: string }[] = [
   { key: '操作', label: '操作' }
 ]
 
+/** 报价单表格列（与产品库同一套拖拽调宽机制；key 加 q 前缀与产品库列区分） */
+const QUOTE_COLS: { key: string; label: string; title?: string }[] = [
+  { key: 'q图', label: '图' },
+  { key: 'q名称', label: '产品名称' },
+  { key: 'q品牌', label: '品牌/供应商' },
+  { key: 'q数量', label: '数量' },
+  { key: 'q标准价', label: '标准价', title: '产品库建议销售价' },
+  { key: 'q折扣率', label: '折扣率', title: '报价单价÷标准价，改折扣率自动算单价' },
+  { key: 'q单价', label: '报价单价' },
+  { key: 'q成本', label: '成本参考' },
+  { key: 'q小计', label: '小计' },
+  { key: 'q操作', label: '' }
+]
+
 interface PreviewCard extends SupplierDocPreview {
   mode: UploadMode
 }
@@ -145,6 +159,24 @@ function searchScore(p: ProductEntry, tokens: string[]): number {
     total += s
   }
   return total
+}
+
+/** 产品分类支持最多 3 级，用 / 、＞ 、> 分隔（如「取证装备/移动取证/云台」）；没写分隔符就是 1 级 */
+function catParts(s: string): string[] {
+  const parts = (s || '未分类')
+    .split(/[/＞>]/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+  return parts.length > 0 ? parts : ['未分类']
+}
+
+interface CatNode {
+  name: string
+  /** 从根到本节点的完整路径（'/'.join），作为选中/展开的 key */
+  key: string
+  count: number
+  children: CatNode[]
 }
 
 /** 展示价：建议售价优先（对外口径），无价则空 */
@@ -292,7 +324,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [tab, setTab] = useState<SalesTab>('产品库')
   const [products, setProducts] = useState<ProductEntry[]>([])
   const [query, setQuery] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('全部')
+  const [categoryFilter, setCategoryFilter] = useState('全部') // '全部' 或分类路径 '一级/二级/三级'
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
   const [showCatNav, setShowCatNav] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [sortMode, setSortMode] = useState<SortMode>('默认排序')
@@ -316,7 +349,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [needMatches, setNeedMatches] = useState<NeedMatch[]>([])
   const [onlyInBudget, setOnlyInBudget] = useState(false)
 
-  // 产品库列宽（px，可拖拽调整）——键与表头列一一对应
+  // 产品库 + 报价单列宽（px，可拖拽调整）——键与表头列一一对应（报价单列带 q 前缀）
   const [colW, setColW] = useState<Record<string, number>>({
     图: 44,
     品牌: 84,
@@ -326,7 +359,17 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     参数: 300,
     成本价: 80,
     建议售价: 80,
-    操作: 150
+    操作: 150,
+    q图: 44,
+    q名称: 176,
+    q品牌: 120,
+    q数量: 60,
+    q标准价: 84,
+    q折扣率: 70,
+    q单价: 96,
+    q成本: 72,
+    q小计: 84,
+    q操作: 48
   })
   // 技术参数内联编辑
   const [editingParamId, setEditingParamId] = useState<string | null>(null)
@@ -400,14 +443,29 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
-  /** 分类导航（SPS 式左侧栏）：分类 → 数量，按数量排序，未填分类的归"未分类" */
-  const categoryNav = useMemo(() => {
-    const counts = new Map<string, number>()
+  /** 分类导航树（支持 1/2/3 级，分类字段用 / 分隔）：每级 名称→数量，按数量排序 */
+  const categoryTree = useMemo(() => {
+    const root: CatNode[] = []
     for (const p of products) {
-      const c = p.产品分类 || '未分类'
-      counts.set(c, (counts.get(c) ?? 0) + 1)
+      let list = root
+      const acc: string[] = []
+      for (const part of catParts(p.产品分类)) {
+        acc.push(part)
+        let node = list.find((n) => n.name === part)
+        if (!node) {
+          node = { name: part, key: acc.join('/'), count: 0, children: [] }
+          list.push(node)
+        }
+        node.count++
+        list = node.children
+      }
     }
-    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
+    const sortRec = (l: CatNode[]): void => {
+      l.sort((a, b) => b.count - a.count)
+      l.forEach((n) => sortRec(n.children))
+    }
+    sortRec(root)
+    return root
   }, [products])
 
   const filteredProducts = useMemo(() => {
@@ -415,8 +473,13 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     const min = priceNum(priceMin)
     const max = priceNum(priceMax)
     const scored: { p: ProductEntry; score: number }[] = []
+    const selectedCatParts = categoryFilter === '全部' ? null : categoryFilter.split('/')
     for (const p of products) {
-      if (categoryFilter !== '全部' && (p.产品分类 || '未分类') !== categoryFilter) continue
+      if (selectedCatParts) {
+        // 选中某级分类 = 该级及其所有子级都算命中（按路径前缀匹配）
+        const parts = catParts(p.产品分类)
+        if (!selectedCatParts.every((s, idx) => parts[idx] === s)) continue
+      }
       if (min !== null || max !== null) {
         // 价格筛选按对外口径（建议售价→投标价），都没填价的产品在价格筛选下隐藏
         const price = priceNum(displayPrice(p))
@@ -888,18 +951,55 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       <span>全部产品</span>
                       <span className="text-slate-400">{products.length}</span>
                     </button>
-                    {categoryNav.map(([cat, count]) => (
-                      <button
-                        key={cat}
-                        onClick={() => setCategoryFilter(cat)}
-                        className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs ${
-                          categoryFilter === cat ? 'bg-jushi-accent/10 font-medium text-jushi-accent' : 'text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="truncate">{cat}</span>
-                        <span className="ml-1 shrink-0 text-slate-400">{count}</span>
-                      </button>
-                    ))}
+                    {(function renderCats(nodes: CatNode[], depth: number): React.JSX.Element[] {
+                      return nodes.map((n) => {
+                        const open = expandedCats.has(n.key) || categoryFilter.startsWith(n.key)
+                        return (
+                          <Fragment key={n.key}>
+                            <div
+                              className={`flex w-full cursor-pointer items-center justify-between rounded-md py-1.5 pr-2.5 text-left text-xs ${
+                                categoryFilter === n.key
+                                  ? 'bg-jushi-accent/10 font-medium text-jushi-accent'
+                                  : 'text-slate-600 hover:bg-slate-50'
+                              }`}
+                              style={{ paddingLeft: 10 + depth * 14 }}
+                              onClick={() => {
+                                setCategoryFilter(n.key)
+                                if (n.children.length > 0)
+                                  setExpandedCats((prev) => {
+                                    const next = new Set(prev)
+                                    next.add(n.key)
+                                    return next
+                                  })
+                              }}
+                            >
+                              <span className="flex min-w-0 items-center gap-0.5">
+                                {n.children.length > 0 && (
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setExpandedCats((prev) => {
+                                        const next = new Set(prev)
+                                        if (next.has(n.key)) next.delete(n.key)
+                                        else next.add(n.key)
+                                        return next
+                                      })
+                                    }}
+                                    className="shrink-0 text-slate-400 hover:text-jushi-accent"
+                                    title={open ? '收起子分类' : '展开子分类'}
+                                  >
+                                    {open ? '▾' : '▸'}
+                                  </span>
+                                )}
+                                <span className="truncate">{n.name}</span>
+                              </span>
+                              <span className="ml-1 shrink-0 text-slate-400">{n.count}</span>
+                            </div>
+                            {open && n.children.length > 0 && renderCats(n.children, depth + 1)}
+                          </Fragment>
+                        )
+                      })
+                    })(categoryTree, 0)}
                   </div>
                 ) : (
                   <button
@@ -1328,19 +1428,27 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               </div>
 
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full min-w-[760px] text-xs">
+                <table
+                  className="table-fixed text-xs"
+                  style={{ width: QUOTE_COLS.reduce((s, c) => s + (colW[c.key] ?? 100), 0) }}
+                >
+                  <colgroup>
+                    {QUOTE_COLS.map((c) => (
+                      <col key={c.key} style={{ width: colW[c.key] ?? 100 }} />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr className="bg-slate-50 text-left text-slate-500">
-                      <th className="w-10 px-2 py-1.5 font-medium">图</th>
-                      <th className="px-2 py-1.5 font-medium">产品名称</th>
-                      <th className="px-2 py-1.5 font-medium">品牌/供应商</th>
-                      <th className="w-14 px-2 py-1.5 font-medium">数量</th>
-                      <th className="w-20 px-2 py-1.5 font-medium" title="产品库建议销售价">标准价</th>
-                      <th className="w-16 px-2 py-1.5 font-medium" title="报价单价÷标准价，改折扣率自动算单价">折扣率</th>
-                      <th className="w-24 px-2 py-1.5 font-medium">报价单价</th>
-                      <th className="w-16 px-2 py-1.5 font-medium">成本参考</th>
-                      <th className="w-20 px-2 py-1.5 font-medium">小计</th>
-                      <th className="w-12 px-2 py-1.5 font-medium"></th>
+                      {QUOTE_COLS.map((c) => (
+                        <th key={c.key} title={c.title} className="relative select-none px-2 py-1.5 font-medium">
+                          {c.label}
+                          <span
+                            onMouseDown={(e) => startResize(c.key, e)}
+                            title="拖拽调整列宽"
+                            className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-jushi-accent/40"
+                          />
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>

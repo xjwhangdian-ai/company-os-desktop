@@ -5,11 +5,11 @@ import type { ModelMapping, ProviderId } from '@shared/agent-types'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
-const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'deepseek', 'minimax-intl', 'minimax-cn', 'qwen', 'zhipu', 'custom']
+const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'deepseek', 'kimi', 'minimax-cn', 'qwen', 'zhipu', 'custom']
 
 const PROVIDER_DOCS: Partial<Record<ProviderId, { label: string; url: string }>> = {
   deepseek: { label: 'DeepSeek · Claude Code 接入文档', url: 'https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code' },
-  'minimax-intl': { label: 'MiniMax · Claude Code 接入文档', url: 'https://platform.minimax.io/docs/token-plan/claude-code' },
+  kimi: { label: 'Moonshot 开放平台 · Claude Code 接入文档', url: 'https://platform.moonshot.cn/docs/guide/agent-support' },
   'minimax-cn': { label: 'MiniMax · Claude Code 接入文档', url: 'https://platform.minimax.io/docs/token-plan/claude-code' },
   qwen: { label: '阿里云百炼 · Claude Code 接入文档', url: 'https://www.alibabacloud.com/help/en/model-studio/claude-code' },
   zhipu: { label: '智谱开放平台 · Claude Code 接入文档', url: 'https://docs.bigmodel.cn/cn/guide/develop/claude' }
@@ -17,8 +17,7 @@ const PROVIDER_DOCS: Partial<Record<ProviderId, { label: string; url: string }>>
 
 const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
   deepseek: 'DeepSeek 目前只有两档：deepseek-v4-pro（旗舰）/ deepseek-v4-flash（性价比档，sonnet 和 haiku 都用它）。旧别名 deepseek-chat/deepseek-reasoner 将于 2026-07-24 停用，不要用。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
-  'minimax-intl':
-    '已按 2026-07 官方文档预填：MiniMax-M3（旗舰，原生多模态，能看图/视频，适合 brand 这类要理解素材的分身）/ MiniMax-M2.7（主力档）/ MiniMax-M2（最便宜档）。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
+  kimi: '月之暗面官方提供 Anthropic 协议兼容端点（Kimi 接 Claude Code 的官方方式），国内 Base URL 已预填 api.moonshot.cn/anthropic（国际版账号改 api.moonshot.ai）。模型按 K2 系列预填：kimi-k2-thinking-turbo（旗舰推理档）/ kimi-k2-turbo-preview（高速主力档）。Kimi 迭代快，用之前点右侧文档核对最新模型名。',
   'minimax-cn':
     '已按 2026-07 官方文档预填：MiniMax-M3（旗舰，原生多模态）/ MiniMax-M2.7（主力档）/ MiniMax-M2（最便宜档）。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
   qwen: '已按 2026-07 官方文档预填模型名：qwen3.7-max（旗舰）/ qwen3.7-plus（主力档）/ qwen3.6-flash（最便宜档）。Base URL 没有唯一默认值——阿里云这个端点按地区/套餐分裂成好几种，常见几种：国内 PAYG「https://dashscope.aliyuncs.com/apps/anthropic」、国际 PAYG「https://dashscope-intl.aliyuncs.com/apps/anthropic」、Coding Plan「https://coding-intl.dashscope.aliyuncs.com/apps/anthropic」——对着自己开通的套餐选，不确定就点右侧文档核实。',
@@ -244,7 +243,6 @@ function AboutSection({ onFlash }: { onFlash: (t: string) => void }): React.JSX.
   const [downloading, setDownloading] = useState(false)
   const [pct, setPct] = useState<number | null>(null)
   const [tokenSet, setTokenSet] = useState(false)
-  const [tokenInput, setTokenInput] = useState('')
 
   useEffect(() => {
     window.api.update.getTokenSet().then(setTokenSet)
@@ -313,35 +311,11 @@ function AboutSection({ onFlash }: { onFlash: (t: string) => void }): React.JSX.
           自动对比 GitHub Releases；启动 8 秒后也会静默检查一次，有新版在窗口顶部提示。
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
-        <span className="text-xs text-slate-500">
-          GitHub Token{' '}
-          {tokenSet ? (
-            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">已配置</span>
-          ) : (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-400">未配置</span>
-          )}
-        </span>
-        <input
-          type="password"
-          value={tokenInput}
-          onChange={(e) => setTokenInput(e.target.value)}
-          placeholder="ghp_… / github_pat_…（仓库为私有时必填）"
-          className="w-64 rounded-md border border-slate-300 px-2 py-1 font-mono text-xs outline-none focus:border-jushi-accent"
-        />
-        <button
-          disabled={!tokenInput.trim()}
-          onClick={async () => {
-            await window.api.update.setToken(tokenInput.trim())
-            setTokenInput('')
-            setTokenSet(true)
-            onFlash('Token 已保存（只存本机配置，不进数据仓库）')
-          }}
-          className="rounded-md border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-40"
-        >
-          保存
-        </button>
-        {tokenSet && (
+      {tokenSet && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <span className="text-xs text-slate-500">
+            GitHub Token <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">已配置</span>
+          </span>
           <button
             onClick={async () => {
               await window.api.update.setToken(null)
@@ -352,12 +326,11 @@ function AboutSection({ onFlash }: { onFlash: (t: string) => void }): React.JSX.
           >
             清除
           </button>
-        )}
-        <span className="w-full text-[11px] leading-snug text-slate-400">
-          App 仓库目前是私有的，检查/下载更新需要一枚只读 Token：GitHub → Settings → Developer settings → Fine-grained
-          tokens，仓库选 company-os-desktop、权限只勾 Contents: Read。每台电脑配一次；若日后把仓库设为 Public 则无需配置。
-        </span>
-      </div>
+          <span className="w-full text-[11px] leading-snug text-slate-400">
+            App 仓库已设为 Public，检查/下载更新不再需要 Token——之前配置的 Token 可以清除（保留也不影响）。
+          </span>
+        </div>
+      )}
     </section>
   )
 }

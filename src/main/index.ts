@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
 import { getConfig } from './config/store'
+import { ensureDefaultDataDir } from './config/first-run'
 
 // appfile://：给渲染进程安全加载数据目录内的本地图片（产品图缩略图等）。
 // 开发模式页面是 http://localhost，直接 <img src="file://..."> 会被 Chromium 拦，
@@ -61,6 +62,8 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  ensureDefaultDataDir()
 
   registerIpcHandlers(() => mainWindow)
 

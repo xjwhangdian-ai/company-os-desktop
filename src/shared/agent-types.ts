@@ -439,7 +439,7 @@ export interface SupplierDocPreview {
  * 'custom' 是通用逃生舱：任何其它自建/自托管的 Anthropic 协议兼容端点（如
  * claude-code-router）都能通过这个槽位接入，不用为每个新供应商改代码。
  */
-export type ProviderId = 'anthropic' | 'deepseek' | 'minimax-intl' | 'minimax-cn' | 'qwen' | 'zhipu' | 'custom'
+export type ProviderId = 'anthropic' | 'deepseek' | 'kimi' | 'minimax-cn' | 'qwen' | 'zhipu' | 'custom'
 
 export interface ModelMapping {
   opus: string

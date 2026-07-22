@@ -27,6 +27,7 @@ export default function App(): React.JSX.Element {
   const logout = useIdentityStore((s) => s.logout)
   const [view, setView] = useState<View>('settings')
   const [gateKey, setGateKey] = useState(0)
+  const [navCollapsed, setNavCollapsed] = useState(false)
   /** "配置就绪后自动离开设置页"只在启动时做一次——否则配置好之后每次点「设置」都会被立刻弹回分身页 */
   const autoLeftSettings = useRef(false)
 
@@ -100,6 +101,7 @@ export default function App(): React.JSX.Element {
     <div className="flex h-screen flex-col bg-slate-100 text-slate-900">
       <UpdateBanner />
       <div className="flex min-h-0 flex-1">
+      {!navCollapsed ? (
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-100 p-3">
         {/* app-drag：无标题栏窗口靠这块区域拖动；pt-7 给 macOS 红绿灯让位，避免压住公司名 */}
         <div className="app-drag mb-4 flex items-center gap-2.5 px-2 pb-1 pt-7">
@@ -113,10 +115,17 @@ export default function App(): React.JSX.Element {
               <circle cx="43" cy="46" r="3.4" fill="#1D5AF1" />
             </g>
           </svg>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-bold text-jushi-blue">{activeCompany?.name ?? 'Agent 工作台'}</h1>
             <p className="text-xs text-slate-400">Agent 工作台</p>
           </div>
+          <button
+            onClick={() => setNavCollapsed(true)}
+            title="隐藏左侧菜单栏"
+            className="app-no-drag shrink-0 rounded-md px-1.5 py-1 text-slate-400 hover:bg-white/70 hover:text-jushi-accent"
+          >
+            «
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -155,6 +164,19 @@ export default function App(): React.JSX.Element {
           </button>
         )}
       </aside>
+      ) : (
+      /* 收起态：留一条窄栏（顶部仍可拖动窗口/容纳 macOS 红绿灯），点 » 重新展开 */
+      <aside className="flex w-8 shrink-0 flex-col items-center border-r border-slate-200 bg-slate-100">
+        <div className="app-drag h-9 w-full" />
+        <button
+          onClick={() => setNavCollapsed(false)}
+          title="显示左侧菜单栏"
+          className="app-no-drag mt-1 rounded-md px-1.5 py-1.5 text-slate-400 hover:bg-white/70 hover:text-jushi-accent"
+        >
+          »
+        </button>
+      </aside>
+      )}
 
       <main className="flex-1 overflow-hidden bg-white">
         {view === 'settings' && isAdmin && <Settings />}

@@ -47,15 +47,17 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
       haiku: 'deepseek-v4-flash'
     }
   },
-  'minimax-intl': {
-    id: 'minimax-intl',
-    label: 'MiniMax（国际版）',
-    baseUrl: 'https://api.minimax.io/anthropic',
+  kimi: {
+    id: 'kimi',
+    label: 'Kimi（月之暗面）',
+    // 月之暗面官方提供 Anthropic 协议兼容端点（Kimi 接入 Claude Code 的官方方式），
+    // 国内平台域名 api.moonshot.cn；如用国际版账号则改为 api.moonshot.ai。
+    baseUrl: 'https://api.moonshot.cn/anthropic',
     authEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     apiKey: null,
-    // M3 是最新旗舰（原生多模态，支持看图/视频，适合 brand 这类需要理解素材的场景）；
-    // M2.7 是主力档（纯文本+工具调用，性价比最好）；M2 是最便宜档。
-    modelMapping: { opus: 'MiniMax-M3', sonnet: 'MiniMax-M2.7', haiku: 'MiniMax-M2' }
+    // 按 2026 年初 Kimi K2 系列口径预填：k2-thinking-turbo 旗舰推理档 / k2-turbo-preview 高速主力档。
+    // Kimi 迭代快，用前对着 platform.moonshot.cn 文档核对最新模型名。
+    modelMapping: { opus: 'kimi-k2-thinking-turbo', sonnet: 'kimi-k2-turbo-preview', haiku: 'kimi-k2-turbo-preview' }
   },
   'minimax-cn': {
     id: 'minimax-cn',
@@ -63,6 +65,7 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
     baseUrl: 'https://api.minimaxi.com/anthropic',
     authEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     apiKey: null,
+    // M3 是最新旗舰（原生多模态）；M2.7 主力档（性价比最好）；M2 最便宜档。
     modelMapping: { opus: 'MiniMax-M3', sonnet: 'MiniMax-M2.7', haiku: 'MiniMax-M2' }
   },
   qwen: {
@@ -202,12 +205,38 @@ function migrateV2ToV3(v2: StoreSchemaV2): StoreSchemaV3 {
  * 改回来也就一分钟的事。
  */
 function migrateV3ToV4(v3: StoreSchemaV3): StoreSchemaV4 {
-  const REFRESH_IDS: ProviderId[] = ['deepseek', 'minimax-intl', 'minimax-cn', 'qwen']
+  const REFRESH_IDS: ProviderId[] = ['deepseek', 'minimax-cn', 'qwen']
   const providers = { ...v3.providers }
   for (const id of REFRESH_IDS) {
     providers[id] = { ...providers[id], modelMapping: DEFAULT_PROVIDERS[id].modelMapping }
   }
   return { ...v3, version: 4, providers }
+}
+
+/**
+ * 供应商列表就地收敛（2026-07）：MiniMax 国际版下线（保留中国版），新增 Kimi。
+ * 老配置里残留的 minimax-intl 条目删除；正在用它的自动切到 minimax-cn；缺 kimi 的补默认值。
+ */
+function reconcileProviders(schema: StoreSchemaV4): { schema: StoreSchemaV4; changed: boolean } {
+  const providers = { ...schema.providers } as Record<string, ProviderConfig>
+  let changed = false
+  if (providers['minimax-intl']) {
+    delete providers['minimax-intl']
+    changed = true
+  }
+  for (const id of Object.keys(DEFAULT_PROVIDERS) as ProviderId[]) {
+    if (!providers[id]) {
+      providers[id] = structuredClone(DEFAULT_PROVIDERS[id])
+      changed = true
+    }
+  }
+  let activeProviderId = schema.activeProviderId
+  if ((activeProviderId as string) === 'minimax-intl') {
+    activeProviderId = 'minimax-cn'
+    changed = true
+  }
+  if (!changed) return { schema, changed: false }
+  return { schema: { ...schema, providers: providers as Record<ProviderId, ProviderConfig>, activeProviderId }, changed: true }
 }
 
 const DEFAULTS: StoreSchemaV4 = {
@@ -265,8 +294,9 @@ function readAll(): StoreSchemaV4 {
       schema = { ...structuredClone(DEFAULTS), ...raw, providers }
     }
     const { schema: single, changed } = collapseToSingleCompany(schema)
-    if (migrated || changed) writeAll(single)
-    return single
+    const { schema: final, changed: provChanged } = reconcileProviders(single)
+    if (migrated || changed || provChanged) writeAll(final)
+    return final
   } catch {
     return structuredClone(DEFAULTS)
   }
