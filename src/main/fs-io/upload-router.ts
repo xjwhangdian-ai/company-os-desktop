@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import type { AgentName, BiddingUploadResult } from '@shared/agent-types'
 import { AGENT_OUTPUT_FOLDER } from './outputs-scanner'
@@ -261,4 +261,85 @@ export function uploadToSalesTemplate(dataDir: string, sourcePath: string): { ab
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
   return { absPath: dest, relativePath: `销售/_模板/报价模板/${basename(dest)}` }
+}
+
+// ============ 运营（风格模板 + 最近文章）============
+
+const OPERATION_TEMPLATE_REL = join('inbox', '05_运营_operation', '_风格模板')
+const TEMPLATE_DOC_EXTS = ['html', 'htm', 'md']
+const TEMPLATE_IMG_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+
+export interface OperationTemplateEntry {
+  fileName: string
+  relativePath: string
+  /** 模板=html/md 文档；图片=风格参考图 */
+  kind: '模板' | '图片'
+  mtime: number
+}
+
+/** 运营专属：风格模板（html/md）与模板参考图上传到 inbox/05_运营_operation/_风格模板/ */
+export function uploadOperationTemplate(dataDir: string, sourcePath: string): { absPath: string; relativePath: string } {
+  const destDir = join(dataDir, OPERATION_TEMPLATE_REL)
+  const dest = uniqueDestPath(destDir, basename(sourcePath))
+  copyFileSync(sourcePath, dest)
+  return { absPath: dest, relativePath: `inbox/05_运营_operation/_风格模板/${basename(dest)}` }
+}
+
+export function listOperationTemplates(dataDir: string): OperationTemplateEntry[] {
+  const dir = join(dataDir, OPERATION_TEMPLATE_REL)
+  if (!existsSync(dir)) return []
+  const out: OperationTemplateEntry[] = []
+  for (const name of readdirSync(dir)) {
+    if (name.startsWith('.')) continue
+    const ext = name.split('.').pop()?.toLowerCase() ?? ''
+    const kind = TEMPLATE_DOC_EXTS.includes(ext) ? '模板' : TEMPLATE_IMG_EXTS.includes(ext) ? '图片' : null
+    if (!kind) continue
+    out.push({
+      fileName: name,
+      relativePath: `inbox/05_运营_operation/_风格模板/${name}`,
+      kind,
+      mtime: statSync(join(dir, name)).mtimeMs
+    })
+  }
+  return out.sort((a, b) => b.mtime - a.mtime)
+}
+
+export interface RecentArticleEntry {
+  fileName: string
+  /** 相对数据目录 */
+  relativePath: string
+  absPath: string
+  /** 所在项目/主题子文件夹名（直接放根目录的为空串） */
+  folder: string
+  mtime: number
+}
+
+/** 运营专属：outputs/05_运营_operation 下最近生成的推广文章（.md/.html，按修改时间倒序取前 N 条） */
+export function listRecentOperationArticles(dataDir: string, limit = 10): RecentArticleEntry[] {
+  const root = join(dataDir, 'outputs', '05_运营_operation')
+  if (!existsSync(root)) return []
+  const out: RecentArticleEntry[] = []
+  const walk = (dir: string, rel: string, depth: number): void => {
+    for (const name of readdirSync(dir)) {
+      if (name.startsWith('.')) continue
+      const abs = join(dir, name)
+      const st = statSync(abs)
+      if (st.isDirectory()) {
+        if (depth < 3) walk(abs, rel ? `${rel}/${name}` : name, depth + 1)
+        continue
+      }
+      const ext = name.split('.').pop()?.toLowerCase() ?? ''
+      if (ext !== 'md' && ext !== 'html') continue
+      // 排版产物（_公众号排版.html）也算"生成记录"，一并列出便于直接打开复制
+      out.push({
+        fileName: name,
+        relativePath: `outputs/05_运营_operation${rel ? '/' + rel : ''}/${name}`,
+        absPath: abs,
+        folder: rel,
+        mtime: st.mtimeMs
+      })
+    }
+  }
+  walk(root, '', 0)
+  return out.sort((a, b) => b.mtime - a.mtime).slice(0, limit)
 }

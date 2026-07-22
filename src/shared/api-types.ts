@@ -104,6 +104,11 @@ export interface CompanyOsApi {
   operation: {
     /** 读 {主题}/_配图识别.json（分身看图后写的），把图片重命名为 {主题}_序号_描述.ext 并生成 配图清单.md */
     applyImageNames(theme: string): Promise<{ renamed: number; listRelative: string; total: number }>
+    /** 风格模板（html/md）与模板参考图上传到 inbox/05_运营_operation/_风格模板/ */
+    uploadTemplate(sourcePath: string): Promise<UploadResult>
+    listTemplates(): Promise<{ fileName: string; relativePath: string; kind: '模板' | '图片'; mtime: number }[]>
+    /** outputs/05_运营_operation 下最近生成的推广文章（md/html，修改时间倒序前 10 条） */
+    recentArticles(): Promise<{ fileName: string; relativePath: string; absPath: string; folder: string; mtime: number }[]>
   }
   outputs: {
     scan(agentName: AgentName): Promise<OutputEntry[]>

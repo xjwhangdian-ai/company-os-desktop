@@ -34,6 +34,9 @@ import {
   uploadToMaterialLibrary,
   uploadToOperationTheme,
   applyOperationImageNames,
+  listOperationTemplates,
+  listRecentOperationArticles,
+  uploadOperationTemplate,
   uploadToSalesRawDoc,
   uploadToSalesTemplate
 } from '../fs-io/upload-router'
@@ -191,6 +194,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.uploadOperationTheme, (_e, theme: string, sourcePath: string) =>
     uploadToOperationTheme(getDataDir(), theme, sourcePath)
   )
+  ipcMain.handle(IPC.operationUploadTemplate, (_e, sourcePath: string) =>
+    uploadOperationTemplate(getDataDir(), sourcePath)
+  )
+  ipcMain.handle(IPC.operationListTemplates, () => listOperationTemplates(getDataDir()))
+  ipcMain.handle(IPC.operationRecentArticles, () => listRecentOperationArticles(getDataDir(), 10))
   ipcMain.handle(IPC.operationApplyImageNames, (_e, theme: string) =>
     applyOperationImageNames(getDataDir(), theme)
   )

@@ -65,7 +65,11 @@ const api: CompanyOsApi = {
   },
   operation: {
     applyImageNames: (theme: string): Promise<{ renamed: number; listRelative: string; total: number }> =>
-      ipcRenderer.invoke(IPC.operationApplyImageNames, theme)
+      ipcRenderer.invoke(IPC.operationApplyImageNames, theme),
+    uploadTemplate: (sourcePath: string): Promise<UploadResult> =>
+      ipcRenderer.invoke(IPC.operationUploadTemplate, sourcePath),
+    listTemplates: () => ipcRenderer.invoke(IPC.operationListTemplates),
+    recentArticles: () => ipcRenderer.invoke(IPC.operationRecentArticles)
   },
   outputs: {
     scan: (agentName: AgentName) => ipcRenderer.invoke(IPC.outputsScan, agentName)

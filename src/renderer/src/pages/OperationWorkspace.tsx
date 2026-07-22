@@ -31,6 +31,15 @@ function attachmentIcon(fileName: string): string {
   return '📎'
 }
 
+type TemplateEntry = { fileName: string; relativePath: string; kind: '模板' | '图片'; mtime: number }
+type RecentArticle = { fileName: string; relativePath: string; absPath: string; folder: string; mtime: number }
+
+function fmtDay(ms: number): string {
+  const d = new Date(ms)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const [platform, setPlatform] = useState<Platform>('小红书')
   const [theme, setTheme] = useState('')
@@ -41,10 +50,38 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   const [showChat, setShowChat] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<TemplateEntry[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState('')
+  const [recent, setRecent] = useState<RecentArticle[]>([])
+  const [showRecent, setShowRecent] = useState(false)
 
   function flash(t: string): void {
     setNotice(t)
     setTimeout(() => setNotice(null), 6000)
+  }
+
+  async function refreshTemplates(): Promise<void> {
+    setTemplates(await window.api.operation.listTemplates())
+  }
+  async function refreshRecent(): Promise<void> {
+    setRecent(await window.api.operation.recentArticles())
+  }
+  useEffect(() => {
+    refreshTemplates()
+    refreshRecent()
+  }, [refreshKey])
+
+  async function handleUploadTemplate(filters: FileFilter[]): Promise<void> {
+    const paths = await window.api.dialog.pickFiles(filters)
+    for (const p of paths) {
+      const r = await window.api.operation.uploadTemplate(p)
+      const name = r.relativePath.split('/').pop() ?? ''
+      if (/\.(html?|md)$/i.test(name)) setSelectedTemplate(name)
+    }
+    if (paths.length > 0) {
+      await refreshTemplates()
+      flash(`已上传 ${paths.length} 个风格模板文件到 inbox/05_运营_operation/_风格模板/`)
+    }
   }
 
   /** 素材上传：填了主题就落主题文件夹并顺序改名，否则退回通用 inbox */
@@ -94,7 +131,17 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
     const themeLine = t
       ? `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_公众号/（先建子文件夹）。配图在 inbox/05_运营_operation/${t}/，若有 配图清单.md 先读它选图；插入每张图前用 Read 复核画面，图注严格对应画面内容，绝不张冠李戴。`
       : ''
-    setInjectedPrompt(PLATFORM_PROMPTS[platform] + themeLine)
+    const tplImages = templates.filter((x) => x.kind === '图片')
+    const templateLine = selectedTemplate
+      ? `\n风格模板：先用 Read 读 inbox/05_运营_operation/_风格模板/${selectedTemplate}，仿照它的结构/语气/段落节奏组织本篇（内容仍以本次主题素材为准，不抄模板正文）。` +
+        (tplImages.length > 0
+          ? `同目录还有 ${tplImages.length} 张模板参考图（${tplImages
+              .slice(0, 5)
+              .map((x) => x.fileName)
+              .join('、')}），可用 Read 查看作为版式/视觉风格参考，不要插进文章正文。`
+          : '')
+      : ''
+    setInjectedPrompt(PLATFORM_PROMPTS[platform] + themeLine + templateLine)
     if (mediaAttachments.length > 0) {
       setInjectedAttachments(mediaAttachments)
       setMediaAttachments([])
@@ -156,6 +203,42 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
           </div>
           {notice && <p className="mb-1 text-xs text-emerald-700">{notice}</p>}
 
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-400">风格模板：</span>
+            <select
+              value={selectedTemplate}
+              onChange={(e) => setSelectedTemplate(e.target.value)}
+              className="max-w-56 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 outline-none"
+              title="选一个已上传的 html/md 风格模板，生成时分身会仿照它的结构与语气"
+            >
+              <option value="">不用模板</option>
+              {templates
+                .filter((x) => x.kind === '模板')
+                .map((x) => (
+                  <option key={x.fileName} value={x.fileName}>
+                    {x.fileName}
+                  </option>
+                ))}
+            </select>
+            <button
+              onClick={() => handleUploadTemplate([{ name: '风格模板', extensions: ['html', 'htm', 'md'] }])}
+              title="上传 html/md 风格模板到 inbox/05_运营_operation/_风格模板/（跨主题复用）"
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+            >
+              📎 上传模板
+            </button>
+            <button
+              onClick={() => handleUploadTemplate([{ name: '模板图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }])}
+              title="上传模板参考图（版式/视觉风格截图），生成时供分身参考"
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+            >
+              🖼️ 上传模板图片
+            </button>
+            {templates.filter((x) => x.kind === '图片').length > 0 && (
+              <span className="text-[11px] text-slate-400">已有 {templates.filter((x) => x.kind === '图片').length} 张模板图</span>
+            )}
+          </div>
+
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">平台：</span>
             {(['小红书', '微信公众号'] as Platform[]).map((p) => (
@@ -175,8 +258,61 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
             >
               ✍️ 生成内容
             </button>
+            <button
+              onClick={() => {
+                setShowRecent((v) => !v)
+                refreshRecent()
+              }}
+              className={`ml-auto rounded-full border px-3 py-1 text-xs font-medium ${
+                showRecent ? 'border-jushi-accent text-jushi-accent' : 'border-slate-300 text-slate-500'
+              }`}
+              title="outputs/05_运营_operation 下最近生成的 10 篇推广文章"
+            >
+              🕘 最近生成{recent.length > 0 ? ` ${recent.length}` : ''}
+            </button>
           </div>
         </div>
+
+        {showRecent && (
+          <div className="max-h-56 shrink-0 overflow-y-auto border-b border-slate-200 bg-slate-50 px-5 py-2">
+            {recent.length === 0 && <p className="py-3 text-center text-xs text-slate-400">还没有生成过推广文章</p>}
+            <div className="space-y-1">
+              {recent.map((r) => (
+                <div key={r.relativePath} className="flex items-center gap-2 rounded-md bg-white px-2.5 py-1.5 text-xs">
+                  <button
+                    onClick={() => window.api.shell.openPath(r.absPath)}
+                    className="min-w-0 flex-1 truncate text-left text-slate-700 hover:text-jushi-accent"
+                    title={`打开 ${r.relativePath}`}
+                  >
+                    {r.fileName.endsWith('.html') ? '🌐' : '📝'} {r.fileName}
+                  </button>
+                  {r.folder && <span className="max-w-40 shrink-0 truncate text-slate-400">{r.folder}</span>}
+                  <span className="shrink-0 text-slate-300">{fmtDay(r.mtime)}</span>
+                  {r.fileName.endsWith('.md') && (
+                    <button
+                      onClick={async () => {
+                        const html = await window.api.gzh.runStyle(r.absPath)
+                        await window.api.shell.openPath(html)
+                        refreshRecent()
+                      }}
+                      className="shrink-0 rounded border border-slate-300 px-1.5 py-0.5 text-slate-500 hover:border-jushi-accent hover:text-jushi-accent"
+                      title="按公众号固定风格一键排版"
+                    >
+                      排版
+                    </button>
+                  )}
+                  <button
+                    onClick={() => window.api.shell.showItemInFolder(r.absPath)}
+                    className="shrink-0 text-slate-300 hover:text-jushi-accent"
+                    title="在访达中显示"
+                  >
+                    📂
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {platform === '微信公众号' && showChat && <GzhStyleButton />}
 
