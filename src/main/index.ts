@@ -74,8 +74,8 @@ app.whenReady().then(() => {
   })
 })
 
+// 关窗即完全退出（含 macOS）：非技术用户"关了就是退了"；mac 上若按平台惯例后台驻留，
+// 用户卸载时拖去废纸篓会报"无法移到废纸篓，因为它已打开"——这就是 0.1.5 及之前"卸载失败"的原因。
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  app.quit()
 })

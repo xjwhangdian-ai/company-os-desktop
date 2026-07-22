@@ -1,6 +1,6 @@
 {
   "name": "company-os-desktop",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "台州炬视科技 · 数字人分身桌面客户端",
   "main": "./out/main/index.js",
   "author": "炬视科技",
