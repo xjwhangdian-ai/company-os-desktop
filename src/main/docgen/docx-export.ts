@@ -111,6 +111,60 @@ function makeTable(tableLines: string[]): Table {
 const HEADING_MAP = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3]
 
 /**
+ * 判断一个 ``` 围栏块是不是"中文纯文本文档"（合同正文/附件/声明），而不是真正的代码/JSON。
+ * 法务分身习惯把合同正文塞进 ``` 里手工折行，若按代码渲染会变成等宽字体+死行，排版很糟。
+ */
+function isPlainTextBlock(lines: string[]): boolean {
+  const text = lines.join('\n')
+  const cjk = (text.match(/[一-龥]/g) || []).length
+  if (cjk < 12) return false
+  // 用中文占比判断，而不是"出现过 []/{}"——合同正文里 甲方[名义人]、(GP) 这类
+  // ASCII 括号很常见，不能据此当成代码。中文占比高才是纯文本文档。
+  const nonSpace = text.replace(/\s/g, '').length
+  if (cjk / Math.max(1, nonSpace) < 0.3) return false
+  const t = text.trim()
+  if (t.startsWith('{') || t.startsWith('[')) return false // JSON/对象字面量
+  if (/=>|\bfunction\b|\bconst\b|\breturn\b/.test(text)) return false
+  return true
+}
+
+/** 明确的条款/段落起始标记：命中则强制另起一段（即使该行是缩进的，如缩进的【情形B】备选条款） */
+const STRONG_MARKER =
+  /^(第[一二三四五六七八九十百]+条|\d+(\.\d+)+[\s　]|\d+[.、]|[一二三四五六七八九十]+[、.]|（[一二三四五六七八九十]+）|【|附件|鉴于)/
+
+/**
+ * 把"中文纯文本文档块"里手工折行的续行并回段落。法务分身的排版惯例是：
+ * 顶格行 = 新的条款/字段/落款行，缩进行 = 上一行的手工折行续行——据此还原成完整段落。
+ * 另：命中明确条款标记（第X条/1.1/（一）/【/附件/鉴于）的缩进行也强制另起段。
+ * 仅调整空白与换行，绝不改动任何文字内容。
+ */
+function unwrapPlainTextBlock(lines: string[]): string[] {
+  const out: string[] = []
+  let cur = ''
+  const flush = (): void => {
+    if (cur) out.push(cur)
+    cur = ''
+  }
+  for (const raw of lines) {
+    if (raw.trim() === '') {
+      flush()
+      if (out[out.length - 1] !== '') out.push('')
+      continue
+    }
+    const indented = /^[ \t　]/.test(raw)
+    const trimmed = raw.trim()
+    if (cur === '' || !indented || STRONG_MARKER.test(trimmed)) {
+      flush()
+      cur = trimmed
+    } else {
+      cur += trimmed
+    }
+  }
+  flush()
+  return out
+}
+
+/**
  * markdown 正文（逐行）转 docx 段落/表格数组。覆盖：# ~ #### 标题、GFM 表格、
  * 引用块（含内部标题/加粗）、无序/有序列表、加粗、代码块、分隔线。
  * 解析不了的行优雅降级为普通段落，不阻塞整体导出。
@@ -146,9 +200,20 @@ export function markdownToDocxChildren(markdown: string, opts: { pageBreakBefore
         i++
       }
       i++
-      codeLines.forEach((cl) =>
-        children.push(new Paragraph({ children: [new TextRun({ text: cl.length ? cl : ' ', font: 'Courier New' })] }))
-      )
+      if (isPlainTextBlock(codeLines)) {
+        // 合同正文/附件这类中文纯文本文档块：用正文字体、并回段落、占位符照常黄色高亮
+        for (const para of unwrapPlainTextBlock(codeLines)) {
+          if (para === '') {
+            children.push(new Paragraph({ text: '' }))
+            continue
+          }
+          children.push(new Paragraph({ children: parseInline(para), spacing: { after: 100, line: 300 } }))
+        }
+      } else {
+        codeLines.forEach((cl) =>
+          children.push(new Paragraph({ children: [new TextRun({ text: cl.length ? cl : ' ', font: 'Courier New' })] }))
+        )
+      }
       continue
     }
 
