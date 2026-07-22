@@ -21,6 +21,7 @@ import type {
   SolutionFileKind,
   SupplierDocPreview
 } from '@shared/agent-types'
+import { repairDataDir } from '../config/first-run'
 import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
@@ -110,8 +111,14 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   ipcMain.handle(IPC.configAddCompany, (_e, name: string) => addCompany(name))
   ipcMain.handle(IPC.configRemoveCompany, (_e, id: string) => removeCompany(id))
-  ipcMain.handle(IPC.configSetCompanyDataDir, (_e, id: string, dir: string) => setCompanyDataDir(id, dir))
+  ipcMain.handle(IPC.configSetCompanyDataDir, (_e, id: string, dir: string) => {
+    setCompanyDataDir(id, dir)
+    // 用户可能把目录指到一个普通文件夹（没有 .claude/agents 分身定义）——分身列表会为空、
+    // 卡在设置页进不了工作台。绑定时就地补齐模板缺失部分（只增不改，已有文件不动）。
+    if (dir && !existsSync(join(dir, '.claude', 'agents'))) repairDataDir(dir)
+  })
   ipcMain.handle(IPC.configSetActiveCompany, (_e, id: string) => setActiveCompany(id))
+  ipcMain.handle(IPC.configRepairDataDir, () => repairDataDir(getDataDir()))
 
   // 从安装包内置模板初始化新数据目录：选一个空文件夹 → 拷贝模板 → 绑定到公司
   ipcMain.handle(IPC.configInitDataDir, async (_e, companyId: string) => {

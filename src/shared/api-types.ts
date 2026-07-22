@@ -74,6 +74,8 @@ export interface CompanyOsApi {
     setActiveCompany(id: string): Promise<void>
     /** 从安装包内置的 company-os 模板初始化一个新数据目录（弹目录选择框），并绑定到该公司 */
     initDataDir(companyId: string): Promise<{ ok: boolean; dataDir?: string; 说明: string }>
+    /** 把内置模板里缺失的部分（分身定义/knowledge/骨架）补进当前数据目录——只增不改 */
+    repairDataDir(): Promise<{ ok: boolean; copied: number; 说明: string }>
   }
   agents: {
     list(): Promise<AgentDisplayMeta[]>

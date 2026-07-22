@@ -8,6 +8,7 @@ export const IPC = {
   configRemoveCompany: 'config:remove-company',
   configSetCompanyDataDir: 'config:set-company-data-dir',
   configSetActiveCompany: 'config:set-active-company',
+  configRepairDataDir: 'config:repair-data-dir',
 
   agentsList: 'agents:list',
   agentRun: 'agent:run',

@@ -179,7 +179,33 @@ export default function App(): React.JSX.Element {
       )}
 
       <main className="flex-1 overflow-hidden bg-white">
-        {view === 'settings' && isAdmin && <Settings />}
+        {view === 'settings' && isAdmin && (
+          <div className="flex h-full flex-col">
+            {ready && loaded && list.length === 0 && (
+              /* 数据目录缺 .claude/agents（比如「选择目录」指到了普通文件夹）→ 分身列表为空，
+                 没有这条横幅用户会永远卡在设置页且不知道原因 */
+              <div className="flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-6 py-3">
+                <span className="flex-1 text-xs leading-snug text-amber-800">
+                  ⚠ 当前数据目录里没有找到分身定义（.claude/agents/）——可能选择的不是 company-os 数据目录。
+                  点右侧一键修复：把分身定义/知识库/目录骨架补进该目录（只补缺失，已有文件不动）；或在下方「数据目录」重新选择。
+                </span>
+                <button
+                  onClick={async () => {
+                    const r = await window.api.config.repairDataDir()
+                    if (r.ok) await loadAgents()
+                    alert(r.说明 + (r.ok ? '，即将进入工作台' : ''))
+                  }}
+                  className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+                >
+                  🛠 一键修复数据目录
+                </button>
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              <Settings />
+            </div>
+          </div>
+        )}
         {view === 'settings' && !isAdmin && (
           <div className="flex h-full items-center justify-center px-8 text-center text-sm text-slate-400">
             设置页仅管理员可用——数据目录、模型供应商、成员权限由管理员统一配置；有需要请联系管理员。

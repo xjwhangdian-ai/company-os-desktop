@@ -30,7 +30,8 @@ const api: CompanyOsApi = {
     removeCompany: (id: string) => ipcRenderer.invoke(IPC.configRemoveCompany, id),
     setCompanyDataDir: (id: string, dir: string) => ipcRenderer.invoke(IPC.configSetCompanyDataDir, id, dir),
     setActiveCompany: (id: string) => ipcRenderer.invoke(IPC.configSetActiveCompany, id),
-    initDataDir: (companyId: string) => ipcRenderer.invoke(IPC.configInitDataDir, companyId)
+    initDataDir: (companyId: string) => ipcRenderer.invoke(IPC.configInitDataDir, companyId),
+    repairDataDir: () => ipcRenderer.invoke(IPC.configRepairDataDir)
   },
   agents: {
     list: () => ipcRenderer.invoke(IPC.agentsList)

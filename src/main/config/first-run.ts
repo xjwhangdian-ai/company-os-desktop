@@ -1,8 +1,49 @@
 import { app } from 'electron'
-import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { addCompany, listCompanies, setCompanyDataDir } from './store'
 import { ensureCompanySkeleton } from '../fs-io/data-template'
+
+/** 安装包内置数据目录模板的位置（打包后在 resources/，开发时在仓库 resources/） */
+export function templateSrcPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'company-os-template')
+    : join(app.getAppPath(), 'resources', 'company-os-template')
+}
+
+/** 递归把模板里"目标缺失的文件"拷过去——只补缺失，绝不覆盖已有文件。返回补了几个文件 */
+function copyMissingFromTemplate(srcDir: string, destDir: string): number {
+  let copied = 0
+  mkdirSync(destDir, { recursive: true })
+  for (const name of readdirSync(srcDir)) {
+    const src = join(srcDir, name)
+    const dest = join(destDir, name)
+    if (statSync(src).isDirectory()) {
+      copied += copyMissingFromTemplate(src, dest)
+    } else if (!existsSync(dest)) {
+      copyFileSync(src, dest)
+      copied++
+    }
+  }
+  return copied
+}
+
+/**
+ * 修复数据目录：把内置模板里缺失的部分（.claude/agents 分身定义、CLAUDE.md、knowledge/、
+ * 目录骨架）补进当前数据目录。典型场景：用户把「选择目录」指到了一个普通文件夹
+ * （里面没有分身定义），分身列表为空、卡在设置页无法进工作台。只增不改，已有文件原样保留。
+ */
+export function repairDataDir(dataDir: string): { ok: boolean; copied: number; 说明: string } {
+  const src = templateSrcPath()
+  if (!existsSync(src)) return { ok: false, copied: 0, 说明: '安装包内未找到数据目录模板（company-os-template）' }
+  const copied = copyMissingFromTemplate(src, dataDir)
+  ensureCompanySkeleton(dataDir)
+  return {
+    ok: true,
+    copied,
+    说明: copied > 0 ? `已补齐 ${copied} 个缺失文件（分身定义/知识库/目录骨架），已有文件未动` : '数据目录完整，无需修复'
+  }
+}
 
 /**
  * 首启自动初始化数据目录（修复"新用户装完卡在设置页"）：
@@ -28,9 +69,7 @@ export function ensureDefaultDataDir(): void {
     }
 
     if (!looksLikeDataDir(target)) {
-      const templateSrc = app.isPackaged
-        ? join(process.resourcesPath, 'company-os-template')
-        : join(app.getAppPath(), 'resources', 'company-os-template')
+      const templateSrc = templateSrcPath()
       mkdirSync(target, { recursive: true })
       if (existsSync(templateSrc)) cpSync(templateSrc, target, { recursive: true })
     }
