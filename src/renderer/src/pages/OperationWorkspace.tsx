@@ -61,10 +61,18 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   }
 
   async function refreshTemplates(): Promise<void> {
-    setTemplates(await window.api.operation.listTemplates())
+    try {
+      setTemplates(await window.api.operation.listTemplates())
+    } catch {
+      // 主进程还是旧版本（没有新 IPC 通道）时会走到这里——静默留空，上传时会给明确提示
+    }
   }
   async function refreshRecent(): Promise<void> {
-    setRecent(await window.api.operation.recentArticles())
+    try {
+      setRecent(await window.api.operation.recentArticles())
+    } catch {
+      flash('读取最近文章失败——如果刚更新过 App，请完全退出（Cmd+Q）后重新打开再试')
+    }
   }
   useEffect(() => {
     refreshTemplates()
@@ -73,15 +81,23 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
 
   async function handleUploadTemplate(filters: FileFilter[]): Promise<void> {
     const paths = await window.api.dialog.pickFiles(filters)
-    for (const p of paths) {
-      const r = await window.api.operation.uploadTemplate(p)
-      const name = r.relativePath.split('/').pop() ?? ''
-      if (/\.(html?|md)$/i.test(name)) setSelectedTemplate(name)
+    if (paths.length === 0) return
+    const uploaded: string[] = []
+    try {
+      for (const p of paths) {
+        const r = await window.api.operation.uploadTemplate(p)
+        const name = r.relativePath.split('/').pop() ?? ''
+        uploaded.push(name)
+        if (/\.(html?|md)$/i.test(name)) setSelectedTemplate(name)
+      }
+    } catch (err) {
+      flash(
+        `❌ 上传失败：${err instanceof Error ? err.message : String(err)}——如果刚更新过 App，请完全退出（Cmd+Q）后重新打开再试`
+      )
+      return
     }
-    if (paths.length > 0) {
-      await refreshTemplates()
-      flash(`已上传 ${paths.length} 个风格模板文件到 inbox/05_运营_operation/_风格模板/`)
-    }
+    await refreshTemplates()
+    flash(`✅ 上传成功：${uploaded.join('、')}（已存入 inbox/05_运营_operation/_风格模板/）`)
   }
 
   /** 素材上传：填了主题就落主题文件夹并顺序改名，否则退回通用 inbox */
