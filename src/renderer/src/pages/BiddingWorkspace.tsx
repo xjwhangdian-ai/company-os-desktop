@@ -237,6 +237,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [projects, setProjects] = useState<BiddingProject[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'全部' | '待处理' | BidProjectStatus>('全部')
+  const [query, setQuery] = useState('')
   const [showMaterialLib, setShowMaterialLib] = useState(false)
   const [showProjectUpload, setShowProjectUpload] = useState(false)
   const [showCard, setShowCard] = useState(true)
@@ -336,6 +337,21 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
 
   const sorted = useMemo(() => ledgerSort(projects), [projects])
   const filtered = sorted.filter((p) => {
+    // 搜索：空格隔开多个词是"都要命中"，匹配 项目文件夹名（含日期_项目名）+ 项目卡各字段
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (tokens.length > 0) {
+      const hay = [
+        p.folderName,
+        p.card?.业主单位 ?? '',
+        p.card?.招标编号 ?? '',
+        p.card?.预算金额 ?? '',
+        p.card?.状态 ?? '',
+        p.card?.备注 ?? ''
+      ]
+        .join(' ')
+        .toLowerCase()
+      if (!tokens.every((t) => hay.includes(t))) return false
+    }
     if (statusFilter === '全部') return true
     if (statusFilter === '待处理') return isPending(p)
     // 待处理项目的底层状态默认也是"跟进中"，两个筛选必须互斥：跟进中 = 已确认接手的
@@ -391,6 +407,23 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
               素材库
             </button>
           </div>
+          <div className="relative mb-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜项目 / 业主单位 / 招标编号，空格隔开多个词…"
+              className="w-full rounded-lg border border-slate-300 py-1.5 pl-3 pr-7 text-xs outline-none focus:border-jushi-accent"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                title="清空搜索"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <div className="mb-2 flex flex-wrap gap-1">
             {(['全部', '待处理', ...BID_PROJECT_STATUSES] as const).map((s) => (
               <button
@@ -411,10 +444,14 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto p-3 pt-0">
+          {filtered.length === 0 && query.trim() && (
+            <p className="py-6 text-center text-xs text-slate-400">没有匹配「{query.trim()}」的项目</p>
+          )}
           {BID_CATEGORIES.map((cat) => {
             const items = grouped.get(cat) ?? []
             if (items.length === 0) return null
-            const open = openCat[cat]
+            // 搜索时强制展开所有分组——命中的项目不能藏在收起的分组里
+            const open = query.trim() ? true : openCat[cat]
             return (
               <div key={cat} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <button
