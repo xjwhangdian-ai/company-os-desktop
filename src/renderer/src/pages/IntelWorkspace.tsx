@@ -188,6 +188,7 @@ function BiddingFeedPanel({ onNotice, reloadKey }: { onNotice: (t: string) => vo
   const [fetching, setFetching] = useState(false)
   const [onlyRelevant, setOnlyRelevant] = useState(false)
   const [showKeywords, setShowKeywords] = useState(false)
+  const [query, setQuery] = useState('')
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     采购意向: true,
     意见征询: true,
@@ -217,10 +218,18 @@ function BiddingFeedPanel({ onNotice, reloadKey }: { onNotice: (t: string) => vo
     setCandidates((prev) => prev.filter((x) => x.key !== c.key))
   }
 
-  const visible = useMemo(
-    () => (onlyRelevant ? candidates.filter((c) => c.相关度 || c.命中关键词 || c.台州公安) : candidates),
-    [candidates, onlyRelevant]
-  )
+  const visible = useMemo(() => {
+    let list = onlyRelevant ? candidates.filter((c) => c.相关度 || c.命中关键词 || c.台州公安) : candidates
+    // 搜索：空格隔开多个词是"都要命中"，匹配 项目名称/采购单位/中标单位/区县/标签/平台
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (tokens.length > 0) {
+      list = list.filter((c) => {
+        const hay = [c.项目名称, c.采购单位, c.中标单位, c.区县, c.标签, c.平台, c.预算].join(' ').toLowerCase()
+        return tokens.every((t) => hay.includes(t))
+      })
+    }
+    return list
+  }, [candidates, onlyRelevant, query])
   const grouped = useMemo(() => {
     const g = new Map<IntelFeedType, IntelCandidate[]>()
     for (const t of INTEL_FEED_TYPES) g.set(t, [])
@@ -273,17 +282,39 @@ function BiddingFeedPanel({ onNotice, reloadKey }: { onNotice: (t: string) => vo
             </button>
           </div>
         </div>
+        <div className="app-no-drag relative mt-1.5">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜项目 / 采购单位 / 区县 / 平台，空格隔开多个词…"
+            className="w-full rounded-lg border border-slate-300 py-1.5 pl-3 pr-7 text-xs outline-none focus:border-jushi-accent"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              title="清空搜索"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+            >
+              ✕
+            </button>
+          )}
+        </div>
         <p className="mt-1 text-[11px] leading-snug text-slate-400">
           浙江政采（政采云）/台州公共资源/乐采云/台州阳光采购。「确认跟进」后进入招投标页台账并自动回填项目卡。
         </p>
       </div>
       {showKeywords && <KeywordManager onChanged={refresh} onClose={() => setShowKeywords(false)} />}
       <div className="flex-1 space-y-2 overflow-y-auto p-3 pt-0">
-        {visible.length === 0 && <p className="py-6 text-center text-xs text-slate-400">暂无待确认的招投标信息</p>}
+        {visible.length === 0 && (
+          <p className="py-6 text-center text-xs text-slate-400">
+            {query.trim() ? `没有匹配「${query.trim()}」的招投标信息` : '暂无待确认的招投标信息'}
+          </p>
+        )}
         {INTEL_FEED_TYPES.map((t) => {
           const items = grouped.get(t) ?? []
           if (items.length === 0) return null
-          const open = openSections[t]
+          // 搜索时强制展开所有分组——命中的条目不能藏在收起的分组里
+          const open = query.trim() ? true : openSections[t]
           return (
             <div key={t} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
               <button
