@@ -60,6 +60,7 @@ import {
   addFollowUp,
   exportQuoteImages,
   generateQuoteExcel,
+  generateSupplierQuoteList,
   importExcelByHeader,
   linkCustomerFile,
   listCustomers,
@@ -370,6 +371,9 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     IPC.salesGenerateQuoteXlsx,
     (_e, lines: QuoteLineInput[], customerName: string, templateFileName: string | null, projectName: string) =>
       generateQuoteExcel(getDataDir(), lines, customerName, templateFileName, projectName)
+  )
+  ipcMain.handle(IPC.salesGenPdfQuoteList, (_e, pdfFileName: string) =>
+    generateSupplierQuoteList(getDataDir(), pdfFileName)
   )
 
   ipcMain.handle(IPC.salesListCustomers, () => listCustomers(getDataDir()))

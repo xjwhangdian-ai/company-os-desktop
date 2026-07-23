@@ -155,6 +155,7 @@ const api: CompanyOsApi = {
     importExcel: (relativePath: string) => ipcRenderer.invoke(IPC.salesImportExcel, relativePath),
     exportQuoteImages: (productIds: string[], customerName: string) =>
       ipcRenderer.invoke(IPC.salesExportQuoteImages, productIds, customerName),
+    genPdfQuoteList: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesGenPdfQuoteList, pdfFileName),
     generateQuoteXlsx: (
       lines: QuoteLineInput[],
       customerName: string,

@@ -25,6 +25,7 @@ export const IPC = {
   uploadLegalPending: 'upload:legal-pending',
   uploadOperationTheme: 'upload:operation-theme',
   operationApplyImageNames: 'operation:apply-image-names',
+  salesGenPdfQuoteList: 'sales:gen-pdf-quote-list',
   operationUploadTemplate: 'operation:upload-template',
   operationListTemplates: 'operation:list-templates',
   operationRecentArticles: 'operation:recent-articles',

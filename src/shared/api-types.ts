@@ -237,6 +237,10 @@ export interface CompanyOsApi {
     importExcel(relativePath: string): Promise<{ added: number; updated: number; skipped: number }>
     /** 把报价单产品的图片导出到 outputs 报价目录的 图片/ 子文件夹 */
     exportQuoteImages(productIds: string[], customerName: string): Promise<{ dir: string; exported: number; missing: string[] }>
+    /** PDF 产品手册 → 供应商报价清单骨架：分身先提取 JSON（needExtract 时），App 机械填模板生成 xlsx */
+    genPdfQuoteList(
+      pdfFileName: string
+    ): Promise<{ ok: boolean; needExtract: boolean; jsonRel: string; outPath?: string; 行数?: number; 说明: string }>
     /** 机械生成对外报价单 Excel（不经过 AI）：xlsx 模板填充或内置版式，登记报价台账并自动关联同名客户 */
     generateQuoteXlsx(
       lines: QuoteLineInput[],

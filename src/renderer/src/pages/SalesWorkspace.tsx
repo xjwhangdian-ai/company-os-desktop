@@ -219,6 +219,21 @@ function matchNeed(need: string, products: ProductEntry[]): { product: ProductEn
     .slice(0, 6)
 }
 
+/** 构造"PDF 产品手册 → 报价清单提取"的提示词：分身读 PDF 写 JSON，App 再机械填模板出 xlsx */
+function buildPdfQuoteListPrompt(preview: PreviewCard, jsonRel: string): string {
+  return [
+    `读取这份供应商产品手册 PDF，提取产品条目供生成《供应商报价清单》骨架。`,
+    `PDF 文件：${preview.relativePath}（用 Read 工具直接读，PDF 可分页读取；页数多就分批读完，不要只读前几页）。`,
+    `要求：`,
+    `1. 逐页识别产品，每个产品一个 JSON 对象，字段名严格使用：产品名称、分类、品牌、型号、手册页码。`,
+    `2. 分类按手册的章节/目录归类；品牌、型号只有页面上明确标注才填，否则填空字符串""——绝不猜测编造。`,
+    `3. 手册页码填印刷页码（字符串），方便人工回查原文。`,
+    `4. 用 Write 把 JSON 数组写入 ${jsonRel}，文件内容只有 JSON 数组本身。`,
+    `5. 不要修改 销售/产品库/产品库.json。`,
+    `完成后回复提取了多少个产品、哪些字段普遍缺失。之后我会在工作台点「生成报价清单」由 App 机械填模板出 xlsx（价格等留空待人工）。`
+  ].join('\n')
+}
+
 /** 构造"AI 解析供应商资料/投标报价文件"的提示词——分身只写 _待入库/ 暂存 JSON，规范库由 App 合并 */
 function buildParsePrompt(preview: PreviewCard): string {
   const readTarget = preview.companionRelativePath
@@ -908,6 +923,30 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     >
                       🤖 AI 解析入库
                     </button>
+                    {preview.fileName.toLowerCase().endsWith('.pdf') && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const r = await window.api.sales.genPdfQuoteList(preview.fileName)
+                            if (r.ok && r.outPath) {
+                              flash(`✅ ${r.说明}`)
+                              await window.api.shell.showItemInFolder(r.outPath)
+                            } else if (r.needExtract) {
+                              setPendingPrompt(buildPdfQuoteListPrompt(preview, r.jsonRel))
+                              flash('已让分身读 PDF 提取产品条目——分身完成后，再点一次「生成报价清单」即可出 xlsx')
+                            } else {
+                              flash(r.说明)
+                            }
+                          } catch (err) {
+                            flash(err instanceof Error ? err.message : String(err))
+                          }
+                        }}
+                        title="产品手册类 PDF：分身读 PDF 提取 产品名称/分类/品牌/型号/页码 → App 按《供应商报价清单》模板生成 xlsx 骨架（价格等留空待人工）。第一次点让分身提取，提取完成后再点一次生成"
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
+                      >
+                        📋 生成报价清单
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

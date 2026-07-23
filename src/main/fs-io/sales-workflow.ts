@@ -22,6 +22,7 @@ import type {
   QuoteXlsxResult
 } from '@shared/agent-types'
 import { generateQuoteXlsx, type QuoteRow } from '../docgen/quote-xlsx'
+import type { CellValue } from 'exceljs'
 import { detectHeader, readWorkbookRows } from './doc-extract'
 
 // ============ 销售工作台的数据层 ============
@@ -254,7 +255,9 @@ function ingestStaging(dataDir: string, db: ProductDb): { ingested: number; skip
   const doneDir = join(dataDir, STAGING_DONE_REL)
   let names: string[] = []
   try {
-    names = readdirSync(stagingDir).filter((n) => n.endsWith('.json'))
+    // 「报价清单提取_」是 PDF 手册→报价清单骨架的中间产物（缺价格等关键字段），
+    // 只供 generateSupplierQuoteList 机械填模板用，绝不能被当产品自动合并进产品库
+    names = readdirSync(stagingDir).filter((n) => n.endsWith('.json') && !n.startsWith('报价清单提取_'))
   } catch {
     return { ingested: 0, skipped: 0 }
   }
@@ -528,6 +531,130 @@ export async function generateQuoteExcel(
   if (matched) linkCustomerFile(dataDir, matched.id, '报价文件', outPath)
 
   return { outPath, dir, 单号: logEntry.单号, 合计, 导出图片, warnings }
+}
+
+// ============ PDF 产品手册 → 供应商报价清单骨架 ============
+
+interface QuoteListItem {
+  产品名称: string
+  分类?: string
+  产品分类?: string
+  产品类别?: string
+  品牌?: string
+  型号?: string
+  手册页码?: string
+  页码?: string
+}
+
+/** 分身提取结果的约定路径：销售/产品库/_待入库/报价清单提取_{pdf名去扩展}.json */
+export function quoteListJsonRel(pdfFileName: string): string {
+  const stem = pdfFileName.replace(/\.[^.]+$/, '')
+  return `销售/产品库/_待入库/报价清单提取_${stem}.json`
+}
+
+/**
+ * 把分身从 PDF 产品手册提取的产品条目（JSON）机械填进《供应商报价清单》模板，
+ * 生成"待人工补充"的 xlsx（价格/税率等留空）。JSON 不存在时返回 needExtract，
+ * 由前端注入提取提示词让分身先读 PDF 写 JSON。
+ */
+export async function generateSupplierQuoteList(
+  dataDir: string,
+  pdfFileName: string
+): Promise<{ ok: boolean; needExtract: boolean; jsonRel: string; outPath?: string; 行数?: number; 说明: string }> {
+  const jsonRel = quoteListJsonRel(pdfFileName)
+  const jsonAbs = join(dataDir, jsonRel)
+  if (!existsSync(jsonAbs)) {
+    return { ok: false, needExtract: true, jsonRel, 说明: '还没有分身的提取结果——先让分身读 PDF 提取产品条目' }
+  }
+  let items: QuoteListItem[]
+  try {
+    const parsed = JSON.parse(readFileSync(jsonAbs, 'utf-8'))
+    items = (Array.isArray(parsed) ? parsed : []).filter((x) => x && typeof x.产品名称 === 'string' && x.产品名称.trim())
+  } catch {
+    return { ok: false, needExtract: true, jsonRel, 说明: '提取结果 JSON 解析失败——请让分身重新提取' }
+  }
+  if (items.length === 0) return { ok: false, needExtract: true, jsonRel, 说明: '提取结果为空——请让分身重新提取' }
+
+  // 模板：报价模板库里文件名含「报价清单」的 xlsx
+  const tplDir = join(dataDir, TEMPLATE_DIR_REL)
+  const tplName = existsSync(tplDir)
+    ? readdirSync(tplDir).find((f) => f.includes('报价清单') && f.toLowerCase().endsWith('.xlsx'))
+    : undefined
+  if (!tplName) {
+    return { ok: false, needExtract: false, jsonRel, 说明: '报价模板库里没有《供应商报价清单》模板（销售/_模板/报价模板/）' }
+  }
+
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.readFile(join(tplDir, tplName))
+  const ws = wb.worksheets[0]
+  if (!ws) return { ok: false, needExtract: false, jsonRel, 说明: '模板里没有工作表' }
+
+  // 找表头行：同时含"产品名称"和"品牌"
+  const text = (v: CellValue): string => {
+    if (v === null || v === undefined) return ''
+    if (typeof v === 'object' && 'richText' in (v as object)) return (v as { richText: { text: string }[] }).richText.map((t) => t.text).join('')
+    return String(v)
+  }
+  let headerRow = -1
+  const colMap: Record<string, number> = {}
+  for (let r = 1; r <= Math.min(ws.rowCount, 15); r++) {
+    const row = ws.getRow(r)
+    const local: Record<string, number> = {}
+    for (let c = 1; c <= ws.columnCount; c++) {
+      const t = text(row.getCell(c).value).replace(/\s/g, '')
+      if (!t) continue
+      if (t === '序号') local['序号'] = c
+      else if (t.includes('产品名称')) local['产品名称'] = c
+      else if (t.includes('类别') || t.includes('分类')) local['分类'] = c
+      else if (t === '品牌') local['品牌'] = c
+      else if (t.includes('型号')) local['型号'] = c
+      else if (t.includes('备注')) local['备注'] = c
+    }
+    if (local['产品名称'] && local['品牌']) {
+      headerRow = r
+      Object.assign(colMap, local)
+      break
+    }
+  }
+  if (headerRow < 0) return { ok: false, needExtract: false, jsonRel, 说明: '模板里没识别到报价清单表头（需含 产品名称/品牌 列）' }
+
+  // 数据区现有行数 = 表头到"填写说明/合计"前的空档；保守按 1 行原型扩行
+  let tailRow = -1
+  for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+    if (text(ws.getRow(r).getCell(1).value).includes('填写说明')) {
+      tailRow = r
+      break
+    }
+  }
+  const have = tailRow > 0 ? tailRow - headerRow - 2 : 1 // 留一行空隔
+  if (items.length > have && have > 0) ws.duplicateRow(headerRow + 1, items.length - have, true)
+
+  items.forEach((it, i) => {
+    const row = ws.getRow(headerRow + 1 + i)
+    const set = (key: string, v: string | number): void => {
+      if (colMap[key]) row.getCell(colMap[key]).value = v
+    }
+    // 先清原型行内容，再填提取到的字段——读不到的保持空白待人工
+    for (let c = 1; c <= ws.columnCount; c++) row.getCell(c).value = ''
+    set('序号', i + 1)
+    set('产品名称', it.产品名称.trim())
+    set('分类', (it.分类 || it.产品分类 || it.产品类别 || '').trim())
+    set('品牌', (it.品牌 || '').trim())
+    set('型号', (it.型号 || '').trim())
+    const page = (it.手册页码 || it.页码 || '').toString().trim()
+    if (page) set('备注', `手册P${page}`)
+  })
+
+  const d = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const stem = pdfFileName.replace(/\.[^.]+$/, '')
+  const outDir = join(dataDir, 'inbox', '01_销售_sales', '供应商资料')
+  mkdirSync(outDir, { recursive: true })
+  const outPath = join(outDir, `${date}_供应商报价清单_${stem}_待补充.xlsx`)
+  await wb.xlsx.writeFile(outPath)
+  return { ok: true, needExtract: false, jsonRel, outPath, 行数: items.length, 说明: `已生成 ${items.length} 行报价清单骨架（价格等留空待人工/供应商补充）` }
 }
 
 export function listQuotationTemplates(dataDir: string): QuotationTemplate[] {
