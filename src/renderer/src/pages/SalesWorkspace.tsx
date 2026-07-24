@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type {
   AgentDisplayMeta,
   ContactRole,
@@ -59,7 +59,7 @@ interface PreviewCard extends SupplierDocPreview {
 
 /** 画册抠图分步状态（按 PDF 文件名记，常驻显示在预览卡上，替代一闪而过的 flash） */
 interface CatalogFlowState {
-  stage: 'extracting' | 'pairing' | 'applying' | 'done' | 'error'
+  stage: 'extracting' | 'applying' | 'done' | 'error'
   text: string
   outDir?: string
 }
@@ -226,25 +226,6 @@ function matchNeed(need: string, products: ProductEntry[]): { product: ProductEn
     .slice(0, 6)
 }
 
-/** 构造"画册抽取结果核对配对"的提示词：分身照标注图逐页核对，写 _配对.json，App 据此出成品图 */
-function buildCatalogPairPrompt(pdfFileName: string): string {
-  const stem = pdfFileName.replace(/\.[^.]+$/, '')
-  const dir = `inbox/01_销售_sales/供应商资料/${stem}_画册抽取`
-  return [
-    `核对产品画册抽取结果并生成配对清单（画册抠图 第2步）。`,
-    `抽取目录：${dir}/`,
-    `1. 先读 ${dir}/文本提取.md，了解每页有哪些产品（型号/名称/参数原文）。`,
-    `2. 逐页用 Read 打开 ${dir}/_中间产物/标注/P{页}.jpg（红框上的数字=候选图编号），为每个产品选出它对应的产品照片候选编号。页数多也必须逐页看完，绝不凭文件名或文本臆测。`,
-    `3. 只挑真正的"产品照片"：表格、文字块、场景小图、资质证书、二维码一律不选；同一产品多张图选最完整清晰的一张。某产品没有合适候选时，改用 框:[x0,y0,x1,y1] 给出裁切坐标——坐标按 ${dir}/_中间产物/整页/P{页}.jpg 的原图像素（注意：标注图是原图缩小一半，坐标要乘2）。`,
-    `4. 用 Write 把 JSON 数组写到 ${dir}/_配对.json，元素格式：`,
-    `   {"序号":1,"型号":"HW-XX","产品名称":"排爆服","分类":"排爆服","页":5,"候选":0}`,
-    `   或 {"序号":2,...,"页":12,"框":[1950,205,2380,445]}`,
-    `   序号全册连续；型号/产品名称/分类照 文本提取.md 原文，读不到的填空字符串""，绝不编造。`,
-    `5. 进度上报：每核对完一页，就用 Write 覆写 ${dir}/_核对进度.json 为 {"已核对页": 当前已完成页数, "总页": 总页数}——App 靠它向用户显示进度与预计剩余时间，务必每页更新。`,
-    `写完 _配对.json 后简短回复共配对多少个产品、哪些页没有产品照即可——App 会自动检测该文件并定稿出成品图（命名 序号_型号_产品名称_P页.jpg），无需人工再操作。`
-  ].join('\n')
-}
-
 /** 构造"PDF 产品手册 → 报价清单提取"的提示词：分身读 PDF 写 JSON，App 再机械填模板出 xlsx */
 function buildPdfQuoteListPrompt(preview: PreviewCard, jsonRel: string): string {
   return [
@@ -378,7 +359,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [previews, setPreviews] = useState<PreviewCard[]>([])
   const [catalogFlow, setCatalogFlow] = useState<Record<string, CatalogFlowState>>({})
   const [pendingAutoSend, setPendingAutoSend] = useState(false)
-  const catalogPollRef = useRef<Record<string, number>>({})
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -445,76 +425,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   function setCatalog(fileName: string, s: CatalogFlowState): void {
     setCatalogFlow((prev) => ({ ...prev, [fileName]: s }))
   }
-
-  function stopCatalogPoll(fileName: string): void {
-    const id = catalogPollRef.current[fileName]
-    if (id) {
-      window.clearInterval(id)
-      delete catalogPollRef.current[fileName]
-    }
-  }
-
-  /** 分身核对期间每 20 秒探测一次：先读进度更新状态条（含预计剩余时间），_配对.json 写好即自动定稿 */
-  function startCatalogPoll(fileName: string): void {
-    stopCatalogPoll(fileName)
-    let ticks = 0
-    const startAt = Date.now()
-    const id = window.setInterval(async () => {
-      ticks++
-      if (ticks > 90) {
-        // 30 分钟兜底：不再空转，留可点的按钮让人手动收尾
-        stopCatalogPoll(fileName)
-        setCatalog(fileName, { stage: 'error', text: '⚠ 等待分身核对超过 30 分钟——请看右侧对话确认分身状态，完成后再点一次「画册抠图」收尾' })
-        return
-      }
-      try {
-        const a = await window.api.sales.applyCatalogPairing(fileName)
-        if (a.needPairing) {
-          // 分身还没写完配对清单：读进度文件刷新状态条（分身每核对完一页会更新它）
-          const elapsedMin = Math.max(1, Math.round((Date.now() - startAt) / 60000))
-          let progressText = `② 分身核对配图中… 已进行约 ${elapsedMin} 分钟（右侧对话可看实时过程）`
-          try {
-            const p =
-              typeof window.api.sales.catalogProgress === 'function' ? await window.api.sales.catalogProgress(fileName) : null
-            if (p && p.已核对页 > 0) {
-              const pct = Math.round((p.已核对页 / p.总页) * 100)
-              const perPageMs = (Date.now() - startAt) / p.已核对页
-              const etaMin = Math.max(1, Math.ceil(((p.总页 - p.已核对页) * perPageMs) / 60000))
-              progressText = `② 分身核对配图中：${p.已核对页}/${p.总页} 页（${pct}%）· 已用 ${elapsedMin} 分钟 · 预计还需约 ${etaMin} 分钟。完成后 App 自动定稿出图，无需操作`
-            }
-          } catch {
-            /* 进度文件读取失败不影响等待 */
-          }
-          setCatalog(fileName, { stage: 'pairing', text: progressText })
-          return
-        }
-        stopCatalogPoll(fileName)
-        if (a.ok) {
-          setCatalog(fileName, {
-            stage: 'done',
-            outDir: a.outDir,
-            text:
-              `✅ 全部完成：已产出 ${a.count ?? '?'} 张成品图（每产品一张，命名 序号_型号_产品名称_P页），中间产物已自动清理` +
-              (a.missing && a.missing.length > 0 ? `；${a.missing.length} 条未命中需人工处理：${a.missing.slice(0, 3).join('、')}` : '')
-          })
-          if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
-        } else {
-          setCatalog(fileName, { stage: 'error', text: '⚠ 自动定稿失败：' + a.说明 })
-        }
-      } catch {
-        /* 单次探测失败（如主进程忙）不终止轮询 */
-      }
-    }, 20_000)
-    catalogPollRef.current[fileName] = id
-  }
-
-  // 页面卸载时清掉所有轮询
-  useEffect(() => {
-    const polls = catalogPollRef.current
-    return () => {
-      for (const id of Object.values(polls)) window.clearInterval(id)
-    }
-  }, [])
 
   /** 拖拽表头右缘调整列宽（最小 40px） */
   function startResize(key: string, e: React.MouseEvent): void {
@@ -1059,19 +969,15 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       (() => {
                         const f = preview.fileName
                         const cat = catalogFlow[f]
-                        const busyStage = cat?.stage === 'extracting' || cat?.stage === 'pairing' || cat?.stage === 'applying'
+                        const busyStage = cat?.stage === 'extracting' || cat?.stage === 'applying'
                         const label =
                           cat?.stage === 'extracting'
-                            ? '⏳ ① 抽取中…'
-                            : cat?.stage === 'pairing'
-                              ? '⏳ ② 分身核对中…'
-                              : cat?.stage === 'applying'
-                                ? '⏳ ③ 定稿中…'
-                                : cat?.stage === 'done'
-                                  ? '📂 查看成品图'
-                                  : '📖 画册抠图'
-                        const PAIRING_TEXT = (extra: string): string =>
-                          `${extra}② 已把核对任务直发给分身，本状态条稍后会显示 已核对页数/总页数 与预计剩余时间。分身完成后 App 自动定稿出图并打开成品文件夹——全程无需再点击，请保持 App 开启`
+                            ? '⏳ ① 抽取配对中…'
+                            : cat?.stage === 'applying'
+                              ? '⏳ ② 定稿出图中…'
+                              : cat?.stage === 'done'
+                                ? '📂 查看成品图'
+                                : '📖 画册抠图'
                         return (
                           <button
                             disabled={busyStage}
@@ -1088,29 +994,26 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                 return
                               }
                               try {
+                                // 全自动纯机械：抽取(含 文本层/OCR 自动配对) → 立即定稿出图，不经过分身、无需任何人工步骤
+                                setCatalog(f, { stage: 'extracting', text: '① 机械抽取+自动配对中（抠产品图、识别型号/名称）。扫描版画册会做整页 OCR，约 1-3 分钟，请勿关闭窗口…' })
+                                const r = await window.api.sales.extractPdfCatalog(f)
+                                if (!r.ok) {
+                                  setCatalog(f, { stage: 'error', text: '⚠ ' + r.说明 })
+                                  return
+                                }
+                                setCatalog(f, { stage: 'applying', text: `① 完成：${r.pages} 页、自动配对 ${r.autoPaired ?? 0} 个产品。② 正在定稿出图并清理中间产物…` })
                                 const a = await window.api.sales.applyCatalogPairing(f)
-                                if (a.notExtracted) {
-                                  setCatalog(f, { stage: 'extracting', text: '① 机械抽取中（候选图+逐页文本+标注图），页数多时约 1-2 分钟，请勿关闭窗口…' })
-                                  const r = await window.api.sales.extractPdfCatalog(f)
-                                  if (!r.ok) {
-                                    setCatalog(f, { stage: 'error', text: '⚠ ' + r.说明 })
-                                    return
-                                  }
-                                  setPendingPrompt(buildCatalogPairPrompt(f))
-                                  setPendingAutoSend(true)
-                                  setCatalog(f, { stage: 'pairing', text: PAIRING_TEXT(`① 抽取完成：${r.pages} 页、${r.crops} 个候选图。`) })
-                                  startCatalogPoll(f)
-                                } else if (a.needPairing) {
-                                  setPendingPrompt(buildCatalogPairPrompt(f))
-                                  setPendingAutoSend(true)
-                                  setCatalog(f, { stage: 'pairing', text: PAIRING_TEXT('此前已抽取过。') })
-                                  startCatalogPoll(f)
-                                } else if (a.ok) {
+                                if (a.ok) {
+                                  const note = r.degraded
+                                    ? '。⚠ 本画册无文本层且 OCR 不可用，产品名称留空（文件名仅含序号和页码）——Mac 终端执行 pip3 install ocrmac 后重试可自动识别名称'
+                                    : r.usedOcr
+                                      ? '。名称由系统 OCR 从扫描页识别，个别字可能有误差，可直接改文件名修正'
+                                      : ''
                                   setCatalog(f, {
                                     stage: 'done',
                                     outDir: a.outDir,
-                                    text: `✅ 完成：已产出 ${a.count ?? '?'} 张成品图（每产品一张，命名 序号_型号_产品名称_P页），中间产物已自动清理` +
-                                      (a.missing && a.missing.length > 0 ? `；${a.missing.length} 条未命中需人工处理：${a.missing.slice(0, 3).join('、')}` : '')
+                                    text: `✅ 全自动完成：已产出 ${a.count ?? '?'} 张成品图（每产品一张，命名 序号_型号_产品名称_P页），中间产物已清理${note}` +
+                                      (a.missing && a.missing.length > 0 ? `；${a.missing.length} 条未命中：${a.missing.slice(0, 3).join('、')}` : '')
                                   })
                                   if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
                                 } else {
@@ -1120,7 +1023,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                 setCatalog(f, { stage: 'error', text: '⚠ ' + (err instanceof Error ? err.message : String(err)) })
                               }
                             }}
-                            title="数字排版产品画册一键闭环：点一次=机械抽取→核对任务直发分身→分身完成后自动定稿出成品图（每产品一张，序号_型号_产品名称_P页.jpg，在 _画册抽取/产品图片/）并自动清理中间产物。整页扫描件抠不出独立图，用「AI 解析入库」。"
+                            title="产品画册一键全自动（纯机械，不依赖 AI 模型）：抠出每个产品照 + 用文本层/系统OCR识别型号名称自动配对 → 直出成品图（每产品一张，序号_型号_产品名称_P页.jpg，在 _画册抽取/产品图片/），中间产物自动清理。"
                             className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-60"
                           >
                             {label}

@@ -101,6 +101,197 @@ def _slug(s):
     return re.sub(r'[\\/:*?"<>|\s]+', "_", str(s or "")).strip("_")[:36]
 
 
+
+def page_text_runs(page):
+    """带坐标/字号的文本片段（PDF 用户空间坐标，y 原点在页底）；部分 PDF 的 XObject 文本取不到。"""
+    runs = []
+
+    def visitor(text, cm, tm, font_dict, font_size):
+        s = (text or "").strip()
+        if not s:
+            return
+        try:
+            eff = abs((font_size or 0) * (tm[3] if tm[3] else 1))
+        except Exception:
+            eff = font_size or 0
+        runs.append((s, float(tm[4]), float(tm[5]), float(eff)))
+
+    try:
+        page.extract_text(visitor_text=visitor)
+    except Exception:
+        pass
+    return runs
+
+
+def _ocr_lines(img_path):
+    """macOS 系统 Vision OCR（离线）；不可用返回 None。返回 [(text, x_img, y_top_img, h_img), ...]"""
+    try:
+        from ocrmac import ocrmac as _o
+    except Exception:
+        return None
+    try:
+        with Image.open(img_path) as im:
+            iw, ih = im.size
+        out = []
+        for txt, _conf, box in _o.OCR(img_path, language_preference=["zh-Hans", "en-US"]).recognize():
+            s = (txt or "").strip()
+            if not s:
+                continue
+            x, y, w, h = box  # 归一化，原点左下
+            out.append((s, x * iw, (1 - (y + h)) * ih, h * ih))
+        return out
+    except Exception:
+        return None
+
+
+_MODELISH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-/\.+()®™ ]{1,}$")
+# 前言/栏目类标题不是产品名（公司简介、资质荣誉、技术参数小节标题等）
+_JUNK_NAME = re.compile(r"简介|文化|荣誉|目录|联系|扫码|愿景|理念|资质|租赁|回收|服务商|供货单位|一站式|技术参数|产品特点|产品参数|配置清单|规格参数|技术规格|解决方案|应用场景|公司|集团")
+# 产品页信号：正文含这些词的页才认为在介绍具体产品
+_PRODUCT_PAGE = re.compile(r"产品简介|技术参数|产品特点|规格参数|技术规格|产品参数|配置清单")
+
+
+def _lines_to_headings(lines, iw, ih):
+    """大字行 → 标题块（图像坐标）。lines: [(text, x_img, y_top_img, h_img)]"""
+    body = sorted([l[3] for l in lines if len(l[0]) >= 2 and l[3] > 0])
+    if not body:
+        return []
+    med = body[len(body) // 2]
+    big = []
+    for s, x, y_top, h in lines:
+        if h < med * 1.4 or len(s) < 2:
+            continue
+        if y_top < ih * 0.055 or y_top > ih * 0.95:  # 页眉/页脚
+            continue
+        cjk = len(re.findall(r"[\u4e00-\u9fa5]", s))
+        modelish = cjk == 0 and _MODELISH.match(s) and any(c.isdigit() or c == "-" for c in s)
+        if cjk < 2 and not modelish:
+            continue
+        big.append((s, x, y_top, h))
+    big.sort(key=lambda l: (0 if l[1] < iw / 2 else 1, l[2]))
+    headings = []
+    for s, x, y_top, h in big:
+        col = 0 if x < iw / 2 else 1
+        if headings and headings[-1]["col"] == col and abs(y_top - headings[-1]["y_last"]) < h * 2.8:
+            headings[-1]["lines"].append(s)
+            headings[-1]["y_last"] = y_top
+        else:
+            headings.append({"col": col, "y_top": y_top, "y_last": y_top, "lines": [s]})
+    return headings
+
+
+def _collect_page(pg, boxes, headings, iw, ih, seq_start):
+    """在一页内按标题块认领候选图，返回该页 items（序号从 seq_start+1 起）。"""
+    items = []
+    seq = seq_start
+    used = set()
+    for hi, h in enumerate(headings):
+        model, name = "", ""
+        for ln in h["lines"]:
+            cjk = len(re.findall(r"[\u4e00-\u9fa5]", ln))
+            if not model and cjk == 0 and _MODELISH.match(ln) and any(c.isdigit() or c == "-" for c in ln):
+                model = ln.strip()
+            elif not name and cjk >= 2:
+                name = ln.strip()
+        if not (model or name):
+            continue
+        if not model and name and _JUNK_NAME.search(name):
+            continue  # 无型号且名称是栏目词 → 不是产品
+        nxt = None
+        for h2 in headings[hi + 1:]:
+            if h2["col"] == h["col"]:
+                nxt = h2["y_top"]
+                break
+        y_bot = nxt if nxt is not None else ih
+        best, best_area = None, 0
+        for bi, b in enumerate(boxes):
+            if bi in used:
+                continue
+            bcx = (b["x0"] + b["x1"]) / 2
+            bcy = (b["y0"] + b["y1"]) / 2
+            if (0 if bcx < iw / 2 else 1) != h["col"]:
+                continue
+            if not (h["y_top"] - 60 <= bcy <= y_bot + 40):
+                continue
+            area = b["w"] * b["h"]
+            if area > best_area:
+                best, best_area = bi, area
+        if best is None:
+            continue
+        used.add(best)
+        seq += 1
+        items.append({"序号": seq, "型号": model, "产品名称": name, "分类": "", "页": pg, "候选": best})
+    return items
+
+
+def auto_pair(reader, meta, out):
+    """机械自动配对（不依赖 AI）：每页找型号/名称标题块（文本层优先，扫描页用系统 OCR），
+    候选图按同栏纵向地盘就近认领；只对"产品页"（正文含 产品简介/技术参数 等）配对。
+    全部失败时兜底导出全部候选（名称留空）。"""
+    pages = []  # (pg, boxes, headings, iw, ih, is_product_page)
+    any_heading = False
+    used_ocr = False
+    for m in meta:
+        pg = m["page"]
+        boxes = m.get("boxes") or []
+        if not boxes:
+            continue
+        pp = os.path.join(out, "_中间产物", "整页", "P%02d.jpg" % pg)
+        try:
+            with Image.open(pp) as pim:
+                iw, ih = pim.size
+        except Exception:
+            continue
+        # 1) 文本层（转图像坐标）
+        page = reader.pages[pg - 1]
+        runs = page_text_runs(page)
+        lines = []
+        if runs:
+            mb = page.mediabox
+            try:
+                pw, ph = float(mb.width), float(mb.height)
+            except Exception:
+                pw, ph = 595.0, 842.0
+            sx, sy = iw / pw, ih / ph
+            lines = [(s, x * sx, (ph - y) * sy - fs * sy, fs * sy) for (s, x, y, fs) in runs]
+        headings = _lines_to_headings(lines, iw, ih) if lines else []
+        # 2) 扫描页兜底：系统 OCR
+        ocr_lines_cache = None
+        if not headings:
+            ocr_lines_cache = _ocr_lines(pp)
+            if ocr_lines_cache:
+                used_ocr = True
+                headings = _lines_to_headings(ocr_lines_cache, iw, ih)
+        if not headings:
+            continue
+        any_heading = True
+        all_text = " ".join(l[0] for l in (lines or [])) + " " + " ".join(l[0] for l in (ocr_lines_cache or []))
+        pages.append((pg, boxes, headings, iw, ih, bool(_PRODUCT_PAGE.search(all_text))))
+    # 第一轮：只配产品页；一个产品页都没有（版式特殊）再放开
+    items = []
+    seq = 0
+    for gate in (True, False):
+        items = []
+        seq = 0
+        for pg, boxes, headings, iw, ih, is_prod in pages:
+            if gate and not is_prod:
+                continue
+            got = _collect_page(pg, boxes, headings, iw, ih, seq)
+            items.extend(got)
+            seq += len(got)
+        if items:
+            break
+    if not any_heading:
+        items = []
+        seq = 0
+        for m in meta:
+            for bi, _b in enumerate(m.get("boxes") or []):
+                seq += 1
+                items.append({"序号": seq, "型号": "", "产品名称": "", "分类": "", "页": m["page"], "候选": bi})
+        return items, True, used_ocr
+    return items, False, used_ocr
+
+
 def apply_pairing(out, clean=False):
     """阶段2：按分身写的 _配对.json 产出成品图 产品图片/序号_型号_产品名称_P页.jpg"""
     import shutil
@@ -139,7 +330,8 @@ def apply_pairing(out, clean=False):
         except Exception:
             miss.append(str(it.get("产品名称") or it.get("型号") or "?"))
             continue
-        fn = "%03d_%s_%s_P%02d.jpg" % (seq, _slug(it.get("型号")), _slug(it.get("产品名称")), pg)
+        parts = ["%03d" % seq, _slug(it.get("型号")), _slug(it.get("产品名称")), "P%02d" % pg]
+        fn = "_".join([p for p in parts if p]) + ".jpg"
         dst = os.path.join(dest, fn)
         cand = it.get("候选")
         box = it.get("框")
@@ -166,7 +358,7 @@ def apply_pairing(out, clean=False):
     cleaned = False
     if clean and okn > 0:
         # 定稿成功后清理可再生的中间产物，最终目录只留 产品图片/ + 文本提取.md + _配对.json
-        for c in ("_中间产物", "_候选图", "_整页", "_标注", "产品图候选", "_候选.json"):
+        for c in ("_中间产物", "_候选图", "_整页", "_标注", "产品图候选", "_候选.json", "_核对进度.json"):
             p = os.path.join(out, c)
             try:
                 if os.path.isdir(p):
@@ -247,8 +439,15 @@ def main():
     with open(os.path.join(mid, "候选.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False)
 
+    # 机械自动配对（不依赖 AI）：文本层大字标题 ↔ 候选图就近认领；扫描版兜底导出全部候选
+    pair_items, degraded, used_ocr = auto_pair(reader, meta, out)
+    if pair_items:
+        with open(os.path.join(out, "_配对.json"), "w", encoding="utf-8") as f:
+            json.dump(pair_items, f, ensure_ascii=False, indent=1)
+
     print(json.dumps({
         "ok": True, "pages": len(reader.pages), "crops": n_crop,
+        "autoPaired": len(pair_items), "degraded": degraded, "usedOcr": used_ocr,
         "outDir": out,
         "说明": "阶段1完成：抽出 %d 张候选图（_候选图/，中间产物）+ 逐页文本 + 标注图；"
                 "下一步由分身照 _标注/ 核对生成 _配对.json，再执行定稿出成品图" % n_crop

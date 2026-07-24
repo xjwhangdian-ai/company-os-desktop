@@ -11,6 +11,12 @@ export interface PdfCatalogResult {
   ok: boolean
   pages?: number
   crops?: number
+  /** 机械自动配对出的产品条目数（文本层/OCR 标题 ↔ 候选图） */
+  autoPaired?: number
+  /** true=没识别到任何标题（纯扫描且无 OCR），兜底导出全部候选、名称留空 */
+  degraded?: boolean
+  /** 本次用了系统 OCR（扫描版画册，名称可能有个别识别误差） */
+  usedOcr?: boolean
   outDir?: string
   说明: string
 }
@@ -82,7 +88,8 @@ export function extractPdfCatalog(dataDir: string, pdfFileName: string): Promise
       }
       try {
         const j = JSON.parse(out.trim().split('\n').pop() ?? '{}')
-        if (j.ok) return resolve({ ok: true, pages: j.pages, crops: j.crops, outDir, 说明: j.说明 })
+        if (j.ok)
+          return resolve({ ok: true, pages: j.pages, crops: j.crops, autoPaired: j.autoPaired, degraded: Boolean(j.degraded), usedOcr: Boolean(j.usedOcr), outDir, 说明: j.说明 })
       } catch {
         /* 落到下面的失败分支 */
       }
