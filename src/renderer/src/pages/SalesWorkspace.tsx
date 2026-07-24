@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AgentDisplayMeta,
   ContactRole,
@@ -240,7 +240,7 @@ function buildCatalogPairPrompt(pdfFileName: string): string {
     `   {"序号":1,"型号":"HW-XX","产品名称":"排爆服","分类":"排爆服","页":5,"候选":0}`,
     `   或 {"序号":2,...,"页":12,"框":[1950,205,2380,445]}`,
     `   序号全册连续；型号/产品名称/分类照 文本提取.md 原文，读不到的填空字符串""，绝不编造。`,
-    `完成后回复：共配对多少个产品、哪些页没有产品照。之后我再点一次「画册抠图」，App 会按清单机械产出成品图（命名 序号_型号_产品名称_P页.jpg）。`
+    `写完 _配对.json 后简短回复共配对多少个产品、哪些页没有产品照即可——App 会自动检测该文件并定稿出成品图（命名 序号_型号_产品名称_P页.jpg），无需人工再操作。`
   ].join('\n')
 }
 
@@ -376,6 +376,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [editingId, setEditingId] = useState<string | null>(null)
   const [previews, setPreviews] = useState<PreviewCard[]>([])
   const [catalogFlow, setCatalogFlow] = useState<Record<string, CatalogFlowState>>({})
+  const [pendingAutoSend, setPendingAutoSend] = useState(false)
+  const catalogPollRef = useRef<Record<string, number>>({})
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -437,6 +439,62 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     setNotice(text)
     setTimeout(() => setNotice(null), 4500)
   }
+
+  /** 画册抠图：把某个 PDF 的分步状态写入常驻状态条 */
+  function setCatalog(fileName: string, s: CatalogFlowState): void {
+    setCatalogFlow((prev) => ({ ...prev, [fileName]: s }))
+  }
+
+  function stopCatalogPoll(fileName: string): void {
+    const id = catalogPollRef.current[fileName]
+    if (id) {
+      window.clearInterval(id)
+      delete catalogPollRef.current[fileName]
+    }
+  }
+
+  /** 分身核对期间每 20 秒探测一次：_配对.json 写好了就自动定稿出图（applyCatalogPairing 本身即定稿动作） */
+  function startCatalogPoll(fileName: string): void {
+    stopCatalogPoll(fileName)
+    let ticks = 0
+    const id = window.setInterval(async () => {
+      ticks++
+      if (ticks > 90) {
+        // 30 分钟兜底：不再空转，留可点的按钮让人手动收尾
+        stopCatalogPoll(fileName)
+        setCatalog(fileName, { stage: 'error', text: '⚠ 等待分身核对超过 30 分钟——请看右侧对话确认分身状态，完成后再点一次「画册抠图」收尾' })
+        return
+      }
+      try {
+        const a = await window.api.sales.applyCatalogPairing(fileName)
+        if (a.needPairing) return // 分身还没写完配对清单，继续等
+        stopCatalogPoll(fileName)
+        if (a.ok) {
+          setCatalog(fileName, {
+            stage: 'done',
+            outDir: a.outDir,
+            text:
+              `✅ 全部完成：已产出 ${a.count ?? '?'} 张成品图（每产品一张，命名 序号_型号_产品名称_P页），中间产物已自动清理` +
+              (a.missing && a.missing.length > 0 ? `；${a.missing.length} 条未命中需人工处理：${a.missing.slice(0, 3).join('、')}` : '')
+          })
+          if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
+        } else {
+          setCatalog(fileName, { stage: 'error', text: '⚠ 自动定稿失败：' + a.说明 })
+        }
+      } catch {
+        /* 单次探测失败（如主进程忙）不终止轮询 */
+      }
+    }, 20_000)
+    catalogPollRef.current[fileName] = id
+  }
+
+  // 页面卸载时清掉所有轮询
+  useEffect(() => {
+    const polls = catalogPollRef.current
+    return () => {
+      for (const id of Object.values(polls)) window.clearInterval(id)
+    }
+  }, [])
 
   /** 拖拽表头右缘调整列宽（最小 40px） */
   function startResize(key: string, e: React.MouseEvent): void {
@@ -979,20 +1037,21 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     )}
                     {preview.fileName.toLowerCase().endsWith('.pdf') &&
                       (() => {
-                        const cat = catalogFlow[preview.fileName]
-                        const busyStage = cat?.stage === 'extracting' || cat?.stage === 'applying'
+                        const f = preview.fileName
+                        const cat = catalogFlow[f]
+                        const busyStage = cat?.stage === 'extracting' || cat?.stage === 'pairing' || cat?.stage === 'applying'
                         const label =
                           cat?.stage === 'extracting'
                             ? '⏳ ① 抽取中…'
-                            : cat?.stage === 'applying'
-                              ? '⏳ ② 定稿中…'
-                              : cat?.stage === 'pairing'
-                                ? '② 定稿出图'
+                            : cat?.stage === 'pairing'
+                              ? '⏳ ② 分身核对中…'
+                              : cat?.stage === 'applying'
+                                ? '⏳ ③ 定稿中…'
                                 : cat?.stage === 'done'
                                   ? '📂 查看成品图'
                                   : '📖 画册抠图'
-                        const setCat = (s: CatalogFlowState): void =>
-                          setCatalogFlow((prev) => ({ ...prev, [preview.fileName]: s }))
+                        const PAIRING_TEXT = (extra: string): string =>
+                          `${extra}② 已把核对任务直发给分身（右侧对话可看进度）。分身写完配对清单后，App 会自动定稿出图并打开成品文件夹——全程无需再点击，请保持 App 开启`
                         return (
                           <button
                             disabled={busyStage}
@@ -1001,7 +1060,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                 typeof window.api.sales.extractPdfCatalog !== 'function' ||
                                 typeof window.api.sales.applyCatalogPairing !== 'function'
                               ) {
-                                setCat({ stage: 'error', text: '⚠ 当前运行的 App 主程序版本过旧——请完全退出（Cmd+Q）重新打开；若仍提示，请在「设置 → 关于与更新」升级到最新版' })
+                                setCatalog(f, { stage: 'error', text: '⚠ 当前运行的 App 主程序版本过旧——请完全退出（Cmd+Q）重新打开；若仍提示，请在「设置 → 关于与更新」升级到最新版' })
                                 return
                               }
                               if (cat?.stage === 'done' && cat.outDir) {
@@ -1009,29 +1068,25 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                 return
                               }
                               try {
-                                if (cat?.stage === 'pairing') setCat({ stage: 'applying', text: '② 正在按分身的配对清单产出成品图并清理中间产物…' })
-                                const a = await window.api.sales.applyCatalogPairing(preview.fileName)
+                                const a = await window.api.sales.applyCatalogPairing(f)
                                 if (a.notExtracted) {
-                                  setCat({ stage: 'extracting', text: '① 机械抽取中（候选图+逐页文本+标注图），页数多时约 1-2 分钟，请勿关闭窗口…' })
-                                  const r = await window.api.sales.extractPdfCatalog(preview.fileName)
+                                  setCatalog(f, { stage: 'extracting', text: '① 机械抽取中（候选图+逐页文本+标注图），页数多时约 1-2 分钟，请勿关闭窗口…' })
+                                  const r = await window.api.sales.extractPdfCatalog(f)
                                   if (!r.ok) {
-                                    setCat({ stage: 'error', text: '⚠ ' + r.说明 })
+                                    setCatalog(f, { stage: 'error', text: '⚠ ' + r.说明 })
                                     return
                                   }
-                                  setPendingPrompt(buildCatalogPairPrompt(preview.fileName))
-                                  setCat({
-                                    stage: 'pairing',
-                                    text: `① 抽取完成：${r.pages} 页、${r.crops} 个候选图（已收进 _中间产物/，属正常中间文件）。→ 第②步：核对任务已填进右侧分身对话输入框，请点「发送」让分身逐页核对配图；等分身回复“核对完成”后，回来点上方「② 定稿出图」`
-                                  })
+                                  setPendingPrompt(buildCatalogPairPrompt(f))
+                                  setPendingAutoSend(true)
+                                  setCatalog(f, { stage: 'pairing', text: PAIRING_TEXT(`① 抽取完成：${r.pages} 页、${r.crops} 个候选图。`) })
+                                  startCatalogPoll(f)
                                 } else if (a.needPairing) {
-                                  if (cat?.stage === 'pairing' || cat?.stage === 'applying') {
-                                    setCat({ stage: 'pairing', text: '分身还没写完配对清单（_配对.json）——请确认右侧对话里的核对任务已「发送」、并等分身回复完成后再点「② 定稿出图」' })
-                                  } else {
-                                    setPendingPrompt(buildCatalogPairPrompt(preview.fileName))
-                                    setCat({ stage: 'pairing', text: '此前已抽取过。→ 核对任务已填进右侧分身对话输入框，请点「发送」；等分身回复完成后点「② 定稿出图」' })
-                                  }
+                                  setPendingPrompt(buildCatalogPairPrompt(f))
+                                  setPendingAutoSend(true)
+                                  setCatalog(f, { stage: 'pairing', text: PAIRING_TEXT('此前已抽取过。') })
+                                  startCatalogPoll(f)
                                 } else if (a.ok) {
-                                  setCat({
+                                  setCatalog(f, {
                                     stage: 'done',
                                     outDir: a.outDir,
                                     text: `✅ 完成：已产出 ${a.count ?? '?'} 张成品图（每产品一张，命名 序号_型号_产品名称_P页），中间产物已自动清理` +
@@ -1039,18 +1094,14 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                   })
                                   if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
                                 } else {
-                                  setCat({ stage: 'error', text: '⚠ ' + a.说明 })
+                                  setCatalog(f, { stage: 'error', text: '⚠ ' + a.说明 })
                                 }
                               } catch (err) {
-                                setCat({ stage: 'error', text: '⚠ ' + (err instanceof Error ? err.message : String(err)) })
+                                setCatalog(f, { stage: 'error', text: '⚠ ' + (err instanceof Error ? err.message : String(err)) })
                               }
                             }}
-                            title="数字排版产品画册两次点击闭环：第一次点=机械抽取+派分身核对配图（需在右侧对话点发送）；分身完成后再点=按配对清单出成品图并清理中间产物。成品在 _画册抽取/产品图片/，每产品一张（序号_型号_产品名称_P页.jpg）。整页扫描件抠不出独立图，用「AI 解析入库」。"
-                            className={`rounded-md border px-3 py-1 text-xs disabled:opacity-50 ${
-                              cat?.stage === 'pairing'
-                                ? 'border-jushi-accent bg-jushi-accent/5 font-medium text-jushi-accent'
-                                : 'border-slate-300 bg-white text-slate-600 hover:border-jushi-accent hover:text-jushi-accent'
-                            }`}
+                            title="数字排版产品画册一键闭环：点一次=机械抽取→核对任务直发分身→分身完成后自动定稿出成品图（每产品一张，序号_型号_产品名称_P页.jpg，在 _画册抽取/产品图片/）并自动清理中间产物。整页扫描件抠不出独立图，用「AI 解析入库」。"
+                            className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-60"
                           >
                             {label}
                           </button>
@@ -1943,7 +1994,11 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
           <AgentChat
             agent={agent}
             pendingPrompt={pendingPrompt}
-            onPendingPromptConsumed={() => setPendingPrompt(null)}
+            pendingAutoSend={pendingAutoSend}
+            onPendingPromptConsumed={() => {
+              setPendingPrompt(null)
+              setPendingAutoSend(false)
+            }}
           />
         </div>
       </div>

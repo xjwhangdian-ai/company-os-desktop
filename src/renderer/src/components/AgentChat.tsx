@@ -16,6 +16,8 @@ interface AgentChatProps {
   /** 外部注入待发送草稿（如工作台的快捷动作按钮），填入输入框后清空，不自动发送 */
   pendingPrompt?: string | null
   onPendingPromptConsumed?: () => void
+  /** 为 true 时 pendingPrompt 直接自动发送（分身空闲时），不经输入框；分身正忙则退回填输入框 */
+  pendingAutoSend?: boolean
   /** 外部注入待发送附件（如运营页的素材上传区），合并进输入框旁的附件列表，不自动发送 */
   pendingAttachments?: ChatAttachment[] | null
   onPendingAttachmentsConsumed?: () => void
@@ -27,6 +29,7 @@ export function AgentChat({
   uploadFn,
   pendingPrompt,
   onPendingPromptConsumed,
+  pendingAutoSend,
   pendingAttachments: injectedAttachments,
   onPendingAttachmentsConsumed
 }: AgentChatProps): React.JSX.Element {
@@ -46,10 +49,16 @@ export function AgentChat({
 
   useEffect(() => {
     if (pendingPrompt) {
-      setInput(pendingPrompt)
+      if (pendingAutoSend && !(session?.isRunning ?? false)) {
+        // 直发模式（如画册抠图的核对任务）：跳过输入框直接发给分身；分身正忙则退回填输入框
+        sendMessage(agent.name as AgentName, sessionKey, pendingPrompt.trim())
+      } else {
+        setInput(pendingPrompt)
+      }
       onPendingPromptConsumed?.()
     }
-  }, [pendingPrompt, onPendingPromptConsumed])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPrompt, pendingAutoSend, onPendingPromptConsumed])
 
   useEffect(() => {
     if (injectedAttachments && injectedAttachments.length > 0) {
