@@ -57,6 +57,13 @@ interface PreviewCard extends SupplierDocPreview {
   mode: UploadMode
 }
 
+/** 画册抠图分步状态（按 PDF 文件名记，常驻显示在预览卡上，替代一闪而过的 flash） */
+interface CatalogFlowState {
+  stage: 'extracting' | 'pairing' | 'applying' | 'done' | 'error'
+  text: string
+  outDir?: string
+}
+
 interface CartLine {
   product: ProductEntry
   数量: string
@@ -368,6 +375,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [previews, setPreviews] = useState<PreviewCard[]>([])
+  const [catalogFlow, setCatalogFlow] = useState<Record<string, CatalogFlowState>>({})
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -969,49 +977,99 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         📋 生成报价清单
                       </button>
                     )}
-                    {preview.fileName.toLowerCase().endsWith('.pdf') && (
-                      <button
-                        onClick={async () => {
-                          // 主程序还是旧版本（如刚更新未完全重启、或安装版尚未升级）时该 API 不存在——给明确指引
-                          if (
-                            typeof window.api.sales.extractPdfCatalog !== 'function' ||
-                            typeof window.api.sales.applyCatalogPairing !== 'function'
-                          ) {
-                            flash('⚠ 当前运行的 App 主程序版本过旧，没有画册抠图功能——请完全退出（Cmd+Q）重新打开；若仍提示，请在「设置 → 关于与更新」升级到最新版')
-                            return
-                          }
-                          try {
-                            // 智能三段：未抽取→抽取+派分身核对；已抽取未配对→派分身核对；已配对→出成品图
-                            const a = await window.api.sales.applyCatalogPairing(preview.fileName)
-                            if (a.notExtracted) {
-                              flash('第1步：正在抽取产品画册（候选图+文本+标注图），页数多时约1-2分钟…')
-                              const r = await window.api.sales.extractPdfCatalog(preview.fileName)
-                              if (!r.ok) {
-                                flash('⚠ ' + r.说明)
+                    {preview.fileName.toLowerCase().endsWith('.pdf') &&
+                      (() => {
+                        const cat = catalogFlow[preview.fileName]
+                        const busyStage = cat?.stage === 'extracting' || cat?.stage === 'applying'
+                        const label =
+                          cat?.stage === 'extracting'
+                            ? '⏳ ① 抽取中…'
+                            : cat?.stage === 'applying'
+                              ? '⏳ ② 定稿中…'
+                              : cat?.stage === 'pairing'
+                                ? '② 定稿出图'
+                                : cat?.stage === 'done'
+                                  ? '📂 查看成品图'
+                                  : '📖 画册抠图'
+                        const setCat = (s: CatalogFlowState): void =>
+                          setCatalogFlow((prev) => ({ ...prev, [preview.fileName]: s }))
+                        return (
+                          <button
+                            disabled={busyStage}
+                            onClick={async () => {
+                              if (
+                                typeof window.api.sales.extractPdfCatalog !== 'function' ||
+                                typeof window.api.sales.applyCatalogPairing !== 'function'
+                              ) {
+                                setCat({ stage: 'error', text: '⚠ 当前运行的 App 主程序版本过旧——请完全退出（Cmd+Q）重新打开；若仍提示，请在「设置 → 关于与更新」升级到最新版' })
                                 return
                               }
-                              setPendingPrompt(buildCatalogPairPrompt(preview.fileName))
-                              flash(`✅ 抽取完成（${r.pages}页/${r.crops}个候选）。已让分身逐页核对配对——分身完成后再点一次「画册抠图」即可出成品图`)
-                            } else if (a.needPairing) {
-                              setPendingPrompt(buildCatalogPairPrompt(preview.fileName))
-                              flash('已让分身照标注图逐页核对配对——分身完成后再点一次「画册抠图」出成品图')
-                            } else if (a.ok) {
-                              flash(`✅ ${a.说明}`)
-                              if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
-                            } else {
-                              flash('⚠ ' + a.说明)
-                            }
-                          } catch (err) {
-                            flash(err instanceof Error ? err.message : String(err))
-                          }
-                        }}
-                        title="数字排版产品画册三步闭环：①机械抽取候选图+文本+标注图 ②分身照标注图逐页核对生成配对清单 ③再点一次出成品图——每个产品一张，命名 序号_型号_产品名称_来源页.jpg（在 _画册抽取/产品图片/）。整页扫描件抠不出独立图，用「AI 解析入库」。"
-                        className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
-                      >
-                        📖 画册抠图
-                      </button>
-                    )}
+                              if (cat?.stage === 'done' && cat.outDir) {
+                                await window.api.shell.showItemInFolder(cat.outDir)
+                                return
+                              }
+                              try {
+                                if (cat?.stage === 'pairing') setCat({ stage: 'applying', text: '② 正在按分身的配对清单产出成品图并清理中间产物…' })
+                                const a = await window.api.sales.applyCatalogPairing(preview.fileName)
+                                if (a.notExtracted) {
+                                  setCat({ stage: 'extracting', text: '① 机械抽取中（候选图+逐页文本+标注图），页数多时约 1-2 分钟，请勿关闭窗口…' })
+                                  const r = await window.api.sales.extractPdfCatalog(preview.fileName)
+                                  if (!r.ok) {
+                                    setCat({ stage: 'error', text: '⚠ ' + r.说明 })
+                                    return
+                                  }
+                                  setPendingPrompt(buildCatalogPairPrompt(preview.fileName))
+                                  setCat({
+                                    stage: 'pairing',
+                                    text: `① 抽取完成：${r.pages} 页、${r.crops} 个候选图（已收进 _中间产物/，属正常中间文件）。→ 第②步：核对任务已填进右侧分身对话输入框，请点「发送」让分身逐页核对配图；等分身回复“核对完成”后，回来点上方「② 定稿出图」`
+                                  })
+                                } else if (a.needPairing) {
+                                  if (cat?.stage === 'pairing' || cat?.stage === 'applying') {
+                                    setCat({ stage: 'pairing', text: '分身还没写完配对清单（_配对.json）——请确认右侧对话里的核对任务已「发送」、并等分身回复完成后再点「② 定稿出图」' })
+                                  } else {
+                                    setPendingPrompt(buildCatalogPairPrompt(preview.fileName))
+                                    setCat({ stage: 'pairing', text: '此前已抽取过。→ 核对任务已填进右侧分身对话输入框，请点「发送」；等分身回复完成后点「② 定稿出图」' })
+                                  }
+                                } else if (a.ok) {
+                                  setCat({
+                                    stage: 'done',
+                                    outDir: a.outDir,
+                                    text: `✅ 完成：已产出 ${a.count ?? '?'} 张成品图（每产品一张，命名 序号_型号_产品名称_P页），中间产物已自动清理` +
+                                      (a.missing && a.missing.length > 0 ? `；${a.missing.length} 条未命中需人工处理：${a.missing.slice(0, 3).join('、')}` : '')
+                                  })
+                                  if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
+                                } else {
+                                  setCat({ stage: 'error', text: '⚠ ' + a.说明 })
+                                }
+                              } catch (err) {
+                                setCat({ stage: 'error', text: '⚠ ' + (err instanceof Error ? err.message : String(err)) })
+                              }
+                            }}
+                            title="数字排版产品画册两次点击闭环：第一次点=机械抽取+派分身核对配图（需在右侧对话点发送）；分身完成后再点=按配对清单出成品图并清理中间产物。成品在 _画册抽取/产品图片/，每产品一张（序号_型号_产品名称_P页.jpg）。整页扫描件抠不出独立图，用「AI 解析入库」。"
+                            className={`rounded-md border px-3 py-1 text-xs disabled:opacity-50 ${
+                              cat?.stage === 'pairing'
+                                ? 'border-jushi-accent bg-jushi-accent/5 font-medium text-jushi-accent'
+                                : 'border-slate-300 bg-white text-slate-600 hover:border-jushi-accent hover:text-jushi-accent'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        )
+                      })()}
                   </div>
+                  {catalogFlow[preview.fileName] && (
+                    <p
+                      className={`mt-2 rounded-md px-2.5 py-1.5 text-[11px] leading-relaxed ${
+                        catalogFlow[preview.fileName].stage === 'done'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : catalogFlow[preview.fileName].stage === 'error'
+                            ? 'bg-red-50 text-red-600'
+                            : 'bg-sky-50 text-sky-800'
+                      }`}
+                    >
+                      {catalogFlow[preview.fileName].text}
+                    </p>
+                  )}
                 </div>
               ))}
 
