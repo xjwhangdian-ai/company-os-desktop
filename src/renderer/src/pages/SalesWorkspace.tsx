@@ -240,6 +240,7 @@ function buildCatalogPairPrompt(pdfFileName: string): string {
     `   {"序号":1,"型号":"HW-XX","产品名称":"排爆服","分类":"排爆服","页":5,"候选":0}`,
     `   或 {"序号":2,...,"页":12,"框":[1950,205,2380,445]}`,
     `   序号全册连续；型号/产品名称/分类照 文本提取.md 原文，读不到的填空字符串""，绝不编造。`,
+    `5. 进度上报：每核对完一页，就用 Write 覆写 ${dir}/_核对进度.json 为 {"已核对页": 当前已完成页数, "总页": 总页数}——App 靠它向用户显示进度与预计剩余时间，务必每页更新。`,
     `写完 _配对.json 后简短回复共配对多少个产品、哪些页没有产品照即可——App 会自动检测该文件并定稿出成品图（命名 序号_型号_产品名称_P页.jpg），无需人工再操作。`
   ].join('\n')
 }
@@ -453,10 +454,11 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     }
   }
 
-  /** 分身核对期间每 20 秒探测一次：_配对.json 写好了就自动定稿出图（applyCatalogPairing 本身即定稿动作） */
+  /** 分身核对期间每 20 秒探测一次：先读进度更新状态条（含预计剩余时间），_配对.json 写好即自动定稿 */
   function startCatalogPoll(fileName: string): void {
     stopCatalogPoll(fileName)
     let ticks = 0
+    const startAt = Date.now()
     const id = window.setInterval(async () => {
       ticks++
       if (ticks > 90) {
@@ -467,7 +469,25 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       }
       try {
         const a = await window.api.sales.applyCatalogPairing(fileName)
-        if (a.needPairing) return // 分身还没写完配对清单，继续等
+        if (a.needPairing) {
+          // 分身还没写完配对清单：读进度文件刷新状态条（分身每核对完一页会更新它）
+          const elapsedMin = Math.max(1, Math.round((Date.now() - startAt) / 60000))
+          let progressText = `② 分身核对配图中… 已进行约 ${elapsedMin} 分钟（右侧对话可看实时过程）`
+          try {
+            const p =
+              typeof window.api.sales.catalogProgress === 'function' ? await window.api.sales.catalogProgress(fileName) : null
+            if (p && p.已核对页 > 0) {
+              const pct = Math.round((p.已核对页 / p.总页) * 100)
+              const perPageMs = (Date.now() - startAt) / p.已核对页
+              const etaMin = Math.max(1, Math.ceil(((p.总页 - p.已核对页) * perPageMs) / 60000))
+              progressText = `② 分身核对配图中：${p.已核对页}/${p.总页} 页（${pct}%）· 已用 ${elapsedMin} 分钟 · 预计还需约 ${etaMin} 分钟。完成后 App 自动定稿出图，无需操作`
+            }
+          } catch {
+            /* 进度文件读取失败不影响等待 */
+          }
+          setCatalog(fileName, { stage: 'pairing', text: progressText })
+          return
+        }
         stopCatalogPoll(fileName)
         if (a.ok) {
           setCatalog(fileName, {
@@ -1051,7 +1071,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                   ? '📂 查看成品图'
                                   : '📖 画册抠图'
                         const PAIRING_TEXT = (extra: string): string =>
-                          `${extra}② 已把核对任务直发给分身（右侧对话可看进度）。分身写完配对清单后，App 会自动定稿出图并打开成品文件夹——全程无需再点击，请保持 App 开启`
+                          `${extra}② 已把核对任务直发给分身，本状态条稍后会显示 已核对页数/总页数 与预计剩余时间。分身完成后 App 自动定稿出图并打开成品文件夹——全程无需再点击，请保持 App 开启`
                         return (
                           <button
                             disabled={busyStage}

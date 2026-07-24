@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
 
@@ -111,6 +111,21 @@ export interface CatalogApplyResult {
 export function catalogOutDirRel(pdfFileName: string): string {
   const stem = basename(pdfFileName).replace(/\.[^.]+$/, '')
   return join('inbox', '01_销售_sales', '供应商资料', `${stem}_画册抽取`)
+}
+
+/** 分身核对进度（分身每核对完一页更新 _核对进度.json）；没有/坏文件返回 null */
+export function readCatalogProgress(dataDir: string, pdfFileName: string): { 已核对页: number; 总页: number } | null {
+  try {
+    const p = join(dataDir, catalogOutDirRel(pdfFileName), '_核对进度.json')
+    if (!existsSync(p)) return null
+    const j = JSON.parse(readFileSync(p, 'utf-8'))
+    const done = Number(j.已核对页)
+    const total = Number(j.总页)
+    if (!isFinite(done) || !isFinite(total) || total <= 0) return null
+    return { 已核对页: Math.min(done, total), 总页: total }
+  } catch {
+    return null
+  }
 }
 
 /**

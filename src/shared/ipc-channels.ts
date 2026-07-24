@@ -28,6 +28,7 @@ export const IPC = {
   salesGenPdfQuoteList: 'sales:gen-pdf-quote-list',
   salesExtractPdfCatalog: 'sales:extract-pdf-catalog',
   salesApplyCatalogPairing: 'sales:apply-catalog-pairing',
+  salesCatalogProgress: 'sales:catalog-progress',
   operationUploadTemplate: 'operation:upload-template',
   operationListTemplates: 'operation:list-templates',
   operationRecentArticles: 'operation:recent-articles',
