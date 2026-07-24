@@ -15,20 +15,33 @@ export interface PdfCatalogResult {
   说明: string
 }
 
-// Python(pypdf/PIL/numpy) 抽图栈目前在 Mac 就绪；Windows 成员机给手动指引，避免 spawn 报错。
-const SUPPORTED = process.platform === 'darwin'
+const isWin = process.platform === 'win32'
+
+/** 跨平台找 python3：mac 常见绝对路径 → PATH 里的 python3/python/py（Windows 官方装包是 python/py） */
+function resolvePython(): string | null {
+  const candidates = isWin
+    ? ['python', 'py']
+    : ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
+  for (const c of candidates) {
+    if (c.startsWith('/')) {
+      if (existsSync(c)) return c
+    } else {
+      return c // 交给 PATH 解析；spawn error 时会落到"无法启动 Python"分支给出安装指引
+    }
+  }
+  return null
+}
+
+const INSTALL_HINT = isWin
+  ? '本机没有可用的 Python——请安装 python.org 的 Python 3 并勾选 Add to PATH，再执行 pip install pypdf pillow numpy 后重试'
+  : '本机没有可用的 python3——终端执行 xcode-select --install（或 brew install python3），再 pip3 install pypdf pillow numpy 后重试'
 
 /**
  * 抽取产品画册：pdfFileName 为 inbox/01_销售_sales/供应商资料/ 下的 PDF 文件名。
  * 产出到同目录的 {pdf名}_画册抽取/（产品图候选/ + 文本提取.md + _标注/ + _整页/）。
+ * 跨平台：mac / Windows 都尝试本机 Python；没装或缺依赖时给出对应平台的安装指引。
  */
 export function extractPdfCatalog(dataDir: string, pdfFileName: string): Promise<PdfCatalogResult> {
-  if (!SUPPORTED) {
-    return Promise.resolve({
-      ok: false,
-      说明: '画册抽图目前仅 Mac 管理员机支持（依赖 Python 图像栈）；Windows 请把 PDF 发给销售分身逐页整理'
-    })
-  }
   const supplierDir = join(dataDir, 'inbox', '01_销售_sales', '供应商资料')
   const pdf = join(supplierDir, pdfFileName)
   if (!existsSync(pdf)) {
@@ -38,12 +51,16 @@ export function extractPdfCatalog(dataDir: string, pdfFileName: string): Promise
   if (!existsSync(script)) {
     return Promise.resolve({ ok: false, 说明: '抽图脚本不存在（tools/pdf-catalog 未同步到数据目录）' })
   }
+  const python = resolvePython()
+  if (!python) {
+    return Promise.resolve({ ok: false, 说明: INSTALL_HINT })
+  }
   const stem = basename(pdfFileName).replace(/\.[^.]+$/, '')
   const outDir = join(supplierDir, `${stem}_画册抽取`)
   mkdirSync(outDir, { recursive: true })
 
   return new Promise((resolve) => {
-    const child = spawn('/usr/bin/python3', [script, pdf, outDir])
+    const child = spawn(python, [script, pdf, outDir], { windowsHide: true })
     let out = ''
     let err = ''
     const timer = setTimeout(() => {
@@ -58,7 +75,9 @@ export function extractPdfCatalog(dataDir: string, pdfFileName: string): Promise
         return resolve({
           ok: false,
           outDir,
-          说明: '缺少 Python 依赖，请在终端执行：pip3 install pypdf pillow numpy，然后重试'
+          说明: isWin
+            ? '缺少 Python 依赖，请在命令提示符执行：pip install pypdf pillow numpy，然后重试'
+            : '缺少 Python 依赖，请在终端执行：pip3 install pypdf pillow numpy，然后重试'
         })
       }
       try {
@@ -69,9 +88,9 @@ export function extractPdfCatalog(dataDir: string, pdfFileName: string): Promise
       }
       resolve({ ok: false, outDir, 说明: `抽图失败：${(err || out).slice(0, 200)}` })
     })
-    child.on('error', (e) => {
+    child.on('error', () => {
       clearTimeout(timer)
-      resolve({ ok: false, outDir, 说明: `无法启动 Python：${String(e)}（确认已装 python3）` })
+      resolve({ ok: false, outDir, 说明: INSTALL_HINT })
     })
   })
 }

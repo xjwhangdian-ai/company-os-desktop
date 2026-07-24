@@ -26,6 +26,7 @@ done
 # 公众号排版引擎
 mkdir -p "$DST/tools"
 cp -R "$SRC/tools/gzh" "$DST/tools/gzh"
+cp -R "$SRC/tools/pdf-catalog" "$DST/tools/pdf-catalog"
 
 # 目录骨架（空桶 + .gitkeep）
 BUCKETS=(

@@ -926,6 +926,10 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     {preview.fileName.toLowerCase().endsWith('.pdf') && (
                       <button
                         onClick={async () => {
+                          if (typeof window.api.sales.genPdfQuoteList !== 'function') {
+                            flash('⚠ 当前运行的 App 主程序版本过旧——请完全退出（Cmd+Q）重新打开；若仍提示，请在「设置 → 关于与更新」升级到最新版')
+                            return
+                          }
                           try {
                             const r = await window.api.sales.genPdfQuoteList(preview.fileName)
                             if (r.ok && r.outPath) {
@@ -950,6 +954,11 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     {preview.fileName.toLowerCase().endsWith('.pdf') && (
                       <button
                         onClick={async () => {
+                          // 主程序还是旧版本（如刚更新未完全重启、或安装版尚未升级）时该 API 不存在——给明确指引
+                          if (typeof window.api.sales.extractPdfCatalog !== 'function') {
+                            flash('⚠ 当前运行的 App 主程序版本过旧，没有画册抠图功能——请完全退出（Cmd+Q）重新打开；若仍提示，请在「设置 → 关于与更新」升级到最新版')
+                            return
+                          }
                           flash('正在抽取产品画册（抠图+文本），页数多时约1-2分钟…')
                           try {
                             const r = await window.api.sales.extractPdfCatalog(preview.fileName)

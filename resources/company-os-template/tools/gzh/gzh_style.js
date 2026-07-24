@@ -9,22 +9,57 @@
  */
 const fs = require('fs');
 const path = require('path');
-const T = require('./theme.js');
+const os = require('os');
+const { execFileSync } = require('child_process');
 
 const SRC = process.argv[2];
-if (!SRC) { console.error('用法: node gzh_style.js <输入.md> [输出.html]'); process.exit(1); }
+if (!SRC) { console.error('用法: node gzh_style.js <输入.md> [输出.html] [风格:炬视|瑾智]'); process.exit(1); }
 const OUT = process.argv[3] || SRC.replace(/\.md$/i, '') + '_公众号排版.html';
+// 第 4 参数选风格：themes/<品牌>.js；缺省或找不到则用本仓库默认 theme.js
+const THEME = process.argv[4];
+let T;
+try { T = THEME ? require('./themes/' + THEME + '.js') : require('./theme.js'); }
+catch (e) { T = require('./theme.js'); }
 const SRCDIR = path.dirname(path.resolve(SRC));
 
 const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+// 解析图片实际路径：绝对路径直用；相对路径先按 md 所在目录找，
+// 找不到再从 md 目录逐级向上，直到命中（分身写的图多是相对数据根的 inbox/…，
+// 而 md 在 outputs/… 下，两者基准不同——向上兜底即可两种写法都命中）。
+function resolveImg(rel){
+  if(path.isAbsolute(rel)) return fs.existsSync(rel) ? rel : null;
+  let dir = SRCDIR;
+  for(let up=0; up<10; up++){
+    const cand = path.resolve(dir, rel);
+    if(fs.existsSync(cand)) return cand;
+    const parent = path.dirname(dir);
+    if(parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+// 大图先缩到 1080px 再内嵌——手机原图动辄十几 MB，base64 后公众号编辑器根本粘不动。
+// 用 macOS 自带 sips 缩放；不可用/失败则退回原图（图片照样能显示，只是体积大）。
+function shrunk(p, ext){
+  try{
+    if(fs.statSync(p).size < 500*1024) return p;                 // 小图不折腾
+    if(!(ext==='jpg'||ext==='jpeg'||ext==='png')) return p;      // 只缩位图
+    const tmp = path.join(os.tmpdir(), `gzh_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext==='png'?'png':'jpg'}`);
+    execFileSync('/usr/bin/sips', ['-Z', '1080', p, '--out', tmp], { stdio: 'ignore' });
+    if(fs.existsSync(tmp) && fs.statSync(tmp).size > 0) return tmp;
+  }catch(e){ /* sips 缺失或失败：用原图 */ }
+  return p;
+}
+
 // 图片转 base64 内嵌
 function imgData(rel){
-  const p = path.isAbsolute(rel) ? rel : path.resolve(SRCDIR, rel);
-  if(!fs.existsSync(p)) return null;
-  const ext = p.split('.').pop().toLowerCase();
+  const src = resolveImg(rel);
+  if(!src) return null;
+  const ext = src.split('.').pop().toLowerCase();
   const mime = ext==='jpg'||ext==='jpeg' ? 'image/jpeg' : ext==='svg' ? 'image/svg+xml' : 'image/png';
-  return `data:${mime};base64,${fs.readFileSync(p).toString('base64')}`;
+  return `data:${mime};base64,${fs.readFileSync(shrunk(src, ext)).toString('base64')}`;
 }
 
 // 行内：**粗体**、`代码`、[文字](链接)
@@ -61,8 +96,18 @@ while(i<lines.length){
   if((m = t.match(/^!\[([^\]]*)\]\(([^)]+)\)\s*$/))){
     const d = imgData(m[2]);
     if(d){
-      out.push(`<section style="${T.figWrap}"><img src="${d}" style="${T.img}" alt="${esc(m[1])}"/>`
-        + (m[1] ? `<p style="${T.caption}">${esc(m[1])}</p>` : '') + `</section>`);
+      // 若紧跟的下一非空行已是 *图注* 斜体行，就不再把 alt 也渲染成图注（否则出现两行相同说明）。
+      let j = i + 1;
+      while(j < lines.length && lines[j].trim() === '') j++;
+      const nextT = j < lines.length ? lines[j].trim() : '';
+      const nextIsCaption = /^\*([^*].*?)\*$/.test(nextT) && !nextT.startsWith('**');
+      const cap = (m[1] && !nextIsCaption) ? `<p style="${T.caption}">${esc(m[1])}</p>` : '';
+      out.push(`<section style="${T.figWrap}"><img src="${d}" style="${T.img}" alt="${esc(m[1])}"/>${cap}</section>`);
+    } else {
+      // 找不到图片：给醒目占位并在控制台告警，绝不静默丢图
+      console.error('⚠ 图片未找到，已占位：', m[2]);
+      out.push(`<section style="${T.photoSlot}"><p style="${T.photoSlotLabel}">📷 图片未找到：${esc(m[1]||'配图')}</p>`
+        + `<p style="${T.photoSlotHint}">路径 ${esc(m[2])} 未定位到文件——请核对图片是否已上传到 inbox/05_运营_operation/，或在编辑器手动插入</p></section>`);
     }
     i++; continue;
   }
