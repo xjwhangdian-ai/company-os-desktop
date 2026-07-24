@@ -26,6 +26,7 @@ export const IPC = {
   uploadOperationTheme: 'upload:operation-theme',
   operationApplyImageNames: 'operation:apply-image-names',
   salesGenPdfQuoteList: 'sales:gen-pdf-quote-list',
+  salesExtractPdfCatalog: 'sales:extract-pdf-catalog',
   operationUploadTemplate: 'operation:upload-template',
   operationListTemplates: 'operation:list-templates',
   operationRecentArticles: 'operation:recent-articles',

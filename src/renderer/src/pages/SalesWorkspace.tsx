@@ -947,6 +947,24 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         📋 生成报价清单
                       </button>
                     )}
+                    {preview.fileName.toLowerCase().endsWith('.pdf') && (
+                      <button
+                        onClick={async () => {
+                          flash('正在抽取产品画册（抠图+文本），页数多时约1-2分钟…')
+                          try {
+                            const r = await window.api.sales.extractPdfCatalog(preview.fileName)
+                            flash((r.ok ? '✅ ' : '⚠ ') + r.说明)
+                            if (r.outDir) await window.api.shell.showItemInFolder(r.outDir)
+                          } catch (err) {
+                            flash(err instanceof Error ? err.message : String(err))
+                          }
+                        }}
+                        title="数字排版产品画册：机械抠出每个产品照到「产品图候选/」+ 逐页文本「文本提取.md」+ 带编号标注图「_标注/」。复杂版面照标注图人工核对配图；整页扫描件抠不出独立图，用左侧「AI 解析入库」。"
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
+                      >
+                        📖 画册抠图
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
