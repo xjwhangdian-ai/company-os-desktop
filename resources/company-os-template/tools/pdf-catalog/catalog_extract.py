@@ -5,13 +5,15 @@
 
 两个阶段：
   阶段1 抽取：python3 catalog_extract.py <画册.pdf> <产出目录>
-    _候选图/       每页检测到的候选产品照（P{页}_{序}.jpg）——中间产物，数量偏多是正常的
-    _整页/         每页整页位图，配对/复核时看整页
-    _标注/         每页标注候选框编号的图（原图1/2大小），分身照它核对"编号↔产品"
-    文本提取.md    每页文本层（型号/名称/参数原文）
-    _候选.json     结构化候选框坐标
+    _中间产物/候选图/  每页检测到的候选产品照（P{页}_{序}.jpg）——数量偏多是正常的
+    _中间产物/整页/    每页整页位图，配对/复核时看整页
+    _中间产物/标注/    每页标注候选框编号的图（原图1/2大小），分身照它核对"编号↔产品"
+    _中间产物/候选.json  结构化候选框坐标
+    文本提取.md        每页文本层（型号/名称/参数原文）
 
-  阶段2 定稿：python3 catalog_extract.py --apply <产出目录>
+  阶段2 定稿：python3 catalog_extract.py --apply <产出目录> [--clean]
+    --clean：定稿成功后删除 _中间产物/（可随时重新抽取再生），最终目录只留
+             产品图片/ + 文本提取.md + _配对.json
     读分身写的 <产出目录>/_配对.json：
       [{"序号":1,"型号":"HW-1","产品名称":"排爆服","页":5,"候选":0}, {"...","框":[x0,y0,x1,y1]}]
       候选=阶段1候选编号；候选不合适时用 框（按 _整页/P{页}.jpg 原图像素）。
@@ -86,6 +88,8 @@ def detect_boxes(im, min_area_frac=0.004):
                 fill = n / area
                 if ar > 4 or ar < 0.15 or fill < 0.25:
                     continue
+                if bh * k < 160 or bw * k < 120:  # 过小的块多为 logo/二维码/小图标
+                    continue
                 out.append(dict(x0=x0 * k, y0=y0 * k, x1=x1 * k, y1=y1 * k,
                                 w=bw * k, h=bh * k, fill=round(fill, 2)))
     # 左栏在前、上到下，编号稳定
@@ -97,8 +101,9 @@ def _slug(s):
     return re.sub(r'[\\/:*?"<>|\s]+', "_", str(s or "")).strip("_")[:36]
 
 
-def apply_pairing(out):
+def apply_pairing(out, clean=False):
     """阶段2：按分身写的 _配对.json 产出成品图 产品图片/序号_型号_产品名称_P页.jpg"""
+    import shutil
     pairing = os.path.join(out, "_配对.json")
     if not os.path.exists(pairing):
         print(json.dumps({"ok": False, "needPairing": True,
@@ -113,11 +118,19 @@ def apply_pairing(out):
         return
     dest = os.path.join(out, "产品图片")
     os.makedirs(dest, exist_ok=True)
-    # 兼容旧目录名
-    cand_dir = os.path.join(out, "_候选图")
-    if not os.path.isdir(cand_dir):
-        cand_dir = os.path.join(out, "产品图候选")
-    import shutil
+    # 目录布局兼容：新 _中间产物/候选图 → 旧 _候选图 → 更旧 产品图候选
+    cand_dir = None
+    for c in ("_中间产物/候选图", "_候选图", "产品图候选"):
+        p = os.path.join(out, c)
+        if os.path.isdir(p):
+            cand_dir = p
+            break
+    page_dir = None
+    for c in ("_中间产物/整页", "_整页"):
+        p = os.path.join(out, c)
+        if os.path.isdir(p):
+            page_dir = p
+            break
     okn, miss = 0, []
     for it in items:
         try:
@@ -131,13 +144,13 @@ def apply_pairing(out):
         cand = it.get("候选")
         box = it.get("框")
         done = False
-        if cand is not None:
+        if cand is not None and cand_dir:
             src = os.path.join(cand_dir, "P%02d_%d.jpg" % (pg, int(cand)))
             if os.path.exists(src):
                 shutil.copyfile(src, dst)
                 done = True
         if not done and box and len(box) == 4:
-            page_img = os.path.join(out, "_整页", "P%02d.jpg" % pg)
+            page_img = os.path.join(page_dir or os.path.join(out, "_整页"), "P%02d.jpg" % pg)
             if os.path.exists(page_img):
                 im = Image.open(page_img).convert("RGB")
                 x0, y0, x1, y1 = [int(v) for v in box]
@@ -150,23 +163,40 @@ def apply_pairing(out):
             okn += 1
         else:
             miss.append("%s(P%d 候选%s)" % (it.get("产品名称") or it.get("型号") or "?", pg, cand))
-    print(json.dumps({"ok": True, "count": okn, "missing": miss, "outDir": dest,
-                      "说明": "已按配对清单产出 %d 张成品图到 产品图片/（命名 序号_型号_产品名称_P页）%s"
-                              % (okn, ("；%d 条未命中：%s" % (len(miss), "、".join(miss[:5]))) if miss else "")},
+    cleaned = False
+    if clean and okn > 0:
+        # 定稿成功后清理可再生的中间产物，最终目录只留 产品图片/ + 文本提取.md + _配对.json
+        for c in ("_中间产物", "_候选图", "_整页", "_标注", "产品图候选", "_候选.json"):
+            p = os.path.join(out, c)
+            try:
+                if os.path.isdir(p):
+                    shutil.rmtree(p)
+                    cleaned = True
+                elif os.path.isfile(p):
+                    os.remove(p)
+                    cleaned = True
+            except Exception:
+                pass
+    print(json.dumps({"ok": True, "count": okn, "missing": miss, "outDir": dest, "cleaned": cleaned,
+                      "说明": "已按配对清单产出 %d 张成品图到 产品图片/（命名 序号_型号_产品名称_P页）%s%s"
+                              % (okn,
+                                 ("；%d 条未命中：%s" % (len(miss), "、".join(miss[:5]))) if miss else "",
+                                 "；中间产物已清理" if cleaned else "")},
                      ensure_ascii=False))
 
 
 def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "--apply":
-        apply_pairing(sys.argv[2])
+        apply_pairing(sys.argv[2], clean="--clean" in sys.argv[3:])
         return
     if len(sys.argv) < 3:
-        print("用法: catalog_extract.py <画册.pdf> <产出目录> | --apply <产出目录>", file=sys.stderr)
+        print("用法: catalog_extract.py <画册.pdf> <产出目录> | --apply <产出目录> [--clean]", file=sys.stderr)
         sys.exit(1)
     pdf, out = sys.argv[1], sys.argv[2]
-    d_crop = os.path.join(out, "_候选图")
-    d_page = os.path.join(out, "_整页")
-    d_mark = os.path.join(out, "_标注")
+    mid = os.path.join(out, "_中间产物")
+    d_crop = os.path.join(mid, "候选图")
+    d_page = os.path.join(mid, "整页")
+    d_mark = os.path.join(mid, "标注")
     for d in (d_crop, d_page, d_mark):
         os.makedirs(d, exist_ok=True)
 
@@ -214,7 +244,7 @@ def main():
 
     with open(os.path.join(out, "文本提取.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(md))
-    with open(os.path.join(out, "_候选.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(mid, "候选.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False)
 
     print(json.dumps({

@@ -133,7 +133,7 @@ export function applyCatalogPairing(dataDir: string, pdfFileName: string): Promi
   if (!python) return Promise.resolve({ ok: false, 说明: INSTALL_HINT })
 
   return new Promise((resolve) => {
-    const child = spawn(python, [script, '--apply', outDir], { windowsHide: true })
+    const child = spawn(python, [script, '--apply', outDir, '--clean'], { windowsHide: true })
     let out = ''
     let err = ''
     const timer = setTimeout(() => {
