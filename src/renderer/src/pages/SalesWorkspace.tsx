@@ -219,6 +219,24 @@ function matchNeed(need: string, products: ProductEntry[]): { product: ProductEn
     .slice(0, 6)
 }
 
+/** 构造"画册抽取结果核对配对"的提示词：分身照标注图逐页核对，写 _配对.json，App 据此出成品图 */
+function buildCatalogPairPrompt(pdfFileName: string): string {
+  const stem = pdfFileName.replace(/\.[^.]+$/, '')
+  const dir = `inbox/01_销售_sales/供应商资料/${stem}_画册抽取`
+  return [
+    `核对产品画册抽取结果并生成配对清单（画册抠图 第2步）。`,
+    `抽取目录：${dir}/`,
+    `1. 先读 ${dir}/文本提取.md，了解每页有哪些产品（型号/名称/参数原文）。`,
+    `2. 逐页用 Read 打开 ${dir}/_标注/P{页}.jpg（红框上的数字=候选图编号），为每个产品选出它对应的产品照片候选编号。页数多也必须逐页看完，绝不凭文件名或文本臆测。`,
+    `3. 只挑真正的"产品照片"：表格、文字块、场景小图、资质证书、二维码一律不选；同一产品多张图选最完整清晰的一张。某产品没有合适候选时，改用 框:[x0,y0,x1,y1] 给出裁切坐标——坐标按 ${dir}/_整页/P{页}.jpg 的原图像素（注意：_标注 图是原图缩小一半，坐标要乘2）。`,
+    `4. 用 Write 把 JSON 数组写到 ${dir}/_配对.json，元素格式：`,
+    `   {"序号":1,"型号":"HW-XX","产品名称":"排爆服","分类":"排爆服","页":5,"候选":0}`,
+    `   或 {"序号":2,...,"页":12,"框":[1950,205,2380,445]}`,
+    `   序号全册连续；型号/产品名称/分类照 文本提取.md 原文，读不到的填空字符串""，绝不编造。`,
+    `完成后回复：共配对多少个产品、哪些页没有产品照。之后我再点一次「画册抠图」，App 会按清单机械产出成品图（命名 序号_型号_产品名称_P页.jpg）。`
+  ].join('\n')
+}
+
 /** 构造"PDF 产品手册 → 报价清单提取"的提示词：分身读 PDF 写 JSON，App 再机械填模板出 xlsx */
 function buildPdfQuoteListPrompt(preview: PreviewCard, jsonRel: string): string {
   return [
@@ -955,20 +973,39 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       <button
                         onClick={async () => {
                           // 主程序还是旧版本（如刚更新未完全重启、或安装版尚未升级）时该 API 不存在——给明确指引
-                          if (typeof window.api.sales.extractPdfCatalog !== 'function') {
+                          if (
+                            typeof window.api.sales.extractPdfCatalog !== 'function' ||
+                            typeof window.api.sales.applyCatalogPairing !== 'function'
+                          ) {
                             flash('⚠ 当前运行的 App 主程序版本过旧，没有画册抠图功能——请完全退出（Cmd+Q）重新打开；若仍提示，请在「设置 → 关于与更新」升级到最新版')
                             return
                           }
-                          flash('正在抽取产品画册（抠图+文本），页数多时约1-2分钟…')
                           try {
-                            const r = await window.api.sales.extractPdfCatalog(preview.fileName)
-                            flash((r.ok ? '✅ ' : '⚠ ') + r.说明)
-                            if (r.outDir) await window.api.shell.showItemInFolder(r.outDir)
+                            // 智能三段：未抽取→抽取+派分身核对；已抽取未配对→派分身核对；已配对→出成品图
+                            const a = await window.api.sales.applyCatalogPairing(preview.fileName)
+                            if (a.notExtracted) {
+                              flash('第1步：正在抽取产品画册（候选图+文本+标注图），页数多时约1-2分钟…')
+                              const r = await window.api.sales.extractPdfCatalog(preview.fileName)
+                              if (!r.ok) {
+                                flash('⚠ ' + r.说明)
+                                return
+                              }
+                              setPendingPrompt(buildCatalogPairPrompt(preview.fileName))
+                              flash(`✅ 抽取完成（${r.pages}页/${r.crops}个候选）。已让分身逐页核对配对——分身完成后再点一次「画册抠图」即可出成品图`)
+                            } else if (a.needPairing) {
+                              setPendingPrompt(buildCatalogPairPrompt(preview.fileName))
+                              flash('已让分身照标注图逐页核对配对——分身完成后再点一次「画册抠图」出成品图')
+                            } else if (a.ok) {
+                              flash(`✅ ${a.说明}`)
+                              if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
+                            } else {
+                              flash('⚠ ' + a.说明)
+                            }
                           } catch (err) {
                             flash(err instanceof Error ? err.message : String(err))
                           }
                         }}
-                        title="数字排版产品画册：机械抠出每个产品照到「产品图候选/」+ 逐页文本「文本提取.md」+ 带编号标注图「_标注/」。复杂版面照标注图人工核对配图；整页扫描件抠不出独立图，用左侧「AI 解析入库」。"
+                        title="数字排版产品画册三步闭环：①机械抽取候选图+文本+标注图 ②分身照标注图逐页核对生成配对清单 ③再点一次出成品图——每个产品一张，命名 序号_型号_产品名称_来源页.jpg（在 _画册抽取/产品图片/）。整页扫描件抠不出独立图，用「AI 解析入库」。"
                         className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"
                       >
                         📖 画册抠图

@@ -94,3 +94,73 @@ export function extractPdfCatalog(dataDir: string, pdfFileName: string): Promise
     })
   })
 }
+
+export interface CatalogApplyResult {
+  ok: boolean
+  /** 抽取目录还不存在（要先跑阶段1抽取） */
+  notExtracted?: boolean
+  /** 缺 _配对.json（要先让分身核对生成配对清单） */
+  needPairing?: boolean
+  count?: number
+  missing?: string[]
+  outDir?: string
+  说明: string
+}
+
+/** 抽取目录（相对 dataDir）：inbox/01_销售_sales/供应商资料/{pdf名}_画册抽取 */
+export function catalogOutDirRel(pdfFileName: string): string {
+  const stem = basename(pdfFileName).replace(/\.[^.]+$/, '')
+  return join('inbox', '01_销售_sales', '供应商资料', `${stem}_画册抽取`)
+}
+
+/**
+ * 阶段2 定稿：按分身写的 _配对.json 产出成品图 产品图片/序号_型号_产品名称_P页.jpg。
+ * 抽取目录不存在 → notExtracted；缺 _配对.json → needPairing（前端据此注入核对提示词）。
+ */
+export function applyCatalogPairing(dataDir: string, pdfFileName: string): Promise<CatalogApplyResult> {
+  const outDir = join(dataDir, catalogOutDirRel(pdfFileName))
+  if (!existsSync(outDir)) {
+    return Promise.resolve({ ok: false, notExtracted: true, 说明: '还没抽取过——先执行画册抠图阶段1' })
+  }
+  if (!existsSync(join(outDir, '_配对.json'))) {
+    return Promise.resolve({ ok: false, needPairing: true, outDir, 说明: '缺配对清单——先让分身照 _标注/ 核对生成 _配对.json' })
+  }
+  const script = join(dataDir, 'tools', 'pdf-catalog', 'catalog_extract.py')
+  if (!existsSync(script)) {
+    return Promise.resolve({ ok: false, 说明: '抽图脚本不存在（tools/pdf-catalog 未同步到数据目录）' })
+  }
+  const python = resolvePython()
+  if (!python) return Promise.resolve({ ok: false, 说明: INSTALL_HINT })
+
+  return new Promise((resolve) => {
+    const child = spawn(python, [script, '--apply', outDir], { windowsHide: true })
+    let out = ''
+    let err = ''
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM')
+      resolve({ ok: false, outDir, 说明: '定稿超时（2分钟）' })
+    }, 120_000)
+    child.stdout.on('data', (d) => (out += String(d)))
+    child.stderr.on('data', (d) => (err += String(d)))
+    child.on('close', () => {
+      clearTimeout(timer)
+      try {
+        const j = JSON.parse(out.trim().split('\n').pop() ?? '{}')
+        return resolve({
+          ok: Boolean(j.ok),
+          needPairing: Boolean(j.needPairing),
+          count: j.count,
+          missing: j.missing,
+          outDir: j.outDir ?? outDir,
+          说明: j.说明 ?? '定稿完成'
+        })
+      } catch {
+        resolve({ ok: false, outDir, 说明: `定稿失败：${(err || out).slice(0, 200)}` })
+      }
+    })
+    child.on('error', () => {
+      clearTimeout(timer)
+      resolve({ ok: false, outDir, 说明: INSTALL_HINT })
+    })
+  })
+}

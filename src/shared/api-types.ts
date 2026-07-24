@@ -241,10 +241,20 @@ export interface CompanyOsApi {
     genPdfQuoteList(
       pdfFileName: string
     ): Promise<{ ok: boolean; needExtract: boolean; jsonRel: string; outPath?: string; 行数?: number; 说明: string }>
-    /** 产品画册 PDF → 抽图+文本：机械抠出每个产品照 + 逐页文本 + 标注图，产出到 供应商资料/{名}_画册抽取/ */
+    /** 产品画册 PDF 阶段1 抽取：候选图+逐页文本+标注图，产出到 供应商资料/{名}_画册抽取/ */
     extractPdfCatalog(
       pdfFileName: string
     ): Promise<{ ok: boolean; pages?: number; crops?: number; outDir?: string; 说明: string }>
+    /** 产品画册 阶段2 定稿：按分身写的 _配对.json 出成品图 产品图片/序号_型号_产品名称_P页.jpg */
+    applyCatalogPairing(pdfFileName: string): Promise<{
+      ok: boolean
+      notExtracted?: boolean
+      needPairing?: boolean
+      count?: number
+      missing?: string[]
+      outDir?: string
+      说明: string
+    }>
     /** 机械生成对外报价单 Excel（不经过 AI）：xlsx 模板填充或内置版式，登记报价台账并自动关联同名客户 */
     generateQuoteXlsx(
       lines: QuoteLineInput[],

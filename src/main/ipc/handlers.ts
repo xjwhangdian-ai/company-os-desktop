@@ -21,7 +21,7 @@ import type {
   SolutionFileKind,
   SupplierDocPreview
 } from '@shared/agent-types'
-import { extractPdfCatalog } from '../fs-io/pdf-catalog'
+import { applyCatalogPairing, extractPdfCatalog } from '../fs-io/pdf-catalog'
 import { repairDataDir } from '../config/first-run'
 import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
@@ -378,6 +378,9 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   )
   ipcMain.handle(IPC.salesExtractPdfCatalog, (_e, pdfFileName: string) =>
     extractPdfCatalog(getDataDir(), pdfFileName)
+  )
+  ipcMain.handle(IPC.salesApplyCatalogPairing, (_e, pdfFileName: string) =>
+    applyCatalogPairing(getDataDir(), pdfFileName)
   )
 
   ipcMain.handle(IPC.salesListCustomers, () => listCustomers(getDataDir()))
