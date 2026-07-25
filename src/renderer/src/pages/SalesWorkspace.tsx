@@ -885,6 +885,29 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   ＋ 手动添加
                 </button>
                 <button
+                  disabled={busy || sortedProducts.length === 0}
+                  onClick={async () => {
+                    if (typeof window.api.sales.exportZcy !== 'function') {
+                      flash('⚠ 当前运行的 App 主程序版本过旧——请完全退出（Cmd+Q）重新打开')
+                      return
+                    }
+                    setBusy(true)
+                    try {
+                      const r = await window.api.sales.exportZcy(sortedProducts.map((p) => p.id))
+                      flash((r.ok ? '✅ ' : '⚠ ') + r.说明)
+                      if (r.ok && r.outDir) await window.api.shell.showItemInFolder(r.outDir)
+                    } catch (err) {
+                      flash(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setBusy(false)
+                    }
+                  }}
+                  title="把当前筛选出的产品导出为政采云上架数据包：商品清单xlsx（含品目甄别打标：管制标红/需资质标黄）+ 按型号规范命名的主图图片包 + 使用说明。对照官方类目模板粘贴导入即可。"
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  🛒 政采云导出
+                </button>
+                <button
                   onClick={refreshProducts}
                   className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
                   title="重新读取产品库（会顺带合并 AI 解析的暂存结果）"

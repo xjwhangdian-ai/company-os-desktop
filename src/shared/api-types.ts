@@ -253,6 +253,10 @@ export interface CompanyOsApi {
       说明: string
     }>
     /** 产品画册 阶段2 定稿：按分身写的 _配对.json 出成品图 产品图片/序号_型号_产品名称_P页.jpg */
+    /** 政采云上架数据包：选中产品 → 商品清单xlsx(含品目甄别打标) + 规范命名图片包 + 使用说明 */
+    exportZcy(
+      productIds: string[]
+    ): Promise<{ ok: boolean; outDir?: string; count?: number; 管制数?: number; 缺图?: string[]; 说明: string }>
     /** 分身核对进度（读 _核对进度.json）；无进度文件返回 null */
     catalogProgress(pdfFileName: string): Promise<{ 已核对页: number; 总页: number } | null>
     applyCatalogPairing(pdfFileName: string): Promise<{

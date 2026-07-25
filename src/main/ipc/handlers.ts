@@ -22,6 +22,7 @@ import type {
   SupplierDocPreview
 } from '@shared/agent-types'
 import { applyCatalogPairing, extractPdfCatalog, readCatalogProgress } from '../fs-io/pdf-catalog'
+import { exportZcyPackage } from '../fs-io/zcy-export'
 import { repairDataDir } from '../config/first-run'
 import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
@@ -380,6 +381,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     extractPdfCatalog(getDataDir(), pdfFileName)
   )
   ipcMain.handle(IPC.salesCatalogProgress, (_e, pdfFileName: string) => readCatalogProgress(getDataDir(), pdfFileName))
+  ipcMain.handle(IPC.salesExportZcy, async (_e, productIds: string[]) => {
+    const { products } = await Promise.resolve(listProducts(getDataDir()))
+    const picked = products.filter((p) => productIds.includes(p.id))
+    return exportZcyPackage(getDataDir(), picked)
+  })
   ipcMain.handle(IPC.salesApplyCatalogPairing, (_e, pdfFileName: string) =>
     applyCatalogPairing(getDataDir(), pdfFileName)
   )

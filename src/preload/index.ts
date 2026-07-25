@@ -159,6 +159,7 @@ const api: CompanyOsApi = {
     extractPdfCatalog: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesExtractPdfCatalog, pdfFileName),
     applyCatalogPairing: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesApplyCatalogPairing, pdfFileName),
     catalogProgress: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesCatalogProgress, pdfFileName),
+    exportZcy: (productIds: string[]) => ipcRenderer.invoke(IPC.salesExportZcy, productIds),
     generateQuoteXlsx: (
       lines: QuoteLineInput[],
       customerName: string,

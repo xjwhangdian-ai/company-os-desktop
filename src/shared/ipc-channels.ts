@@ -29,6 +29,7 @@ export const IPC = {
   salesExtractPdfCatalog: 'sales:extract-pdf-catalog',
   salesApplyCatalogPairing: 'sales:apply-catalog-pairing',
   salesCatalogProgress: 'sales:catalog-progress',
+  salesExportZcy: 'sales:export-zcy',
   operationUploadTemplate: 'operation:upload-template',
   operationListTemplates: 'operation:list-templates',
   operationRecentArticles: 'operation:recent-articles',
