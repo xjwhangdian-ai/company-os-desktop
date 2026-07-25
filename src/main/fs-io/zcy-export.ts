@@ -114,7 +114,8 @@ export async function exportZcyPackage(
     const vals: CellValue[] = [
       i + 1,
       tag,
-      p.品牌 ? `${p.品牌} ${p.产品名称}` : p.产品名称,
+      // 对外商品名统一挂瑾智品牌，绝不带原厂品牌（采购侧信息）
+      `瑾智 ${p.产品名称}`,
       '瑾智',
       model,
       p.建议销售价 || '',
