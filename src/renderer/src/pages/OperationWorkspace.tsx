@@ -39,6 +39,23 @@ const PLATFORM_FOLDER: Record<Platform, string> = {
   微信视频号: '视频号'
 }
 
+/** 各平台从素材到发布的操作步骤提示 */
+const PLATFORM_STEPS: Record<Platform, string> = {
+  小红书: '① 填主题 → ② 上传图片素材 → ③（可选）AI识别配图+应用重命名 → ④ 生成内容 → ⑤ 打开生成的 .md，复制文字+配图到小红书 App 发布',
+  微信公众号: '① 填主题 → ② 上传图片素材 → ③ AI识别配图+应用重命名 → ④ 生成内容 → ⑤ 最近生成里点「排版」出公众号 HTML → ⑥ 浏览器「一键复制」粘进公众号编辑器，配封面图发布',
+  抖音: '① 填主题 → ② 上传视频/图片素材（建议在需求里补一句视频内容描述）→ ③ 生成内容（分镜脚本+标题+文案+封面建议材料包）→ ④ 按分镜脚本在剪映等工具剪视频、贴字幕 → ⑤ 用备选标题+话题标签发布，置顶评论用材料包话术',
+  微信视频号: '① 填主题 → ② 上传视频/图片素材 → ③ 生成内容（材料包）→ ④ 按分镜脚本剪视频 → ⑤ 视频号发布后转发到微信群/朋友圈，可挂关联公众号文章链接'
+}
+
+/** 判断一条生成记录属于哪个平台（按产出文件夹名里的平台词；都不含=通用旧记录，各平台都显示） */
+function articlePlatform(folder: string): Platform | null {
+  if (folder.includes('小红书')) return '小红书'
+  if (folder.includes('公众号')) return '微信公众号'
+  if (folder.includes('抖音')) return '抖音'
+  if (folder.includes('视频号')) return '微信视频号'
+  return null
+}
+
 const MEDIA_UPLOAD_KINDS: { key: string; buttonLabel: string; filters: FileFilter[] }[] = [
   { key: 'image', buttonLabel: '🖼️ 图片', filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'] }] },
   { key: 'video', buttonLabel: '🎬 视频', filters: [{ name: '视频', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] }] },
@@ -81,6 +98,14 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
     setNotice(t)
     setTimeout(() => setNotice(null), 6000)
   }
+
+  /** 当前平台的最近生成（产出文件夹带平台词的归对应平台；没带平台词的通用旧记录各平台都显示） */
+  const platformRecent = recent
+    .filter((r) => {
+      const p = articlePlatform(r.folder)
+      return p === null || p === platform
+    })
+    .slice(0, 10)
 
   async function refreshTemplates(): Promise<void> {
     try {
@@ -307,18 +332,26 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
               className={`ml-auto rounded-full border px-3 py-1 text-xs font-medium ${
                 showRecent ? 'border-jushi-accent text-jushi-accent' : 'border-slate-300 text-slate-500'
               }`}
-              title="outputs/05_运营_operation 下最近生成的 10 篇推广文章"
+              title={`当前平台（${platform}）最近生成的 10 条内容`}
             >
-              🕘 最近生成{recent.length > 0 ? ` ${recent.length}` : ''}
+              🕘 最近生成{platformRecent.length > 0 ? ` ${platformRecent.length}` : ''}
             </button>
           </div>
+
+          {/* 当前平台的操作步骤提示 */}
+          <p className="mt-2 rounded-md bg-slate-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-slate-500">
+            📖 {platform}操作步骤：{PLATFORM_STEPS[platform]}
+          </p>
         </div>
 
         {showRecent && (
           <div className="max-h-56 shrink-0 overflow-y-auto border-b border-slate-200 bg-slate-50 px-5 py-2">
-            {recent.length === 0 && <p className="py-3 text-center text-xs text-slate-400">还没有生成过推广文章</p>}
+            <p className="pb-1 text-[11px] font-semibold text-slate-500">最近生成 · {platform}</p>
+            {platformRecent.length === 0 && (
+              <p className="py-3 text-center text-xs text-slate-400">{platform}最近没有内容产生——按上方操作步骤生成第一条</p>
+            )}
             <div className="space-y-1">
-              {recent.map((r) => (
+              {platformRecent.map((r) => (
                 <div key={r.relativePath} className="flex items-center gap-2 rounded-md bg-white px-2.5 py-1.5 text-xs">
                   <button
                     onClick={() => window.api.shell.openPath(r.absPath)}

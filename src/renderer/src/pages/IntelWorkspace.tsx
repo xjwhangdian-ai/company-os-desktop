@@ -52,8 +52,9 @@ function ReportRow({ r, onNotice }: { r: IntelReport; onNotice: (t: string) => v
   )
 }
 
-/** 研报抓取操作指引：首次登录 → 手动抓取 → 排查，命令可一键复制 */
+/** 研报抓取操作指引：首次登录 → 手动抓取 → 排查，命令可一键复制；Windows 机器给单独说明 */
 function ReportsGuide({ dataDir, onNotice }: { dataDir: string; onNotice: (t: string) => void }): React.JSX.Element {
+  const isWin = navigator.userAgent.includes('Windows')
   const chromeCmd =
     '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.openclaw/chrome-debug-profile" &'
   const runCmd = `cd "${dataDir || '<数据目录>'}/tools/intel-reports" && bash run_reports.sh`
@@ -76,9 +77,30 @@ function ReportsGuide({ dataDir, onNotice }: { dataDir: string; onNotice: (t: st
     )
   }
 
+  if (isWin) {
+    return (
+      <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-white p-2.5 text-[11px] leading-relaxed text-slate-600">
+        <div className="font-semibold text-slate-700">📖 研报抓取说明（Windows 电脑）</div>
+        <div className="mt-1.5 font-medium text-slate-700">① 这台电脑不用配置抓取</div>
+        <p className="text-slate-500">
+          研报抓取管线依赖管理员 Mac 上的专用组件（每日 07:20 定时任务 + 登录态 Chrome），Windows 电脑不在本机抓取——点「刷新」提示失败属正常现象，不是故障。
+        </p>
+        <div className="mt-2 font-medium text-slate-700">② 想在这台电脑上看研报，两条路</div>
+        <p className="text-slate-500">
+          1. 让管理员 Mac 当天抓取后，把数据目录里 <code className="rounded bg-slate-100 px-1">outputs\09_情报_intel\研报追踪\</code>
+          下的当日 JSON 文件（通过微信/内网共享）拷到本机数据目录的相同位置，回到本页即可看到列表；
+          <br />
+          2. 直接用浏览器打开 sgpjbg.com，按关键词（机器人 / AI产业 / 低空经济）搜索查看（需皮匠会员登录）。
+        </p>
+        <div className="mt-2 font-medium text-slate-700">③ 列表里的链接正常可用</div>
+        <p className="text-slate-500">只要本机有数据，点报告标题即可跳转下载页；「→ 存入方案资料库」等按钮也都正常工作。</p>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-white p-2.5 text-[11px] leading-relaxed text-slate-600">
-      <div className="font-semibold text-slate-700">📖 研报抓取操作指引</div>
+      <div className="font-semibold text-slate-700">📖 研报抓取操作指引（管理员 Mac）</div>
       <div className="mt-1.5 font-medium text-slate-700">① 平时不用管</div>
       <p className="text-slate-500">管理员 Mac 每天 07:20 自动抓取；想立刻要最新的，直接点上方「刷新」（App 会自己拉起抓取，约 1-2 分钟）。</p>
       <div className="mt-2 font-medium text-slate-700">② 首次使用 / 提示"需要登录"时（只需做一次）</div>
@@ -185,9 +207,9 @@ function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; re
           <div className="py-6 text-center text-xs leading-relaxed text-slate-400">
             暂无{type}数据。
             <br />
-            点右上角「刷新」立即抓取；
-            <br />
-            提示需要登录或仍为 0 份时，点「操作指引」按步骤处理。
+            {navigator.userAgent.includes('Windows')
+              ? 'Windows 电脑不在本机抓取（依赖管理员 Mac 的每日管线）——点「操作指引」看怎么拿到数据。'
+              : '点右上角「刷新」立即抓取；提示需要登录或仍为 0 份时，点「操作指引」按步骤处理。'}
             <button
               onClick={() => setShowGuide(true)}
               className="mx-auto mt-2 block rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-500 hover:border-jushi-accent hover:text-jushi-accent"

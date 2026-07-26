@@ -113,20 +113,21 @@ function CandidateRow({
         <span className="text-[10px] text-slate-400">{c.日期}</span>
       </div>
       {c.理由 && <div className="mt-1 text-[11px] leading-snug text-slate-400">{c.理由}</div>}
-      <div className="mt-1.5 flex gap-1.5">
+      <div className="mt-1.5 flex justify-end gap-1.5">
         <button
           disabled={disabled}
           onClick={onConfirm}
-          className={`flex-1 rounded px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
+          title="建项目档并进入左侧台账（意见征询项目自动带上征询截止日）"
+          className={`rounded px-3 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
             c.跟进升级 ? 'bg-amber-500' : 'bg-jushi-accent'
           }`}
         >
-          {confirming ? '建档中…' : c.跟进升级 ? '✓ 归档进已有项目（更新为正式公告）' : '✓ 确认跟进 → 招投标'}
+          {confirming ? '建档中…' : c.跟进升级 ? '跟进（归档进已有项目）' : '跟进'}
         </button>
         <button
           disabled={disabled}
           onClick={onIgnore}
-          className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-500 disabled:opacity-50"
+          className="rounded border border-slate-300 px-3 py-1 text-[11px] text-slate-500 disabled:opacity-50"
         >
           忽略
         </button>

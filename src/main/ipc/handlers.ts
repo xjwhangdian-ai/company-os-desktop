@@ -208,7 +208,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     uploadOperationTemplate(getDataDir(), sourcePath)
   )
   ipcMain.handle(IPC.operationListTemplates, () => listOperationTemplates(getDataDir()))
-  ipcMain.handle(IPC.operationRecentArticles, () => listRecentOperationArticles(getDataDir(), 10))
+  // 多取一些，渲染层按平台（公众号/小红书/抖音/视频号）分别过滤后各显示最近10条
+  ipcMain.handle(IPC.operationRecentArticles, () => listRecentOperationArticles(getDataDir(), 100))
   ipcMain.handle(IPC.operationApplyImageNames, (_e, theme: string) =>
     applyOperationImageNames(getDataDir(), theme)
   )
