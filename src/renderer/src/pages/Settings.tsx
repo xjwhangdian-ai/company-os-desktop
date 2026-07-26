@@ -17,7 +17,7 @@ const PROVIDER_DOCS: Partial<Record<ProviderId, { label: string; url: string }>>
 
 const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
   deepseek: 'DeepSeek 目前只有两档：deepseek-v4-pro（旗舰）/ deepseek-v4-flash（性价比档，sonnet 和 haiku 都用它）。旧别名 deepseek-chat/deepseek-reasoner 将于 2026-07-24 停用，不要用。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
-  kimi: '月之暗面官方提供 Anthropic 协议兼容端点（Kimi 接 Claude Code 的官方方式），国内 Base URL 已预填 api.moonshot.cn/anthropic（国际版账号改 api.moonshot.ai）。模型按 K2 系列预填：kimi-k2-thinking-turbo（旗舰推理档）/ kimi-k2-turbo-preview（高速主力档）。Kimi 迭代快，用之前点右侧文档核对最新模型名。',
+  kimi: '月之暗面官方提供 Anthropic 协议兼容端点（Kimi 接 Claude Code 的官方方式），国内 Base URL 已预填 api.moonshot.cn/anthropic（国际版账号改 api.moonshot.ai）。模型已按最新旗舰预填：kimi-k3（2026-07 发布，opus/sonnet 档）/ kimi-k2-turbo-preview（haiku 高速便宜档）。Kimi 迭代快，用之前点右侧文档核对最新模型名。',
   'minimax-cn':
     '已按 2026-07 官方文档预填：MiniMax-M3（旗舰，原生多模态）/ MiniMax-M2.7（主力档）/ MiniMax-M2（最便宜档）。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
   qwen: '已按 2026-07 官方文档预填模型名：qwen3.7-max（旗舰）/ qwen3.7-plus（主力档）/ qwen3.6-flash（最便宜档）。Base URL 没有唯一默认值——阿里云这个端点按地区/套餐分裂成好几种，常见几种：国内 PAYG「https://dashscope.aliyuncs.com/apps/anthropic」、国际 PAYG「https://dashscope-intl.aliyuncs.com/apps/anthropic」、Coding Plan「https://coding-intl.dashscope.aliyuncs.com/apps/anthropic」——对着自己开通的套餐选，不确定就点右侧文档核实。',

@@ -55,9 +55,9 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
     baseUrl: 'https://api.moonshot.cn/anthropic',
     authEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     apiKey: null,
-    // 按 2026 年初 Kimi K2 系列口径预填：k2-thinking-turbo 旗舰推理档 / k2-turbo-preview 高速主力档。
-    // Kimi 迭代快，用前对着 platform.moonshot.cn 文档核对最新模型名。
-    modelMapping: { opus: 'kimi-k2-thinking-turbo', sonnet: 'kimi-k2-turbo-preview', haiku: 'kimi-k2-turbo-preview' }
+    // 2026-07 口径：kimi-k3 为最新旗舰（2026-07-16 发布，多模态推理）；haiku 档留 k2-turbo-preview 高速便宜档。
+    // Kimi 迭代快，用前对着官方平台文档核对最新模型名。
+    modelMapping: { opus: 'kimi-k3', sonnet: 'kimi-k3', haiku: 'kimi-k2-turbo-preview' }
   },
   'minimax-cn': {
     id: 'minimax-cn',
@@ -229,6 +229,20 @@ function reconcileProviders(schema: StoreSchemaV4): { schema: StoreSchemaV4; cha
       providers[id] = structuredClone(DEFAULT_PROVIDERS[id])
       changed = true
     }
+  }
+  // Kimi K3 上线（2026-07-16）：老配置里仍是 K2 旧默认映射的就地升级；用户自己改过的映射不动
+  const kimi = providers['kimi']
+  if (kimi) {
+    const mm = { ...kimi.modelMapping }
+    if (mm.opus === 'kimi-k2-thinking-turbo') {
+      mm.opus = 'kimi-k3'
+      changed = true
+    }
+    if (mm.sonnet === 'kimi-k2-turbo-preview' && mm.opus === 'kimi-k3') {
+      mm.sonnet = 'kimi-k3'
+      changed = true
+    }
+    if (changed) providers['kimi'] = { ...kimi, modelMapping: mm }
   }
   let activeProviderId = schema.activeProviderId
   if ((activeProviderId as string) === 'minimax-intl') {
