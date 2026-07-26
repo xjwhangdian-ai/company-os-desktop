@@ -174,7 +174,7 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
   return (
     <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-white p-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold text-slate-600">兴趣关键词（命中即标红并计入「只看相关」）</span>
+        <span className="text-[11px] font-semibold text-slate-600">关键词（抓取按它筛选入库 + 命中标红）</span>
         <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-600">收起 ✕</button>
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1">
@@ -245,7 +245,7 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
         </button>
       </div>
       <p className="mt-1.5 text-[10px] leading-snug text-slate-400">
-        增删改：点词本身=修改，点 × =删除，输入新词回车=添加。匹配范围=项目名称+采购单位；改完立即对现有列表生效，无需重新抓取。
+        增删改：点词本身=修改，点 × =删除，输入新词回车=添加。词库整合自黄药师管线（安防智能化+警用装备+采购部门，共百余词）。抓取时只保留 项目名称/采购单位/区县 命中任一关键词的公告——标红立即生效，抓取筛选下次「刷新」生效。
       </p>
     </div>
   )
@@ -338,7 +338,7 @@ export function IntelBiddingFeed({
               className={`rounded-full border px-2 py-0.5 text-[11px] ${
                 showKeywords ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-300 text-slate-500'
               }`}
-              title="管理兴趣关键词：命中的公告标红并计入「只看相关」"
+              title="管理关键词（增删改）：抓取时只保留命中关键词的公告；命中的词在列表里标红"
             >
               ⚙ 关键词
             </button>

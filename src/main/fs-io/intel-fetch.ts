@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { getIntelKeywords, matchIntelKeyword } from './intel-keywords'
 
 // ============ App 内置招投标情报抓取（跨平台，mac/Windows 通用） ============
 // 数据不走 git 同步：git 只管应用程序更新，情报数据由每台电脑的 App 自己抓。
@@ -481,10 +482,16 @@ export async function fetchIntelNow(dataDir: string, force = false): Promise<Int
     return { ok: false, 新增条数: 0, 平台结果, 说明: '三个平台都没抓到（多为网络问题），稍后点「刷新」重试' }
   }
 
-  // 意见征询条目补抓详情页提取「征询截止日」（重点关注日期）
-  await enrichZjgovConsultDeadlines(all)
+  // 关键词筛选（词库可在工作台增删改）：只保留 项目名称/采购单位/区县 命中任一关键词的公告
+  const kws = getIntelKeywords(dataDir)
+  const beforeFilter = all.length
+  const kept = all.filter((e) => e.台州公安 || matchIntelKeyword(`${e.项目名称}${e.采购单位}${e.区县}`, kws) !== null)
+  if (beforeFilter > kept.length) 平台结果.push(`关键词筛除 ${beforeFilter - kept.length} 条`)
 
-  const { added, addedEntries } = mergeIntoFeeds(dataDir, all)
+  // 意见征询条目补抓详情页提取「征询截止日」（重点关注日期）
+  await enrichZjgovConsultDeadlines(kept)
+
+  const { added, addedEntries } = mergeIntoFeeds(dataDir, kept)
   writeFetchState(dataDir)
 
   // 新增条目累计追加进 Excel 台账（只增不覆盖；3天清理只清 JSON，不动它）
