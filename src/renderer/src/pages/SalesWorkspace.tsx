@@ -1035,7 +1035,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                   setCatalog(f, {
                                     stage: 'done',
                                     outDir: a.outDir,
-                                    text: `✅ 全自动完成：已产出 ${a.count ?? '?'} 张成品图（每产品一张，命名 序号_型号_产品名称_P页），中间产物已清理${note}` +
+                                    text: `✅ 全自动完成：已产出 ${a.count ?? '?'} 张成品图 ＋ 产品清单.xlsx（名称/型号/技术参数已按模板填好，品牌/价格等留空待补，可发供应商补价后「直接导入」产品库），中间产物已清理${note}` +
                                       (a.missing && a.missing.length > 0 ? `；${a.missing.length} 条未命中：${a.missing.slice(0, 3).join('、')}` : '')
                                   })
                                   if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
@@ -1046,7 +1046,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                 setCatalog(f, { stage: 'error', text: '⚠ ' + (err instanceof Error ? err.message : String(err)) })
                               }
                             }}
-                            title="产品画册一键全自动（纯机械，不依赖 AI 模型）：抠出每个产品照 + 用文本层/系统OCR识别型号名称自动配对 → 直出成品图（每产品一张，序号_型号_产品名称_P页.jpg，在 _画册抽取/产品图片/），中间产物自动清理。"
+                            title="产品画册一键全自动（纯机械，不依赖 AI 模型）：抠出每个产品照 + 用文本层/系统OCR识别型号名称自动配对 → 直出成品图（序号_型号_产品名称_P页.jpg）＋ 产品清单.xlsx（按供应商资料解析模板：名称/型号/技术参数已填、备注含手册页码、最后一列对应成品图文件名），中间产物自动清理。"
                             className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-60"
                           >
                             {label}
