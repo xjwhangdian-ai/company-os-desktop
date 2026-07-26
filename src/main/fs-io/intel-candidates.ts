@@ -87,8 +87,9 @@ function scanAllCandidates(dataDir: string): IntelCandidate[] {
           采购单位: String(raw?.采购单位 ?? ''),
           预算: String(raw?.预算 ?? ''),
           中标单位: String(raw?.中标单位 ?? ''),
-          区县: '',
+          区县: String(raw?.区县 ?? ''),
           标签: '',
+          征询截止: String(raw?.征询截止 ?? ''),
           链接: String(raw?.链接 ?? ''),
           平台: String(raw?.平台 ?? ''),
           台州公安: Boolean(raw?.台州公安),
@@ -254,6 +255,7 @@ function writeIntelSourceNote(dataDir: string, folderName: string, c: IntelCandi
       '',
       `- 公告链接：${c.链接 || '待确认'}`,
       `- 公告类型：${c.类型}（${c.日期}）`,
+      ...(c.类型 === '意见征询' ? [`- ⚠️ 征询截止日：${c.征询截止 || '待确认——打开公告原文核对意见反馈截止时间'}`] : []),
       `- 来源平台：${c.平台 || '待确认'}`,
       `- 区县：${c.区县 || '待确认'}`,
       `- 标签：${c.标签 || '—'}｜相关度：${c.相关度 ?? '未标注'}`,
@@ -312,6 +314,8 @@ export function confirmIntelCandidate(dataDir: string, key: string): IntelConfir
   }
   if (!card.业主单位 && candidate.采购单位 && candidate.采购单位 !== '待确认') card.业主单位 = candidate.采购单位
   if (!card.预算金额 && candidate.预算) card.预算金额 = normalizeBudget(candidate.预算)
+  // 意见征询阶段的重点日期：征询/意见反馈截止日（错过就无法提意见影响需求了）
+  if (candidate.类型 === '意见征询' && !card.征询截止日 && candidate.征询截止) card.征询截止日 = candidate.征询截止
   saveProjectCard(dataDir, folderName, card)
   writeIntelSourceNote(dataDir, folderName, candidate)
   writeSourceSidecar(dataDir, folderName, candidate)

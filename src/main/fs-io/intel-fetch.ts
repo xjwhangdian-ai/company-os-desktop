@@ -15,13 +15,18 @@ const WINDOW_DAYS = 3
 /** 距上次成功抓取不足该间隔时跳过（打开页面就触发，别把政府接口刷爆） */
 const MIN_INTERVAL_MS = 30 * 60 * 1000
 
-interface FeedEntry {
+export interface FeedEntry {
   类型: '采购意向' | '意见征询' | '采购公告' | '采购结果公告'
   项目名称: string
+  /** 只放真正的采购人名称；列表接口拿不到就留空（UI 显示"待确认"），绝不用区县名顶替 */
   采购单位: string
+  /** 区县/地域归属（台州工程、阳光采购的列表接口只给这个） */
+  区县: string
   预算: string
   中标单位: string
   中标金额: string
+  /** 意见征询条目的征询/意见反馈截止日（YYYY-MM-DD，从详情页提取；提不到为空） */
+  征询截止: string
   链接: string
   平台: string
   台州公安: boolean
@@ -173,14 +178,17 @@ async function fetchZjgov(cutoffMs: number): Promise<FeedEntry[]> {
             类型: cat.类型,
             项目名称: title,
             采购单位: author,
+            区县: String(it.districtName ?? ''),
             预算: fmtAmount(it.budgetPrice),
             中标单位: '',
             中标金额: '',
+            征询截止: '',
             链接: `${ZJGOV_BASE}/site/detail?categoryCode=${code}&articleId=${encodeURIComponent(articleId)}`,
             平台: '浙江政采',
             台州公安: isPolice(title + author),
-            日期: fmtDate(new Date(pd))
-          })
+            日期: fmtDate(new Date(pd)),
+            _articleId: articleId
+          } as FeedEntry & { _articleId?: string })
         }
         // 本页全是窗口外的旧公告 → 后面更旧，翻页到此为止
         if (!anyFresh) break
@@ -189,6 +197,46 @@ async function fetchZjgov(cutoffMs: number): Promise<FeedEntry[]> {
     }
   }
   return entries
+}
+
+/** 详情正文里提"征询/意见反馈截止日"的正则组（去 HTML 标签后的纯文本上匹配） */
+const DEADLINE_PATTERNS = [
+  /(?:意见反馈|反馈意见|征求意见|征询意见|意见征询|公示)[^。；\n]{0,14}?(?:截止|结束)[^。；\n]{0,10}?(\d{4})[年.\-/](\d{1,2})[月.\-/](\d{1,2})/,
+  /(?:截止|结束)(?:时间|日期)[^。；\n]{0,8}?(\d{4})[年.\-/](\d{1,2})[月.\-/](\d{1,2})/
+]
+
+function extractDeadline(text: string): string {
+  for (const re of DEADLINE_PATTERNS) {
+    const m = re.exec(text)
+    if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  }
+  return ''
+}
+
+/**
+ * 意见征询条目补抓详情页，提取「征询/意见反馈截止日」——这是意见征询阶段最关键的日期
+ * （错过截止就没法提意见影响采购需求了）。只对征询类少量条目发详情请求，单条失败不影响其余。
+ */
+async function enrichZjgovConsultDeadlines(entries: FeedEntry[]): Promise<void> {
+  const targets = entries
+    .filter((e) => e.类型 === '意见征询' && !e.征询截止)
+    .slice(0, 15) as (FeedEntry & { _articleId?: string })[]
+  for (const e of targets) {
+    if (!e._articleId) continue
+    try {
+      const resp = await doFetch(`${ZJGOV_BASE}/portal/detail?articleId=${encodeURIComponent(e._articleId)}`, {
+        headers: { 'User-Agent': UA, Referer: `${ZJGOV_BASE}/site/detail` },
+        signal: AbortSignal.timeout(12000)
+      })
+      if (!resp.ok) continue
+      const data = (await resp.json()) as { result?: { data?: { content?: string } } }
+      const text = String(data?.result?.data?.content ?? '').replace(/<[^>]+>/g, '')
+      e.征询截止 = extractDeadline(text)
+      await politeDelay()
+    } catch {
+      // 详情页失败不影响列表数据
+    }
+  }
 }
 
 // ── 平台二：台州公共资源（ggzy.tzztb.zjtz.gov.cn，工程类）──────────────────
@@ -233,14 +281,17 @@ async function fetchTzgg(dates: string[]): Promise<FeedEntry[]> {
         const title = String(it.title ?? '')
         let url = String(it.infourl ?? '')
         if (url && !url.startsWith('http')) url = TZGG_BASE + url
+        // 列表接口只给区县名，不给采购人——放 区县 字段，采购单位留空待确认（此前错放采购单位，属信息有误）
         const district = String(it.xiaquname ?? '')
         entries.push({
           类型: cat.类型,
           项目名称: title,
-          采购单位: district,
+          采购单位: '',
+          区县: district,
           预算: '',
           中标单位: '',
           中标金额: '',
+          征询截止: '',
           链接: url,
           平台: '台州工程',
           台州公安: isPolice(title),
@@ -290,15 +341,17 @@ async function fetchTzygcg(dates: string[]): Promise<FeedEntry[]> {
       const pub = String(it.publishDate ?? '').slice(0, 10)
       if (!dateSet.has(pub)) continue
       const title = String(it.bulletinTitle ?? it.title ?? '')
-      // 列表接口不带采购单位/预算（管理员机管线从详情页提取），这里用区域名占位
+      // 列表接口不带采购单位/预算——区域名放 区县 字段，采购单位留空待确认（此前错放采购单位，属信息有误）
       const area = String(it.areaName ?? '')
       entries.push({
         类型: cat.类型,
         项目名称: title,
-        采购单位: area,
+        采购单位: '',
+        区县: area,
         预算: '',
         中标单位: '',
         中标金额: '',
+        征询截止: '',
         链接: `${TZYGCG_BASE}/NoticeDetail?projectId=${encodeURIComponent(String(it.prjId ?? ''))}&bulletinId=${encodeURIComponent(String(it.bulletinId ?? ''))}`,
         平台: '台州阳光采购',
         台州公安: isPolice(title + area),
@@ -317,7 +370,7 @@ async function fetchTzygcg(dates: string[]): Promise<FeedEntry[]> {
  * 同日按 名称+类型 不重复；跨天——同一 名称+类型 在近三天任一天的信息流里已存在，就不再新增
  * （政府网站会连续多天挂同一公告，只留首次出现的那条）。
  */
-function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): number {
+function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): { added: number; addedEntries: FeedEntry[] } {
   const dir = join(dataDir, TRACK_DIR_REL)
   mkdirSync(dir, { recursive: true })
 
@@ -343,6 +396,7 @@ function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): number {
   }
 
   let added = 0
+  const addedEntries: FeedEntry[] = []
   const touched = new Set<string>()
   for (const e of entries) {
     const name = e.项目名称.trim()
@@ -352,8 +406,11 @@ function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): number {
     const feed = feeds.get(e.日期)
     if (!feed) continue // 窗口外日期不写
     seenAll.add(key)
-    const { 日期: _drop, ...feedEntry } = e
+    // _articleId 之类的内部字段不落盘
+    const { 日期: _drop, ...feedEntry } = { ...e } as FeedEntry & { _articleId?: string }
+    delete (feedEntry as { _articleId?: string })._articleId
     feed.items.push(feedEntry)
+    addedEntries.push(e)
     touched.add(e.日期)
     added += 1
   }
@@ -365,7 +422,7 @@ function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): number {
     writeFileSync(tmp, JSON.stringify({ ...feed.data, 日期: d, 项目: feed.items }, null, 2), 'utf-8')
     renameSync(tmp, feed.path)
   }
-  return added
+  return { added, addedEntries }
 }
 
 function readFetchState(dataDir: string): { lastFetchAt?: number } {
@@ -424,12 +481,28 @@ export async function fetchIntelNow(dataDir: string, force = false): Promise<Int
     return { ok: false, 新增条数: 0, 平台结果, 说明: '三个平台都没抓到（多为网络问题），稍后点「刷新」重试' }
   }
 
-  const added = mergeIntoFeeds(dataDir, all)
+  // 意见征询条目补抓详情页提取「征询截止日」（重点关注日期）
+  await enrichZjgovConsultDeadlines(all)
+
+  const { added, addedEntries } = mergeIntoFeeds(dataDir, all)
   writeFetchState(dataDir)
+
+  // 新增条目累计追加进 Excel 台账（只增不覆盖；3天清理只清 JSON，不动它）
+  let ledgerNote = ''
+  if (addedEntries.length > 0) {
+    try {
+      const { appendIntelLedger } = await import('./intel-ledger')
+      const r = await appendIntelLedger(dataDir, addedEntries)
+      if (r.appended > 0) ledgerNote = `；已追加 ${r.appended} 条到信息台账.xlsx`
+    } catch (err) {
+      ledgerNote = `；台账追加失败（${err instanceof Error ? err.message.slice(0, 30) : '未知'}，若正开着 Excel 请先关闭）`
+    }
+  }
+
   return {
     ok: true,
     新增条数: added,
     平台结果,
-    说明: added > 0 ? `已抓取最近三天招投标信息，新增 ${added} 条` : '已抓取，无新增（信息流已是最新）'
+    说明: (added > 0 ? `已抓取最近三天招投标信息，新增 ${added} 条` : '已抓取，无新增（信息流已是最新）') + ledgerNote
   }
 }

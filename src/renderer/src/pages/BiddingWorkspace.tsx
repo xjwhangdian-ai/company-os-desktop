@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { AgentDisplayMeta, BidProjectCard, BidProjectStatus, BiddingProject } from '@shared/agent-types'
 import { BID_PROJECT_STATUSES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
+import { IntelBiddingFeed } from '../components/IntelBiddingFeed'
 import { MaterialChecklist } from '../components/MaterialChecklist'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -58,6 +59,14 @@ function daysToDeadline(dateStr: string | undefined): number | null {
 }
 
 function DeadlineTag({ card }: { card: BidProjectCard | null }): React.JSX.Element | null {
+  // 意见征询阶段没有投标截止日，重点日期是征询截止——错过就无法提意见影响需求了
+  const consultDays = daysToDeadline(card?.征询截止日)
+  if (daysToDeadline(card?.投标截止日) === null && consultDays !== null) {
+    if (consultDays < 0) return <span className="text-slate-400">征询已截止 {-consultDays} 天</span>
+    if (consultDays === 0) return <span className="font-semibold text-red-600">⏰ 征询今天截止！</span>
+    if (consultDays <= 3) return <span className="font-semibold text-red-500">⏰ 征询还剩 {consultDays} 天</span>
+    return <span className="font-medium text-amber-600">⏰ 征询还剩 {consultDays} 天</span>
+  }
   const days = daysToDeadline(card?.投标截止日)
   if (days === null) return null
   const terminal = card && ['已中标', '未中标', '已放弃'].includes(card.状态)
@@ -73,7 +82,8 @@ function DeadlineTag({ card }: { card: BidProjectCard | null }): React.JSX.Eleme
 function ledgerSort(projects: BiddingProject[]): BiddingProject[] {
   const urgency = (p: BiddingProject): number => {
     const active = !p.card || ['跟进中', '已投标'].includes(p.card.状态)
-    const days = daysToDeadline(p.card?.投标截止日)
+    // 没有投标截止日的意见征询项目按征询截止日排紧迫度
+    const days = daysToDeadline(p.card?.投标截止日) ?? daysToDeadline(p.card?.征询截止日)
     if (active && days !== null && days >= 0) return days
     return Number.MAX_SAFE_INTEGER
   }
@@ -130,6 +140,7 @@ const EMPTY_CARD_FORM: Omit<BidProjectCard, '更新时间'> = {
   保证金: '',
   投标截止日: '',
   开标日: '',
+  征询截止日: '',
   状态: '跟进中',
   备注: ''
 }
@@ -158,7 +169,8 @@ function ProjectCardEditor({
     { key: '我方报价', label: '我方报价' },
     { key: '保证金', label: '保证金' },
     { key: '投标截止日', label: '投标截止日', placeholder: 'YYYY-MM-DD' },
-    { key: '开标日', label: '开标日', placeholder: 'YYYY-MM-DD' }
+    { key: '开标日', label: '开标日', placeholder: 'YYYY-MM-DD' },
+    { key: '征询截止日', label: '征询截止日（意见征询阶段）', placeholder: 'YYYY-MM-DD' }
   ]
 
   return (
@@ -168,7 +180,7 @@ function ProjectCardEditor({
           <div key={f.key}>
             <label className="mb-0.5 block text-xs text-slate-400">{f.label}</label>
             <input
-              value={form[f.key] as string}
+              value={(form[f.key] as string) ?? ''}
               onChange={(e) => set(f.key, e.target.value)}
               placeholder={f.placeholder ?? ''}
               className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
@@ -245,10 +257,42 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [showChat, setShowChat] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
+  /** 左栏视图：台账（项目列表）| 情报（四平台每日抓取，原行业情报页的招投标信息） */
+  const [leftView, setLeftView] = useState<'台账' | '情报'>('台账')
+  const [intelReloadKey, setIntelReloadKey] = useState(0)
+  const [candidateCount, setCandidateCount] = useState(0)
 
   useEffect(() => {
     if (pendingPrompt) setShowChat(true)
   }, [pendingPrompt])
+
+  // 打开招投标分身：①清理超过3天的旧情报机读数据 ②内置抓取最新招投标信息（30分钟内不重复抓）
+  useEffect(() => {
+    ;(async () => {
+      try {
+        await window.api.intel.purgeStale()
+        setIntelReloadKey((k) => k + 1)
+        const r = await window.api.intel.fetchNow()
+        if (r.新增条数 > 0) flash(r.说明 + (r.平台结果.length > 0 ? `（${r.平台结果.join('、')}）` : ''))
+        setIntelReloadKey((k) => k + 1)
+      } catch {
+        // 网络失败静默——情报页签里有「刷新」可手动重试
+      }
+      try {
+        setCandidateCount((await window.api.bidding.listCandidates()).length)
+      } catch {
+        // 主进程旧版本没有该通道时静默
+      }
+    })()
+  }, [])
+
+  // 情报数据刷新后同步左上角计数角标
+  useEffect(() => {
+    window.api.bidding
+      .listCandidates()
+      .then((l) => setCandidateCount(l.length))
+      .catch(() => {})
+  }, [intelReloadKey])
   const [openCat, setOpenCat] = useState<Record<BidCategory, boolean>>({
     采购意向: true,
     意见征询: true,
@@ -373,9 +417,35 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
 
   return (
     <div className="flex h-full">
-      <div className="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-slate-50">
+      <div className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50 ${leftView === '情报' ? 'w-96' : 'w-80'}`}>
+        {/* 台账 / 每日情报 视图切换（招投标信息从行业情报页整合过来，情报→确认→台账一条线） */}
+        <div className="app-drag flex gap-1 px-3 pb-1 pt-3">
+          {(['台账', '情报'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setLeftView(v)}
+              className={`app-no-drag flex-1 rounded-lg px-2 py-1.5 text-xs font-medium ${
+                leftView === v ? 'bg-jushi-accent text-white' : 'border border-slate-300 text-slate-500 hover:border-jushi-accent'
+              }`}
+            >
+              {v === '台账' ? '📋 台账' : `📡 每日情报${candidateCount > 0 ? ` ${candidateCount}` : ''}`}
+            </button>
+          ))}
+        </div>
+        {leftView === '情报' && (
+          <IntelBiddingFeed
+            onNotice={flash}
+            reloadKey={intelReloadKey}
+            onConfirmed={() => {
+              refresh()
+              setIntelReloadKey((k) => k + 1)
+            }}
+          />
+        )}
+        {leftView === '台账' && (
+        <>
         <div className="p-3 pb-0">
-          <div className="app-drag mb-2 flex items-center justify-between pt-1">
+          <div className="mb-2 flex items-center justify-between pt-1">
             <h2 className="text-xs font-semibold text-slate-500">招投标台账</h2>
             <div className="app-no-drag flex items-center gap-1.5">
               <button
@@ -529,10 +599,12 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
           })}
           {filtered.length === 0 && (
             <p className="px-2 py-4 text-center text-xs text-slate-400">
-              {projects.length === 0 ? '还没有招标项目' : '该状态下没有项目'}
+              {projects.length === 0 ? '还没有招标项目——去「📡 每日情报」页签看看今天的公告' : '该状态下没有项目'}
             </p>
           )}
         </div>
+        </>
+        )}
         {notice && <div className="border-t border-slate-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">{notice}</div>}
       </div>
 

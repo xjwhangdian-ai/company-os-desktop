@@ -97,6 +97,8 @@ export interface BidProjectCard {
   /** YYYY-MM-DD；台账视图按它做倒计时排序 */
   投标截止日: string
   开标日: string
+  /** YYYY-MM-DD；意见征询阶段项目的征询/意见反馈截止日（重点关注：错过就没法提意见了） */
+  征询截止日?: string
   状态: BidProjectStatus
   备注: string
   更新时间: number
@@ -149,6 +151,8 @@ export interface IntelCandidate {
   台州公安: boolean
   /** 命中的兴趣关键词（读列表时按用户配置动态匹配；未命中为 null） */
   命中关键词?: string | null
+  /** 意见征询条目的征询截止日（YYYY-MM-DD，从公告详情页提取；提不到为空） */
+  征询截止?: string
   /** intel 分身标注的相关度；未标注（纯信息流条目）为 null */
   相关度: '高' | '中' | null
   理由: string

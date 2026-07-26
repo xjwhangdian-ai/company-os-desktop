@@ -8,13 +8,35 @@ import { GzhStyleButton } from '../components/GzhStyleButton'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
-type Platform = '小红书' | '微信公众号'
+type Platform = '小红书' | '微信公众号' | '抖音' | '微信视频号'
+
+const SHORT_VIDEO_PACK = [
+  '产出一份完整的短视频推广材料包（.md，含以下全部板块）：',
+  '① 口播脚本：15-60 秒，用表格分镜（镜头序号/画面内容/口播台词/屏幕字幕/时长秒数），画面列优先引用已上传的素材文件名；',
+  '② 视频标题：3 个备选（带钩子，前 5 个字抓住注意力）；',
+  '③ 发布文案：正文 + 话题标签；',
+  '④ 封面建议：封面画面 + 封面大字文案（不超过 12 字）；',
+  '⑤ 发布建议：发布时间段、置顶评论话术、引导关注话术。',
+  '素材使用规则：图片用 Read 逐张打开看清真实画面再写进分镜；视频文件无法直接观看，按文件名与我的描述引用，标注〔视频内容待人工核对〕。'
+].join('\n')
 
 const PLATFORM_PROMPTS: Record<Platform, string> = {
   小红书:
     '生成一篇小红书笔记文案。风格要求：口语化、emoji 适度点缀、开头 3 秒抓人的钩子、正文分点或分段清晰、结尾带 3-8 个相关话题标签(#xxx)。主题/需求：〔请描述这次想推广什么产品/场景/卖点〕',
   微信公众号:
-    '生成一篇公众号推文图文。按标准结构：标题(2-3个备选)+摘要 → 痛点引入 → 场景/方案 → 价值/数据(标来源) → 行动引导 → 配图建议。主题/需求：〔请描述这次想推广什么产品/场景/卖点〕'
+    '生成一篇公众号推文图文。按标准结构：标题(2-3个备选)+摘要 → 痛点引入 → 场景/方案 → 价值/数据(标来源) → 行动引导 → 配图建议。主题/需求：〔请描述这次想推广什么产品/场景/卖点〕',
+  抖音:
+    `生成抖音短视频推广材料。平台风格：节奏快、开头 3 秒必须有钩子（反差/提问/痛点），口语化短句，字幕节奏感强，话题标签 3-5 个（#行业词+#热点词）。\n${SHORT_VIDEO_PACK}\n主题/需求：〔请描述这次想推广什么产品/场景/卖点〕`,
+  微信视频号:
+    `生成微信视频号推广材料。平台风格：比抖音更稳重可信（观众多为行业客户与熟人圈），开头亮明价值点，结尾引导转发到微信群/朋友圈，可关联公众号文章。\n${SHORT_VIDEO_PACK}\n主题/需求：〔请描述这次想推广什么产品/场景/卖点〕`
+}
+
+/** 产出子文件夹后缀：outputs/05_运营_operation/{主题}_{后缀}/ */
+const PLATFORM_FOLDER: Record<Platform, string> = {
+  小红书: '小红书',
+  微信公众号: '公众号',
+  抖音: '抖音',
+  微信视频号: '视频号'
 }
 
 const MEDIA_UPLOAD_KINDS: { key: string; buttonLabel: string; filters: FileFilter[] }[] = [
@@ -144,8 +166,11 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
 
   function handleGenerate(): void {
     const t = theme.trim()
+    const isVideo = platform === '抖音' || platform === '微信视频号'
     const themeLine = t
-      ? `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_公众号/（先建子文件夹）。配图在 inbox/05_运营_operation/${t}/，若有 配图清单.md 先读它选图；插入每张图前用 Read 复核画面，图注严格对应画面内容，绝不张冠李戴。`
+      ? isVideo
+        ? `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_${PLATFORM_FOLDER[platform]}/（先建子文件夹）。视频/图片素材在 inbox/05_运营_operation/${t}/——先用 Glob 列出该目录全部文件，图片逐张 Read 看清画面再写分镜。`
+        : `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_${PLATFORM_FOLDER[platform]}/（先建子文件夹）。配图在 inbox/05_运营_operation/${t}/，若有 配图清单.md 先读它选图；插入每张图前用 Read 复核画面，图注严格对应画面内容，绝不张冠李戴。`
       : ''
     const tplImages = templates.filter((x) => x.kind === '图片')
     const templateLine = selectedTemplate
@@ -257,7 +282,7 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">平台：</span>
-            {(['小红书', '微信公众号'] as Platform[]).map((p) => (
+            {(['小红书', '微信公众号', '抖音', '微信视频号'] as Platform[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPlatform(p)}

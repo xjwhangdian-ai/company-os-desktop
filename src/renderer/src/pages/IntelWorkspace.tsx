@@ -1,352 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import type {
-  AgentDisplayMeta,
-  AgentName,
-  IntelCandidate,
-  IntelFeedType,
-  IntelReport,
-  IntelReportType
-} from '@shared/agent-types'
-import { INTEL_FEED_TYPES } from '@shared/agent-types'
+import type { AgentDisplayMeta, AgentName, IntelReport, IntelReportType } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { OutputsPanel } from '../components/OutputsPanel'
 
-type IntelTab = '招投标信息' | '行业趋势' | '政策文件'
-const TABS: IntelTab[] = ['招投标信息', '行业趋势', '政策文件']
+type IntelTab = '行业趋势' | '政策文件'
+const TABS: IntelTab[] = ['行业趋势', '政策文件']
 
-const FEED_TYPE_EMOJI: Record<IntelFeedType, string> = {
-  采购意向: '📌',
-  意见征询: '📋',
-  采购公告: '📢',
-  采购结果公告: '🏆'
-}
-
-// ── 招投标候选行 ──────────────────────────────────────────
-function CandidateRow({
-  c,
-  confirming,
-  disabled,
-  onConfirm,
-  onIgnore
-}: {
-  c: IntelCandidate
-  confirming: boolean
-  disabled: boolean
-  onConfirm: () => void
-  onIgnore: () => void
-}): React.JSX.Element {
-  return (
-    <div
-      className={`rounded-lg border bg-white p-2.5 ${
-        c.跟进升级 ? 'border-amber-400 shadow-sm' : c.相关度 === '高' ? 'border-rose-200' : 'border-slate-200'
-      }`}
-    >
-      {c.跟进升级 && (
-        <div className="mb-1.5 rounded bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
-          🔔 重点：你跟进中的项目发布了正式采购公告
-        </div>
-      )}
-      <a
-        href={c.链接 || undefined}
-        target="_blank"
-        rel="noreferrer"
-        title={c.链接 ? '在浏览器打开公告原文' : undefined}
-        className={`text-xs font-medium leading-snug ${
-          c.链接 ? 'text-jushi-accent underline-offset-2 hover:underline' : 'text-slate-700'
-        }`}
-      >
-        {c.项目名称}
-        {c.链接 && <span className="ml-0.5 text-[10px]">↗</span>}
-      </a>
-      <div className="mt-1 text-[11px] text-slate-500">
-        {c.采购单位 || '采购单位待确认'}
-        {c.区县 ? ` · ${c.区县}` : ''}
-        {c.预算 ? ` · ${c.预算}` : ''}
-        {c.中标单位 ? ` · 中标：${c.中标单位}` : ''}
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-1">
-        {c.相关度 && (
-          <span
-            className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-              c.相关度 === '高' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'
-            }`}
-          >
-            相关度{c.相关度}
-          </span>
-        )}
-        {(c.命中关键词 || c.台州公安) && (
-          <span className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-600">
-            🚨{c.命中关键词 || '公安系统'}
-          </span>
-        )}
-        {c.标签 && <span className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-600">{c.标签}</span>}
-        {c.平台 && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{c.平台}</span>}
-        <span className="text-[10px] text-slate-400">{c.日期}</span>
-      </div>
-      {c.理由 && <div className="mt-1 text-[11px] leading-snug text-slate-400">{c.理由}</div>}
-      <div className="mt-1.5 flex gap-1.5">
-        <button
-          disabled={disabled}
-          onClick={onConfirm}
-          className={`flex-1 rounded px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
-            c.跟进升级 ? 'bg-amber-500' : 'bg-jushi-accent'
-          }`}
-        >
-          {confirming ? '建档中…' : c.跟进升级 ? '✓ 归档进已有项目（更新为正式公告）' : '✓ 确认跟进 → 招投标'}
-        </button>
-        <button
-          disabled={disabled}
-          onClick={onIgnore}
-          className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-500 disabled:opacity-50"
-        >
-          忽略
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── 兴趣关键词管理（命中标红 + 计入「只看相关」）──────────────
-function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose: () => void }): React.JSX.Element {
-  const [keywords, setKeywords] = useState<string[]>([])
-  const [input, setInput] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    window.api.intel.getKeywords().then(setKeywords)
-  }, [])
-
-  async function save(next: string[]): Promise<void> {
-    setSaving(true)
-    try {
-      const saved = await window.api.intel.setKeywords(next)
-      setKeywords(saved)
-      onChanged()
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-white p-2.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold text-slate-600">兴趣关键词（命中即标红并计入「只看相关」）</span>
-        <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-600">收起 ✕</button>
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {keywords.map((k) => (
-          <span key={k} className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600">
-            {k}
-            <button
-              disabled={saving}
-              onClick={() => save(keywords.filter((x) => x !== k))}
-              className="text-rose-400 hover:text-rose-700 disabled:opacity-50"
-              title={`删除关键词「${k}」`}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        {keywords.length === 0 && <span className="text-[11px] text-slate-400">暂无关键词——全部公告都不会标红</span>}
-      </div>
-      <div className="mt-2 flex gap-1.5">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && input.trim()) {
-              save([...keywords, input.trim()])
-              setInput('')
-            }
-          }}
-          placeholder="如：电力 / 水利 / 巡检机器人 / 无人机"
-          className="flex-1 rounded border border-slate-300 px-2 py-1 text-[11px] outline-none focus:border-jushi-accent"
-        />
-        <button
-          disabled={saving || !input.trim()}
-          onClick={() => {
-            save([...keywords, input.trim()])
-            setInput('')
-          }}
-          className="rounded bg-jushi-accent px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
-        >
-          {saving ? '保存中…' : '添加'}
-        </button>
-      </div>
-      <p className="mt-1.5 text-[10px] leading-snug text-slate-400">
-        匹配范围=项目名称+采购单位；改完立即对现有列表生效，无需重新抓取。默认为公安系统一组词，删掉不需要的、加上你关心的行业词即可。
-      </p>
-    </div>
-  )
-}
-
-// ── 招投标信息面板（四类分组 + 确认跟进）────────────────────
-function BiddingFeedPanel({ onNotice, reloadKey }: { onNotice: (t: string) => void; reloadKey: number }): React.JSX.Element {
-  const [candidates, setCandidates] = useState<IntelCandidate[]>([])
-  const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
-  const [fetching, setFetching] = useState(false)
-  const [onlyRelevant, setOnlyRelevant] = useState(false)
-  const [showKeywords, setShowKeywords] = useState(false)
-  const [query, setQuery] = useState('')
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    采购意向: true,
-    意见征询: true,
-    采购公告: true,
-    采购结果公告: false
-  })
-
-  async function refresh(): Promise<void> {
-    setCandidates(await window.api.bidding.listCandidates())
-  }
-  useEffect(() => {
-    refresh()
-  }, [reloadKey])
-
-  async function handleConfirm(c: IntelCandidate): Promise<void> {
-    setConfirmingKey(c.key)
-    try {
-      const r = await window.api.bidding.confirmCandidate(c.key)
-      onNotice(r.ok ? `${r.说明}——项目卡已进入「招投标」页台账` : r.说明)
-      await refresh()
-    } finally {
-      setConfirmingKey(null)
-    }
-  }
-  async function handleIgnore(c: IntelCandidate): Promise<void> {
-    await window.api.bidding.ignoreCandidate(c.key)
-    setCandidates((prev) => prev.filter((x) => x.key !== c.key))
-  }
-
-  const visible = useMemo(() => {
-    let list = onlyRelevant ? candidates.filter((c) => c.相关度 || c.命中关键词 || c.台州公安) : candidates
-    // 搜索：空格隔开多个词是"都要命中"，匹配 项目名称/采购单位/中标单位/区县/标签/平台
-    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    if (tokens.length > 0) {
-      list = list.filter((c) => {
-        const hay = [c.项目名称, c.采购单位, c.中标单位, c.区县, c.标签, c.平台, c.预算].join(' ').toLowerCase()
-        return tokens.every((t) => hay.includes(t))
-      })
-    }
-    return list
-  }, [candidates, onlyRelevant, query])
-  const grouped = useMemo(() => {
-    const g = new Map<IntelFeedType, IntelCandidate[]>()
-    for (const t of INTEL_FEED_TYPES) g.set(t, [])
-    for (const c of visible) g.get(c.类型)?.push(c)
-    return g
-  }, [visible])
-
-  return (
-    <>
-      <div className="app-drag px-3 pb-2 pt-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-500">四平台每日抓取（{visible.length} 条）</span>
-          <div className="app-no-drag flex items-center gap-1.5">
-            <button
-              onClick={() => setShowKeywords((v) => !v)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                showKeywords ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-300 text-slate-500'
-              }`}
-              title="管理兴趣关键词：命中的公告标红并计入「只看相关」"
-            >
-              ⚙ 关键词
-            </button>
-            <button
-              onClick={() => setOnlyRelevant((v) => !v)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                onlyRelevant ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
-              }`}
-              title="只显示：intel 分身标注过相关度的 + 命中兴趣关键词的"
-            >
-              只看相关
-            </button>
-            <button
-              disabled={fetching}
-              onClick={async () => {
-                setFetching(true)
-                try {
-                  const r = await window.api.intel.fetchNow(true)
-                  onNotice(r.说明 + (r.平台结果.length > 0 ? `（${r.平台结果.join('、')}）` : ''))
-                } catch {
-                  onNotice('抓取失败（网络问题），稍后重试')
-                } finally {
-                  setFetching(false)
-                }
-                await refresh()
-              }}
-              className="rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50"
-              title="立即从三平台抓取最新公告并刷新列表"
-            >
-              {fetching ? '抓取中…' : '刷新'}
-            </button>
-          </div>
-        </div>
-        <div className="app-no-drag relative mt-1.5">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜项目 / 采购单位 / 区县 / 平台，空格隔开多个词…"
-            className="w-full rounded-lg border border-slate-300 py-1.5 pl-3 pr-7 text-xs outline-none focus:border-jushi-accent"
-          />
-          {query && (
-            <button
-              onClick={() => setQuery('')}
-              title="清空搜索"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        <p className="mt-1 text-[11px] leading-snug text-slate-400">
-          浙江政采（政采云）/台州公共资源/乐采云/台州阳光采购。「确认跟进」后进入招投标页台账并自动回填项目卡。
-        </p>
-      </div>
-      {showKeywords && <KeywordManager onChanged={refresh} onClose={() => setShowKeywords(false)} />}
-      <div className="flex-1 space-y-2 overflow-y-auto p-3 pt-0">
-        {visible.length === 0 && (
-          <p className="py-6 text-center text-xs text-slate-400">
-            {query.trim() ? `没有匹配「${query.trim()}」的招投标信息` : '暂无待确认的招投标信息'}
-          </p>
-        )}
-        {INTEL_FEED_TYPES.map((t) => {
-          const items = grouped.get(t) ?? []
-          if (items.length === 0) return null
-          // 搜索时强制展开所有分组——命中的条目不能藏在收起的分组里
-          const open = query.trim() ? true : openSections[t]
-          return (
-            <div key={t} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <button
-                onClick={() => setOpenSections((s) => ({ ...s, [t]: !s[t] }))}
-                className="flex w-full items-center justify-between bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600"
-              >
-                <span>
-                  {FEED_TYPE_EMOJI[t]} {t}（{items.length}）
-                </span>
-                <span>{open ? '▾' : '▸'}</span>
-              </button>
-              {open && (
-                <div className="space-y-1.5 bg-slate-50 p-2">
-                  {items.map((c) => (
-                    <CandidateRow
-                      key={c.key}
-                      c={c}
-                      confirming={confirmingKey === c.key}
-                      disabled={confirmingKey !== null}
-                      onConfirm={() => handleConfirm(c)}
-                      onIgnore={() => handleIgnore(c)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </>
-  )
-}
 
 // ── 研报面板（行业趋势 / 政策文件，按关键词分组）─────────────
 function ReportRow({ r, onNotice }: { r: IntelReport; onNotice: (t: string) => void }): React.JSX.Element {
@@ -558,7 +218,7 @@ function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; re
  * 招投标信息=四平台每日抓取（可「确认跟进」进招投标台账）；行业趋势/政策文件=sgpjbg.com 研报（只读，带下载页链接）。
  */
 export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
-  const [tab, setTab] = useState<IntelTab>('招投标信息')
+  const [tab, setTab] = useState<IntelTab>('行业趋势')
   const [notice, setNotice] = useState<string | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
   const [showChat, setShowChat] = useState(true)
@@ -569,22 +229,11 @@ export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     setTimeout(() => setNotice(null), 6000)
   }
 
-  // 打开情报分身：①清理超过三天的旧机读数据 ②App 内置抓取最新招投标信息（30分钟内不重复抓）。
-  // 数据不走 git 同步——任何装了 App 的电脑（mac/Windows）都自己拉，乐采云/研报仍来自管理员机管线。
+  // 打开情报分身：清理超过三天的旧机读数据。招投标信息的抓取与确认已整合进「招投标」工作台。
   useEffect(() => {
     ;(async () => {
       const purged = await window.api.intel.purgeStale()
-      setReloadKey((k) => k + 1)
-      flash('正在抓取最新招投标信息（浙江政采/台州工程/台州阳光采购）…')
-      try {
-        const r = await window.api.intel.fetchNow()
-        flash(
-          [r.说明, r.平台结果.length > 0 ? `（${r.平台结果.join('、')}）` : '', purged.purged.length > 0 ? `；已清理 ${purged.purged.length} 项过期数据` : '']
-            .join('')
-        )
-      } catch {
-        flash('抓取失败（网络问题），点「刷新」重试')
-      }
+      if (purged.purged.length > 0) flash(`已清理 ${purged.purged.length} 项过期情报数据`)
       setReloadKey((k) => k + 1)
     })()
   }, [])
@@ -606,7 +255,9 @@ export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
           ))}
         </div>
 
-        {tab === '招投标信息' && <BiddingFeedPanel onNotice={flash} reloadKey={reloadKey} />}
+        <p className="px-3 pb-1 text-[11px] leading-snug text-slate-400">
+          💡 招投标信息已整合进「招投标」工作台（每日情报页签）——情报确认、台账、解析投标一条线。
+        </p>
         {tab === '行业趋势' && <ReportsPanel type="行业趋势" reloadKey={reloadKey} onNotice={flash} />}
         {tab === '政策文件' && <ReportsPanel type="政策文件" reloadKey={reloadKey} onNotice={flash} />}
 
