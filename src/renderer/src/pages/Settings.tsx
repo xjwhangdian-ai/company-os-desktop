@@ -21,7 +21,7 @@ const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
   'minimax-cn':
     '已按 2026-07 官方文档预填：MiniMax-M3（旗舰，原生多模态）/ MiniMax-M2.7（主力档）/ MiniMax-M2（最便宜档）。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
   qwen: '已按 2026-07 官方文档预填模型名：qwen3.7-max（旗舰）/ qwen3.7-plus（主力档）/ qwen3.6-flash（最便宜档）。Base URL 没有唯一默认值——阿里云这个端点按地区/套餐分裂成好几种，常见几种：国内 PAYG「https://dashscope.aliyuncs.com/apps/anthropic」、国际 PAYG「https://dashscope-intl.aliyuncs.com/apps/anthropic」、Coding Plan「https://coding-intl.dashscope.aliyuncs.com/apps/anthropic」——对着自己开通的套餐选，不确定就点右侧文档核实。',
-  zhipu: '智谱官方提供 Anthropic 协议兼容端点（GLM 接 Claude Code 的官方方式），Base URL 已预填。模型名按官方文档预填 glm-4.5（旗舰）/ glm-4.5-air（轻量）——智谱迭代快，若已发布更新一代（如 glm-5 系列），点右侧文档确认后改成最新模型名即可。',
+  zhipu: '智谱官方提供 Anthropic 协议兼容端点（GLM 接 Claude Code 的官方方式），Base URL 已预填。模型已按最新旗舰预填：glm-5（2026-07 发布，opus/sonnet 档）/ glm-4.5-air（haiku 轻量档）。智谱迭代快，用之前点右侧文档核对最新模型名。',
   custom: '适用于任何自建/自托管的 Anthropic 协议兼容端点（比如自己起一个 claude-code-router）。'
 }
 

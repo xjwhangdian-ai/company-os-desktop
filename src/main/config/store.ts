@@ -25,8 +25,9 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
     baseUrl: null,
     authEnvVar: 'ANTHROPIC_API_KEY',
     apiKey: null,
+    // 2026-07 口径：Opus 5 旗舰 / Sonnet 5 主力 / Haiku 4.5 轻量
     modelMapping: {
-      opus: 'claude-opus-4-8',
+      opus: 'claude-opus-5',
       sonnet: 'claude-sonnet-5',
       haiku: 'claude-haiku-4-5-20251001'
     }
@@ -90,7 +91,8 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
     apiKey: null,
     // 按智谱官方 Claude Code 接入文档的对应关系预填（glm-4.5 旗舰 / glm-4.5-air 轻量）；
     // 智谱迭代快，若有更新一代模型（如 glm-5 系列），在设置页对着官方文档改即可。
-    modelMapping: { opus: 'glm-4.5', sonnet: 'glm-4.5', haiku: 'glm-4.5-air' }
+    // 2026-07 口径：glm-5 为最新旗舰（2026-07 发布）；haiku 档留 4.5-air 轻量档（GLM-5 轻量档模型名待官方文档确认后再换）
+    modelMapping: { opus: 'glm-5', sonnet: 'glm-5', haiku: 'glm-4.5-air' }
   },
   custom: {
     id: 'custom',
@@ -231,18 +233,22 @@ function reconcileProviders(schema: StoreSchemaV4): { schema: StoreSchemaV4; cha
     }
   }
   // Kimi K3 上线（2026-07-16）：老配置里仍是 K2 旧默认映射的就地升级；用户自己改过的映射不动
-  const kimi = providers['kimi']
-  if (kimi) {
-    const mm = { ...kimi.modelMapping }
-    if (mm.opus === 'kimi-k2-thinking-turbo') {
-      mm.opus = 'kimi-k3'
+  // 各家新旗舰上线后的就地升级：老配置里仍是旧默认模型名的换成新默认；用户自己改过的映射不动。
+  // 2026-07：Kimi K3 / Claude Opus 5 / GLM-5
+  const MODEL_UPGRADES: { provider: string; slot: 'opus' | 'sonnet' | 'haiku'; from: string; to: string }[] = [
+    { provider: 'kimi', slot: 'opus', from: 'kimi-k2-thinking-turbo', to: 'kimi-k3' },
+    { provider: 'kimi', slot: 'sonnet', from: 'kimi-k2-turbo-preview', to: 'kimi-k3' },
+    { provider: 'anthropic', slot: 'opus', from: 'claude-opus-4-8', to: 'claude-opus-5' },
+    { provider: 'anthropic', slot: 'opus', from: 'claude-opus-4-7', to: 'claude-opus-5' },
+    { provider: 'zhipu', slot: 'opus', from: 'glm-4.5', to: 'glm-5' },
+    { provider: 'zhipu', slot: 'sonnet', from: 'glm-4.5', to: 'glm-5' }
+  ]
+  for (const up of MODEL_UPGRADES) {
+    const p = providers[up.provider]
+    if (p && p.modelMapping[up.slot] === up.from) {
+      providers[up.provider] = { ...p, modelMapping: { ...p.modelMapping, [up.slot]: up.to } }
       changed = true
     }
-    if (mm.sonnet === 'kimi-k2-turbo-preview' && mm.opus === 'kimi-k3') {
-      mm.sonnet = 'kimi-k3'
-      changed = true
-    }
-    if (changed) providers['kimi'] = { ...kimi, modelMapping: mm }
   }
   let activeProviderId = schema.activeProviderId
   if ((activeProviderId as string) === 'minimax-intl') {
