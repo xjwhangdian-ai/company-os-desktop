@@ -1035,7 +1035,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                   setCatalog(f, {
                                     stage: 'done',
                                     outDir: a.outDir,
-                                    text: `✅ 全自动完成：已产出 ${a.count ?? '?'} 张成品图 ＋ 产品清单.xlsx（名称/型号/技术参数已按模板填好，品牌/价格等留空待补，可发供应商补价后「直接导入」产品库），中间产物已清理${note}` +
+                                    text: `✅ 全自动完成：已产出 ${a.count ?? '?'} 张成品图 ＋ 产品清单.xlsx（名称/型号/技术参数已填、品牌/制造商按画册自动补全、抠图已嵌入表格，缺型号的行标黄待补；发供应商补价后可「直接导入」产品库），中间产物已清理${note}` +
                                       (a.missing && a.missing.length > 0 ? `；${a.missing.length} 条未命中：${a.missing.slice(0, 3).join('、')}` : '')
                                   })
                                   if (a.outDir) await window.api.shell.showItemInFolder(a.outDir)
