@@ -257,8 +257,8 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [showChat, setShowChat] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
-  /** 左栏视图：台账（项目列表）| 情报（四平台每日抓取，原行业情报页的招投标信息） */
-  const [leftView, setLeftView] = useState<'台账' | '情报'>('台账')
+  /** 左栏视图：情报（四平台每日抓取，默认视图）| 台账（项目列表） */
+  const [leftView, setLeftView] = useState<'台账' | '情报'>('情报')
   const [intelReloadKey, setIntelReloadKey] = useState(0)
   const [candidateCount, setCandidateCount] = useState(0)
 
@@ -420,7 +420,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
       <div className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50 ${leftView === '情报' ? 'w-96' : 'w-80'}`}>
         {/* 台账 / 每日情报 视图切换（招投标信息从行业情报页整合过来，情报→确认→台账一条线） */}
         <div className="app-drag flex gap-1 px-3 pb-1 pt-3">
-          {(['台账', '情报'] as const).map((v) => (
+          {(['情报', '台账'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setLeftView(v)}

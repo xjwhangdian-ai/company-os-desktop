@@ -140,6 +140,8 @@ function CandidateRow({
 function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose: () => void }): React.JSX.Element {
   const [keywords, setKeywords] = useState<string[]>([])
   const [input, setInput] = useState('')
+  /** 非空=正在修改这个词：保存时原位替换而不是新增 */
+  const [editing, setEditing] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -157,6 +159,18 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
     }
   }
 
+  function submit(): void {
+    const val = input.trim()
+    if (!val) return
+    if (editing) {
+      save(keywords.map((k) => (k === editing ? val : k)))
+      setEditing(null)
+    } else {
+      save([...keywords, val])
+    }
+    setInput('')
+  }
+
   return (
     <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-white p-2.5">
       <div className="flex items-center justify-between">
@@ -165,11 +179,32 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1">
         {keywords.map((k) => (
-          <span key={k} className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600">
-            {k}
+          <span
+            key={k}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              editing === k ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-400' : 'bg-rose-50 text-rose-600'
+            }`}
+          >
             <button
               disabled={saving}
-              onClick={() => save(keywords.filter((x) => x !== k))}
+              onClick={() => {
+                setEditing(k)
+                setInput(k)
+              }}
+              className="hover:underline disabled:opacity-50"
+              title={`修改关键词「${k}」——点击后在下方输入框改好按保存`}
+            >
+              {k}
+            </button>
+            <button
+              disabled={saving}
+              onClick={() => {
+                if (editing === k) {
+                  setEditing(null)
+                  setInput('')
+                }
+                save(keywords.filter((x) => x !== k))
+              }}
               className="text-rose-400 hover:text-rose-700 disabled:opacity-50"
               title={`删除关键词「${k}」`}
             >
@@ -184,27 +219,33 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && input.trim()) {
-              save([...keywords, input.trim()])
-              setInput('')
-            }
+            if (e.key === 'Enter') submit()
           }}
-          placeholder="如：电力 / 水利 / 巡检机器人 / 无人机"
+          placeholder={editing ? `正在修改「${editing}」，改好按回车或点保存` : '如：电力 / 水利 / 巡检机器人 / 无人机'}
           className="flex-1 rounded border border-slate-300 px-2 py-1 text-[11px] outline-none focus:border-jushi-accent"
         />
+        {editing && (
+          <button
+            onClick={() => {
+              setEditing(null)
+              setInput('')
+            }}
+            className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-500"
+            title="取消修改"
+          >
+            取消
+          </button>
+        )}
         <button
           disabled={saving || !input.trim()}
-          onClick={() => {
-            save([...keywords, input.trim()])
-            setInput('')
-          }}
+          onClick={submit}
           className="rounded bg-jushi-accent px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
         >
-          {saving ? '保存中…' : '添加'}
+          {saving ? '保存中…' : editing ? '保存修改' : '添加'}
         </button>
       </div>
       <p className="mt-1.5 text-[10px] leading-snug text-slate-400">
-        匹配范围=项目名称+采购单位；改完立即对现有列表生效，无需重新抓取。
+        增删改：点词本身=修改，点 × =删除，输入新词回车=添加。匹配范围=项目名称+采购单位；改完立即对现有列表生效，无需重新抓取。
       </p>
     </div>
   )
