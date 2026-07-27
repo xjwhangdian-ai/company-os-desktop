@@ -23,6 +23,10 @@ const MARGIN = 1440
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
 
 const cellBorder = { style: BorderStyle.SINGLE, size: 2, color: 'AAAAAA' } as const
+
+/** 中文文档字体：中文宋体、西文 Times New Roman（标书/公文通用口径，学习自范本投标文件） */
+const CN_BODY_FONT = { ascii: 'Times New Roman', hAnsi: 'Times New Roman', eastAsia: '宋体' } as const
+const CN_HEADING_FONT = { ascii: 'Times New Roman', hAnsi: 'Times New Roman', eastAsia: '宋体' } as const
 const cellBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder }
 
 /**
@@ -305,7 +309,9 @@ export function markdownToDocxChildren(markdown: string, opts: { pageBreakBefore
 export function buildDocument(children: (Paragraph | Table)[]): Document {
   return new Document({
     styles: {
-      default: { document: { run: { font: 'Arial', size: 22 } } },
+      // 中文公文/标书字体口径（学习自范本投标文件：宋体正文 + 宋体加粗标题；英文数字走 Times New Roman）。
+      // 此前全 Arial 是"生成的 Word 格式不对"的主因之一。
+      default: { document: { run: { font: CN_BODY_FONT, size: 24 } } },
       paragraphStyles: [
         {
           id: 'Heading1',
@@ -313,7 +319,7 @@ export function buildDocument(children: (Paragraph | Table)[]): Document {
           basedOn: 'Normal',
           next: 'Normal',
           quickFormat: true,
-          run: { size: 32, bold: true, font: 'Arial' },
+          run: { size: 36, bold: true, font: CN_HEADING_FONT },
           paragraph: { spacing: { before: 240, after: 200 }, outlineLevel: 0 }
         },
         {
@@ -322,7 +328,7 @@ export function buildDocument(children: (Paragraph | Table)[]): Document {
           basedOn: 'Normal',
           next: 'Normal',
           quickFormat: true,
-          run: { size: 26, bold: true, font: 'Arial' },
+          run: { size: 32, bold: true, font: CN_HEADING_FONT },
           paragraph: { spacing: { before: 200, after: 160 }, outlineLevel: 1 }
         },
         {
@@ -331,7 +337,7 @@ export function buildDocument(children: (Paragraph | Table)[]): Document {
           basedOn: 'Normal',
           next: 'Normal',
           quickFormat: true,
-          run: { size: 24, bold: true, font: 'Arial' },
+          run: { size: 28, bold: true, font: CN_HEADING_FONT },
           paragraph: { spacing: { before: 160, after: 120 }, outlineLevel: 2 }
         }
       ]
