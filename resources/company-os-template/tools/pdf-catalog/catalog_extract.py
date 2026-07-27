@@ -180,8 +180,9 @@ def _lines_to_headings(lines, iw, ih):
     return headings
 
 
-def _collect_page(pg, boxes, headings, iw, ih, seq_start):
-    """在一页内按标题块认领候选图，返回该页 items（序号从 seq_start+1 起）。"""
+def _collect_page(pg, boxes, headings, iw, ih, seq_start, body_lines=None):
+    """在一页内按标题块认领候选图，返回该页 items（序号从 seq_start+1 起）。
+    body_lines: 该页全部文本行 [(text, x, y_top, h)]，用于收集产品地盘内的正文作技术参数。"""
     items = []
     seq = seq_start
     used = set()
@@ -220,7 +221,23 @@ def _collect_page(pg, boxes, headings, iw, ih, seq_start):
             continue
         used.add(best)
         seq += 1
-        items.append({"序号": seq, "型号": model, "产品名称": name, "分类": "", "页": pg, "候选": best})
+        # 技术参数：同栏、标题以下到下一标题之间的正文行（排除标题自身），按纵向顺序拼接
+        params = ""
+        if body_lines:
+            own = set(h["lines"])
+            zone = []
+            for s, x, y_top, lh in body_lines:
+                if s in own or len(s.strip()) < 2:
+                    continue
+                if (0 if x < iw / 2 else 1) != h["col"]:
+                    continue
+                if not (h["y_last"] + lh * 0.5 <= y_top <= y_bot - 2):
+                    continue
+                zone.append((y_top, x, s.strip()))
+            zone.sort()
+            params = "\n".join(s for _, _, s in zone)[:1200]
+        items.append({"序号": seq, "型号": model, "产品名称": name, "分类": "", "页": pg, "候选": best,
+                      "技术参数": params})
     return items
 
 
@@ -265,18 +282,19 @@ def auto_pair(reader, meta, out):
         if not headings:
             continue
         any_heading = True
-        all_text = " ".join(l[0] for l in (lines or [])) + " " + " ".join(l[0] for l in (ocr_lines_cache or []))
-        pages.append((pg, boxes, headings, iw, ih, bool(_PRODUCT_PAGE.search(all_text))))
+        all_lines = (lines or []) + (ocr_lines_cache or [])
+        all_text = " ".join(l[0] for l in all_lines)
+        pages.append((pg, boxes, headings, iw, ih, bool(_PRODUCT_PAGE.search(all_text)), all_lines))
     # 第一轮：只配产品页；一个产品页都没有（版式特殊）再放开
     items = []
     seq = 0
     for gate in (True, False):
         items = []
         seq = 0
-        for pg, boxes, headings, iw, ih, is_prod in pages:
+        for pg, boxes, headings, iw, ih, is_prod, all_lines in pages:
             if gate and not is_prod:
                 continue
-            got = _collect_page(pg, boxes, headings, iw, ih, seq)
+            got = _collect_page(pg, boxes, headings, iw, ih, seq, all_lines)
             items.extend(got)
             seq += len(got)
         if items:
@@ -290,6 +308,89 @@ def auto_pair(reader, meta, out):
                 items.append({"序号": seq, "型号": "", "产品名称": "", "分类": "", "页": m["page"], "候选": bi})
         return items, True, used_ocr
     return items, False, used_ocr
+
+
+def _save_final(im, dst, min_side=800):
+    """成品图保存：两边都要 ≥ min_side，不足则等比放大（LANCZOS）；只放大不缩小。"""
+    w, h = im.size
+    scale = max(min_side / w, min_side / h)
+    if scale > 1:
+        im = im.resize((max(min_side, round(w * scale)), max(min_side, round(h * scale))), Image.LANCZOS)
+    im.save(dst, quality=92)
+
+
+_SHEET_COLS = ["序号", "产品名称", "产品类别", "品牌", "型号 / 规格", "生产制造商", "产地",
+               "技术规格参数", "单位", "税率", "质保期(月)", "供货价(含税单价/元)", "交货周期(天)",
+               "最小起订量", "开票类型", "备注", "对应画册抠图的序列"]
+
+
+def derive_brand(pdf_name):
+    """从画册文件名推断品牌/生产制造商（如 和为永泰产品画册-2026.pdf → 和为永泰）。"""
+    base = os.path.splitext(os.path.basename(pdf_name))[0]
+    base = re.sub(r"产品画册|产品手册|画册|手册|目录|宣传册|\d{4}年?版?|20\d{2}|_压缩|[-_（(【\[].*$", "", base)
+    base = re.sub(r"[-_\s]+$", "", base).strip()
+    return base if 2 <= len(base) <= 20 else ""
+
+
+def _write_product_sheet(out, rows):
+    """按《供应商资料解析模板》格式产出 产品清单.xlsx：
+    末列直接嵌入对应抠图（原图≥800×800，显示缩放）；型号缺失的单元格标黄（必填待补）。
+    openpyxl 不在时降级 CSV（图片列写文件名）。"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.drawing.image import Image as XLImage
+        from openpyxl.styles import Font, PatternFill, Alignment
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "供应商报价清单"
+        ws.cell(row=1, column=1, value="供应商报价清单").font = Font(bold=True, size=14)
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(_SHEET_COLS))
+        ws.cell(row=2, column=1, value="名称/型号/技术参数/品牌/制造商由画册抠图机械提取（个别字可能有误差，请对照抠图核对）；型号为必填项，黄色=画册中未识别到、需人工补；价格/税率等空列请人工或供应商补充。抠图原图分辨率≥800×800，表内为缩放显示。")
+        head_fill = PatternFill("solid", fgColor="E8EEF6")
+        model_missing_fill = PatternFill("solid", fgColor="FFF2A8")
+        for ci, name in enumerate(_SHEET_COLS, 1):
+            c = ws.cell(row=3, column=ci, value=name)
+            c.font = Font(bold=True)
+            c.fill = head_fill
+        widths = [6, 22, 14, 12, 18, 14, 8, 50, 6, 8, 10, 16, 12, 10, 10, 12, 20]
+        for ci, w in enumerate(widths, 1):
+            ws.column_dimensions[ws.cell(row=3, column=ci).column_letter].width = w
+        img_col_letter = ws.cell(row=3, column=len(_SHEET_COLS)).column_letter
+        DISPLAY = 130  # 图片显示尺寸（px）；嵌入的原图文件仍是 ≥800×800
+        for ri, r in enumerate(rows, 4):
+            for ci, name in enumerate(_SHEET_COLS, 1):
+                if name == "对应画册抠图的序列":
+                    continue
+                cell = ws.cell(row=ri, column=ci, value=r.get(name, ""))
+                if name == "技术规格参数":
+                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+                elif name == "型号 / 规格" and not r.get(name):
+                    cell.fill = model_missing_fill
+            img_path = r.get("图片路径") or ""
+            if img_path and os.path.exists(img_path):
+                try:
+                    img = XLImage(img_path)
+                    iw, ih = img.width or DISPLAY, img.height or DISPLAY
+                    scale = DISPLAY / max(iw, ih)
+                    img.width, img.height = round(iw * scale), round(ih * scale)
+                    ws.add_image(img, "%s%d" % (img_col_letter, ri))
+                    ws.row_dimensions[ri].height = DISPLAY * 0.75 + 6  # px→pt
+                except Exception:
+                    ws.cell(row=ri, column=len(_SHEET_COLS), value=os.path.basename(img_path))
+            else:
+                ws.cell(row=ri, column=len(_SHEET_COLS), value=r.get("对应画册抠图的序列", ""))
+        p = os.path.join(out, "产品清单.xlsx")
+        wb.save(p)
+        return p
+    except ImportError:
+        import csv
+        p = os.path.join(out, "产品清单.csv")
+        with open(p, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.DictWriter(f, fieldnames=_SHEET_COLS)
+            w.writeheader()
+            for r in rows:
+                w.writerow({k: r.get(k, "") for k in _SHEET_COLS})
+        return p
 
 
 def apply_pairing(out, clean=False):
@@ -322,7 +423,15 @@ def apply_pairing(out, clean=False):
         if os.path.isdir(p):
             page_dir = p
             break
+    # 同画册品牌/生产制造商自动补全（来源：抽取阶段写的 _画册信息.json，从画册文件名推断）
+    brand = ""
+    try:
+        info = json.load(open(os.path.join(out, "_画册信息.json"), encoding="utf-8"))
+        brand = str(info.get("品牌") or "")
+    except Exception:
+        pass
     okn, miss = 0, []
+    sheet_rows = []
     for it in items:
         try:
             seq = int(it.get("序号"))
@@ -332,6 +441,18 @@ def apply_pairing(out, clean=False):
             continue
         parts = ["%03d" % seq, _slug(it.get("型号")), _slug(it.get("产品名称")), "P%02d" % pg]
         fn = "_".join([p for p in parts if p]) + ".jpg"
+        sheet_rows.append({
+            "序号": seq,
+            "产品名称": it.get("产品名称") or "",
+            "产品类别": it.get("分类") or "",
+            "品牌": brand,
+            "生产制造商": brand,
+            "型号 / 规格": it.get("型号") or "",
+            "技术规格参数": it.get("技术参数") or "",
+            "备注": "手册P%02d" % pg,
+            "对应画册抠图的序列": fn,
+            "图片路径": os.path.join(dest, fn)
+        })
         dst = os.path.join(dest, fn)
         cand = it.get("候选")
         box = it.get("框")
@@ -339,7 +460,7 @@ def apply_pairing(out, clean=False):
         if cand is not None and cand_dir:
             src = os.path.join(cand_dir, "P%02d_%d.jpg" % (pg, int(cand)))
             if os.path.exists(src):
-                shutil.copyfile(src, dst)
+                _save_final(Image.open(src).convert("RGB"), dst)
                 done = True
         if not done and box and len(box) == 4:
             page_img = os.path.join(page_dir or os.path.join(out, "_整页"), "P%02d.jpg" % pg)
@@ -349,12 +470,19 @@ def apply_pairing(out, clean=False):
                 x0, y0 = max(0, x0), max(0, y0)
                 x1, y1 = min(im.size[0], x1), min(im.size[1], y1)
                 if x1 - x0 > 20 and y1 - y0 > 20:
-                    im.crop((x0, y0, x1, y1)).save(dst, quality=92)
+                    _save_final(im.crop((x0, y0, x1, y1)), dst)
                     done = True
         if done:
             okn += 1
         else:
             miss.append("%s(P%d 候选%s)" % (it.get("产品名称") or it.get("型号") or "?", pg, cand))
+    # 产品清单 Excel（模板同款 17 列：名称/型号/技术参数机械填入，其余留空待补）
+    sheet_path = ""
+    if sheet_rows:
+        try:
+            sheet_path = _write_product_sheet(out, sheet_rows)
+        except Exception:
+            sheet_path = ""
     cleaned = False
     if clean and okn > 0:
         # 定稿成功后清理可再生的中间产物，最终目录只留 产品图片/ + 文本提取.md + _配对.json
@@ -370,8 +498,10 @@ def apply_pairing(out, clean=False):
             except Exception:
                 pass
     print(json.dumps({"ok": True, "count": okn, "missing": miss, "outDir": dest, "cleaned": cleaned,
-                      "说明": "已按配对清单产出 %d 张成品图到 产品图片/（命名 序号_型号_产品名称_P页）%s%s"
+                      "sheet": sheet_path,
+                      "说明": "已按配对清单产出 %d 张成品图到 产品图片/（命名 序号_型号_产品名称_P页）%s%s%s"
                               % (okn,
+                                 ("＋产品清单.%s（名称/型号/技术参数已填，价格等待补）" % ("xlsx" if sheet_path.endswith(".xlsx") else "csv")) if sheet_path else "",
                                  ("；%d 条未命中：%s" % (len(miss), "、".join(miss[:5]))) if miss else "",
                                  "；中间产物已清理" if cleaned else "")},
                      ensure_ascii=False))
@@ -438,6 +568,9 @@ def main():
         f.write("\n".join(md))
     with open(os.path.join(mid, "候选.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False)
+    # 画册信息（品牌从文件名推断，供 --apply 阶段补全 品牌/生产制造商）
+    with open(os.path.join(out, "_画册信息.json"), "w", encoding="utf-8") as f:
+        json.dump({"来源PDF": os.path.basename(pdf), "品牌": derive_brand(pdf)}, f, ensure_ascii=False)
 
     # 机械自动配对（不依赖 AI）：文本层大字标题 ↔ 候选图就近认领；扫描版兜底导出全部候选
     pair_items, degraded, used_ocr = auto_pair(reader, meta, out)
