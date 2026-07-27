@@ -11,6 +11,7 @@ import { isStampablePath, stampProvenance } from '../fs-io/provenance'
 import { loadAgentDefinitions } from './loader'
 import { resolveModel } from '../config/model-mapping'
 import { getActiveProvider } from '../config/store'
+import { augmentedPath } from '../fs-io/env-check'
 
 export interface RunAgentParams {
   agentName: AgentName
@@ -124,6 +125,9 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentStr
   delete env.ANTHROPIC_BASE_URL
   env[provider.authEnvVar] = provider.apiKey
   if (provider.baseUrl) env.ANTHROPIC_BASE_URL = provider.baseUrl
+  // GUI 启动的 Electron PATH 不含 Homebrew 等目录——分身的 Read 读 PDF 依赖 pdftoppm(poppler)、
+  // Bash 工具依赖 python3 等，这里统一补齐，否则装了组件分身也找不到
+  env.PATH = augmentedPath()
 
   let q: ReturnType<typeof query>
   try {

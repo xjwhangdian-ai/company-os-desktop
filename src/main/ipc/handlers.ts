@@ -24,6 +24,7 @@ import type {
 import { applyCatalogPairing, extractPdfCatalog, readCatalogProgress } from '../fs-io/pdf-catalog'
 import { exportZcyPackage } from '../fs-io/zcy-export'
 import { repairDataDir } from '../config/first-run'
+import { checkEnv, installEnvItem } from '../fs-io/env-check'
 import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
@@ -122,6 +123,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
   ipcMain.handle(IPC.configSetActiveCompany, (_e, id: string) => setActiveCompany(id))
   ipcMain.handle(IPC.configRepairDataDir, () => repairDataDir(getDataDir()))
+  ipcMain.handle(IPC.envCheck, () => checkEnv())
+  ipcMain.handle(IPC.envInstall, (_e, key: string) => installEnvItem(key))
 
   // 从安装包内置模板初始化新数据目录：选一个空文件夹 → 拷贝模板 → 绑定到公司
   ipcMain.handle(IPC.configInitDataDir, async (_e, companyId: string) => {

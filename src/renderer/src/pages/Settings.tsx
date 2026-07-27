@@ -227,6 +227,8 @@ export function Settings(): React.JSX.Element {
         </div>
       </section>
 
+      <EnvSection onFlash={flashSaved} />
+
       <MemberSection onFlash={flashSaved} />
 
       <AboutSection onFlash={flashSaved} />
@@ -238,6 +240,96 @@ export function Settings(): React.JSX.Element {
       )}
       </div>
     </div>
+  )
+}
+
+/** 本地环境检测：python/依赖库/poppler(PDF读取)/OCR——缺失项给解决方案与一键安装 */
+function EnvSection({ onFlash }: { onFlash: (t: string) => void }): React.JSX.Element {
+  type EnvItem = Awaited<ReturnType<typeof window.api.env.check>>['items'][number]
+  const [items, setItems] = useState<EnvItem[]>([])
+  const [checking, setChecking] = useState(false)
+  const [installing, setInstalling] = useState<string | null>(null)
+
+  async function refresh(): Promise<void> {
+    setChecking(true)
+    try {
+      setItems((await window.api.env.check()).items)
+    } catch {
+      // 主进程旧版本没有该通道
+    } finally {
+      setChecking(false)
+    }
+  }
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  async function handleInstall(item: EnvItem): Promise<void> {
+    setInstalling(item.key)
+    onFlash(`正在安装 ${item.name}（可能需要几分钟，请勿关闭 App）…`)
+    try {
+      const r = await window.api.env.install(item.key)
+      onFlash(r.说明)
+    } catch (err) {
+      onFlash(`安装失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setInstalling(null)
+    }
+    await refresh()
+  }
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-slate-700">本地环境</h3>
+        <button
+          disabled={checking}
+          onClick={refresh}
+          className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-500 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50"
+        >
+          {checking ? '检测中…' : '重新检测'}
+        </button>
+      </div>
+      <p className="text-xs text-slate-400">
+        分身读 PDF、画册抠图等功能依赖这些本机组件。首次使用或提示"无法读取 pdf"时，在这里补齐。
+      </p>
+      <div className="space-y-1.5">
+        {items.map((it) => (
+          <div key={it.key} className={`rounded-lg border p-2.5 ${it.ok ? 'border-slate-200 bg-white' : it.required ? 'border-rose-200 bg-rose-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-sm">{it.ok ? '✅' : it.required ? '❌' : '⚠️'}</span>
+              <span className="text-xs font-medium text-slate-700">{it.name}</span>
+              {!it.required && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">可选</span>}
+              {!it.ok && it.canAutoInstall && (
+                <button
+                  disabled={installing !== null}
+                  onClick={() => handleInstall(it)}
+                  className="ml-auto rounded bg-jushi-accent px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+                >
+                  {installing === it.key ? '安装中…' : '⚡ 一键安装'}
+                </button>
+              )}
+              {!it.ok && !it.canAutoInstall && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(it.安装命令)
+                    onFlash('已复制——若是命令去「终端」粘贴执行，若是网址去浏览器打开；装完回来点「重新检测」')
+                  }}
+                  className="ml-auto rounded border border-slate-300 px-2.5 py-1 text-[11px] text-slate-600"
+                >
+                  复制安装命令/链接
+                </button>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">用途：{it.用途}</p>
+            <p className={`mt-0.5 text-[11px] leading-snug ${it.ok ? 'text-slate-400' : 'text-rose-600'}`}>{it.说明}</p>
+          </div>
+        ))}
+        {items.length === 0 && !checking && (
+          <p className="text-xs text-slate-400">检测不可用——如果刚更新过 App，请完全退出后重新打开。</p>
+        )}
+      </div>
+    </section>
   )
 }
 

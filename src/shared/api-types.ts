@@ -77,6 +77,22 @@ export interface CompanyOsApi {
     /** 把内置模板里缺失的部分（分身定义/knowledge/骨架）补进当前数据目录——只增不改 */
     repairDataDir(): Promise<{ ok: boolean; copied: number; 说明: string }>
   }
+  env: {
+    check(): Promise<{
+      items: {
+        key: string
+        name: string
+        ok: boolean
+        required: boolean
+        用途: string
+        说明: string
+        安装命令: string
+        canAutoInstall: boolean
+      }[]
+      missingRequired: string[]
+    }>
+    install(key: string): Promise<{ ok: boolean; 说明: string }>
+  }
   agents: {
     list(): Promise<AgentDisplayMeta[]>
   }

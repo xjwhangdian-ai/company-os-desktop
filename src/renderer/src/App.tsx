@@ -100,6 +100,7 @@ export default function App(): React.JSX.Element {
   return (
     <div className="flex h-screen flex-col bg-slate-100 text-slate-900">
       <UpdateBanner />
+      <EnvBanner onGoSettings={() => setView('settings')} />
       <div className="flex min-h-0 flex-1">
       {!navCollapsed ? (
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-100 p-3">
@@ -254,6 +255,36 @@ export default function App(): React.JSX.Element {
           )}
       </main>
       </div>
+    </div>
+  )
+}
+
+
+/** 本地环境缺失横幅：启动时检测一次，缺核心组件（poppler/python等）就提示去设置页一键安装 */
+function EnvBanner({ onGoSettings }: { onGoSettings: () => void }): React.JSX.Element | null {
+  const [missing, setMissing] = useState<string[]>([])
+  const [dismissed, setDismissed] = useState(false)
+  useEffect(() => {
+    window.api.env
+      .check()
+      .then((r) => setMissing(r.missingRequired))
+      .catch(() => {})
+  }, [])
+  if (dismissed || missing.length === 0) return null
+  return (
+    <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
+      <span>
+        ⚠️ 本地环境缺失：{missing.join('、')}——会导致分身无法读取 PDF、画册抠图不可用等问题
+      </span>
+      <button
+        onClick={onGoSettings}
+        className="shrink-0 rounded bg-amber-500 px-2 py-0.5 font-medium text-white hover:bg-amber-600"
+      >
+        去设置页一键安装
+      </button>
+      <button onClick={() => setDismissed(true)} className="ml-auto shrink-0 text-amber-500 hover:text-amber-700">
+        ✕
+      </button>
     </div>
   )
 }
