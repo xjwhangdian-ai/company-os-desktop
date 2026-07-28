@@ -48,6 +48,15 @@ function shrunk(p, ext){
     if(!(ext==='jpg'||ext==='jpeg'||ext==='png')) return p;      // 只缩位图
     const tmp = path.join(os.tmpdir(), `gzh_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext==='png'?'png':'jpg'}`);
     execFileSync('/usr/bin/sips', ['-Z', '1080', p, '--out', tmp], { stdio: 'ignore' });
+    // EXIF 方向转正：iPhone 竖拍照片像素是横的、靠方向标记显示——浏览器认标记，
+    // 公众号编辑器不认，粘贴后就旋转90度。这里把像素按标记真正转正并清掉标记。
+    try{
+      execFileSync('python3', ['-c',
+        'import sys\nfrom PIL import Image, ImageOps\nim=Image.open(sys.argv[1])\n' +
+        'o=im.getexif().get(274,1)\n' +
+        'ImageOps.exif_transpose(im).convert("RGB").save(sys.argv[1],quality=90) if o!=1 else None',
+        tmp], { stdio: 'ignore' });
+    }catch(e){ /* 无 python3/PIL 时跳过：仅方向标记异常的图仍可能旋转，其余不受影响 */ }
     if(fs.existsSync(tmp) && fs.statSync(tmp).size > 0) return tmp;
   }catch(e){ /* sips 缺失或失败：用原图 */ }
   return p;
