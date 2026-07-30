@@ -64,7 +64,16 @@ export function Settings(): React.JSX.Element {
     const patch: Parameters<typeof saveProviderConfig>[1] = {
       modelMapping: mapping
     }
-    if (apiKeyInput.trim()) patch.apiKey = apiKeyInput.trim()
+    if (apiKeyInput.trim()) {
+      const k = apiKeyInput.trim()
+      // 防呆：API Key 是一串无空格的英文数字符号。误粘贴终端命令/中文说明并保存过一次后，
+      // 所有分身调用都会报 "Header has invalid value"，这里直接拦下并说清楚。
+      if (/\s/.test(k) || /[\u4e00-\u9fa5]/.test(k) || k.length < 8) {
+        flashSaved('❌ 这不是有效的 API Key（含空格/中文或过短）——请粘贴供应商控制台生成的完整密钥，不要粘贴命令或说明文字')
+        return
+      }
+      patch.apiKey = k
+    }
     if (viewingProvider.baseUrl !== null) patch.baseUrl = baseUrlInput.trim()
     await saveProviderConfig(viewingId, patch)
     setApiKeyInput('')
