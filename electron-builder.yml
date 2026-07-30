@@ -1,4 +1,5 @@
 appId: com.jushi.company-os-desktop
+afterPack: build/mac-adhoc-sign.cjs
 productName: Agent工作台
 directories:
   buildResources: build
