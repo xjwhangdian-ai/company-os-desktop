@@ -35,13 +35,30 @@ except ImportError as e:
     sys.exit(3)
 
 
+import logging
+# pypdf 对脏 PDF（交叉表错位/蒙版尺寸不匹配等）会刷大量 warning 到 stderr——
+# 都是可恢复的无害告警，压掉以免上层把告警误当失败原因展示
+logging.getLogger("pypdf").setLevel(logging.ERROR)
+
+
 def page_bitmap(page):
-    """取该页最大的嵌入位图（数字画册每页通常一张整页底图）。"""
-    imgs = list(page.images)
+    """取该页最大的嵌入位图（数字画册每页通常一张整页底图）。
+    逐张容错：个别图片解码失败（如 JBIG2 需要 jbig2dec 外部程序、罕见滤镜等）跳过该图，
+    绝不让一张坏图崩掉整本画册的抽取。"""
+    import io
+    imgs = []
+    try:
+        keys = list(page.images.keys())
+    except Exception:
+        return None
+    for k in keys:
+        try:
+            imgs.append(page.images[k])
+        except Exception:
+            continue  # 单图解码失败（缺 jbig2dec 等）：跳过
     if not imgs:
         return None
     main = max(imgs, key=lambda im: len(im.data))
-    import io
     try:
         return Image.open(io.BytesIO(main.data)).convert("RGB")
     except Exception:

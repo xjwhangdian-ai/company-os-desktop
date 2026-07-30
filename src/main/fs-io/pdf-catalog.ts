@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { augmentedPath } from './env-check'
 import { spawn } from 'node:child_process'
 
 // ============ 产品画册 PDF → 抽图 + 文本提取（销售分身用）============
@@ -66,7 +67,7 @@ export function extractPdfCatalog(dataDir: string, pdfFileName: string): Promise
   mkdirSync(outDir, { recursive: true })
 
   return new Promise((resolve) => {
-    const child = spawn(python, [script, pdf, outDir], { windowsHide: true })
+    const child = spawn(python, [script, pdf, outDir], { windowsHide: true, env: { ...process.env, PATH: augmentedPath() } })
     let out = ''
     let err = ''
     const timer = setTimeout(() => {
@@ -155,7 +156,7 @@ export function applyCatalogPairing(dataDir: string, pdfFileName: string): Promi
   if (!python) return Promise.resolve({ ok: false, 说明: INSTALL_HINT })
 
   return new Promise((resolve) => {
-    const child = spawn(python, [script, '--apply', outDir, '--clean'], { windowsHide: true })
+    const child = spawn(python, [script, '--apply', outDir, '--clean'], { windowsHide: true, env: { ...process.env, PATH: augmentedPath() } })
     let out = ''
     let err = ''
     const timer = setTimeout(() => {
