@@ -193,6 +193,7 @@ const api: CompanyOsApi = {
     toggleTask: (ym: string, taskKey: string, done: boolean) => ipcRenderer.invoke(IPC.financeToggleTask, ym, taskKey, done),
     saveEmployees: (员工: FinanceEmployee[], 发薪日: number) => ipcRenderer.invoke(IPC.financeSaveEmployees, 员工, 发薪日),
     uploadReceipt: (ym: string, sourcePath: string) => ipcRenderer.invoke(IPC.financeUploadReceipt, ym, sourcePath),
+    processInvoices: (files: string[]) => ipcRenderer.invoke(IPC.financeProcessInvoices, files),
     listReceipts: (ym: string) => ipcRenderer.invoke(IPC.financeListReceipts, ym)
   },
   ops: {

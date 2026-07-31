@@ -25,6 +25,7 @@ import { applyCatalogPairing, extractPdfCatalog, readCatalogProgress } from '../
 import { exportZcyPackage } from '../fs-io/zcy-export'
 import { repairDataDir } from '../config/first-run'
 import { checkEnv, installEnvItem } from '../fs-io/env-check'
+import { processInvoices } from '../fs-io/finance-invoice'
 import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
@@ -124,6 +125,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.configSetActiveCompany, (_e, id: string) => setActiveCompany(id))
   ipcMain.handle(IPC.configRepairDataDir, () => repairDataDir(getDataDir()))
   ipcMain.handle(IPC.identityResetAllMembers, () => resetAllTeamMembers())
+  ipcMain.handle(IPC.financeProcessInvoices, (_e, files: string[]) => processInvoices(getDataDir(), files))
   ipcMain.handle(IPC.envCheck, () => checkEnv())
   ipcMain.handle(IPC.envInstall, (_e, key: string) => installEnvItem(key))
 

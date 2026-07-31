@@ -317,6 +317,16 @@ export interface CompanyOsApi {
     /** 票据上传 → inbox/08_财务_finance/票据/{YYYY-MM}/ */
     uploadReceipt(ym: string, sourcePath: string): Promise<{ relativePath: string }>
     listReceipts(ym: string): Promise<OutputEntry[]>
+    processInvoices(files: string[]): Promise<{
+      ok: boolean
+      成功: number
+      重复: number
+      失败: { 原文件: string; 原因: string }[]
+      销项合计: number
+      进项合计: number
+      台账路径: string
+      说明: string
+    }>
   }
   ops: {
     /** 制度文件（四状态文件夹：未审核/初审/终审/定稿） */
