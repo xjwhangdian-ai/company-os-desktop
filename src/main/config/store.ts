@@ -447,6 +447,16 @@ export function changePin(id: string, oldPin: string, newPin: string): { ok: boo
   return { ok: true }
 }
 
+/**
+ * 清空本机全部登录账号（登录页"忘记 PIN"自助通道）：
+ * 场景是重装/换机后旧配置残留、改过的 PIN 想不起来，且没有能登录的管理员来重置。
+ * 界面级权限本就不是安全体系——清空后回到"创建首个管理员"流程；公司/数据目录/供应商配置一概不动。
+ */
+export function resetAllTeamMembers(): void {
+  const all = readAll()
+  writeAll({ ...all, teamMembers: [] })
+}
+
 /** 管理员重置某成员 PIN 回初始值 123456 */
 export function resetPin(id: string): void {
   const all = readAll()

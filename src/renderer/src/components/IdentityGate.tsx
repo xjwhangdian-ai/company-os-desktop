@@ -266,8 +266,27 @@ export function IdentityGate(): React.JSX.Element {
           {members.map((m) => (
             <MemberTile key={m.id} member={m} onBeforeLogin={commitCompany} onLogin={noop} />
           ))}
-          <div className="flex w-full basis-full justify-center">
+          <div className="flex w-full basis-full flex-col items-center gap-1">
             <p className="mt-1 text-xs text-slate-400">账号由管理员在「设置 → 团队成员」统一分配 · 初始 PIN 123456</p>
+            <button
+              onClick={async () => {
+                // 场景：重装/换机后旧配置残留、改过的 PIN 想不起来，且没人能登录进去重置。
+                // PIN 是界面级留痕不是安全体系——允许本机自助清空，公司/数据/API Key 全不动。
+                const ok = window.confirm(
+                  '忘记 PIN？\n\n将清空本机全部登录账号，回到"创建管理员账号"页重新创建（初始 PIN 123456）。\n公司数据、数据目录、API Key 均不受影响。\n\n确定重置吗？'
+                )
+                if (!ok) return
+                try {
+                  await window.api.identity.resetAllMembers()
+                  await loadMembers()
+                } catch {
+                  window.alert('重置失败——如果刚更新过程序，请完全退出后重新打开再试')
+                }
+              }}
+              className="text-xs text-slate-400 underline-offset-2 hover:text-jushi-accent hover:underline"
+            >
+              忘记 PIN？重置本机账号
+            </button>
           </div>
         </div>
       )}

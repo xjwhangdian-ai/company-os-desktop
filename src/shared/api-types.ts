@@ -220,6 +220,7 @@ export interface CompanyOsApi {
     add(name: string, role?: MemberRole, 可见分身?: AgentName[]): Promise<TeamMember>
     remove(id: string): Promise<void>
     verifyPin(id: string, pin?: string): Promise<boolean>
+    resetAllMembers(): Promise<void>
     /** 成员自助改 PIN（先验旧 PIN；新 PIN 4-8 位数字） */
     changePin(id: string, oldPin: string, newPin: string): Promise<{ ok: boolean; message?: string }>
     /** 管理员重置成员 PIN 回 123456 */
