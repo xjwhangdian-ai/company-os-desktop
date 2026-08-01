@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { AgentDisplayMeta, BidProjectCard, BidProjectStatus, BiddingProject } from '@shared/agent-types'
 import { BID_PROJECT_STATUSES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
+import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { IntelBiddingFeed } from '../components/IntelBiddingFeed'
 import { MaterialChecklist } from '../components/MaterialChecklist'
 import { HelpButton } from '../components/HelpPanel'
@@ -257,6 +258,8 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [showChat, setShowChat] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
+  /** 右侧（项目详情+分身对话）整体显隐：三角收起后左栏铺满（与销售支持分身同款交互） */
+  const [showRightPane, setShowRightPane] = useState(true)
   /** 左栏视图：情报（四平台每日抓取，默认视图）| 台账（项目列表） */
   const [leftView, setLeftView] = useState<'台账' | '情报'>('情报')
   const [intelReloadKey, setIntelReloadKey] = useState(0)
@@ -417,7 +420,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
 
   return (
     <div className="flex h-full">
-      <div className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50 ${leftView === '情报' ? 'w-96' : 'w-80'}`}>
+      <div className={`flex flex-col border-r border-slate-200 bg-slate-50 ${showRightPane ? (leftView === '情报' ? 'w-96 shrink-0' : 'w-80 shrink-0') : 'flex-1'}`}>
         {/* 台账 / 每日情报 视图切换（招投标信息从行业情报页整合过来，情报→确认→台账一条线） */}
         <div className="app-drag flex gap-1 px-3 pb-1 pt-3">
           {(['情报', '台账'] as const).map((v) => (
@@ -608,7 +611,8 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         {notice && <div className="border-t border-slate-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">{notice}</div>}
       </div>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <ChatCollapseRail open={showRightPane} onToggle={() => setShowRightPane((v) => !v)} />
+      <div className={`flex flex-col overflow-hidden transition-all ${showRightPane ? 'flex-1' : 'w-0'}`}>
         {showMaterialLib ? (
           <div className="flex-1 overflow-y-auto p-6">
             <h2 className="mb-4 text-sm font-semibold text-slate-800">素材库</h2>

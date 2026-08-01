@@ -110,13 +110,14 @@ function CandidateRow({
         )}
         {c.标签 && <span className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-600">{c.标签}</span>}
         {c.平台 && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{c.平台}</span>}
-        <span className="text-[10px] text-slate-400">{c.日期}</span>
       </div>
       {c.理由 && <div className="mt-1 text-[11px] leading-snug text-slate-400">{c.理由}</div>}
-      <div className="mt-1.5 flex justify-end gap-1.5">
+      <div className="mt-1.5 flex items-center gap-1.5">
+        <span className="text-[10px] text-slate-400">{c.日期}</span>
         <button
           disabled={disabled}
           onClick={onConfirm}
+          style={{ marginLeft: 'auto' }}
           title="建项目档并进入左侧台账（意见征询项目自动带上征询截止日）"
           className={`rounded px-3 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
             c.跟进升级 ? 'bg-amber-500' : 'bg-jushi-accent'

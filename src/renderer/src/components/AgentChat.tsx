@@ -129,6 +129,15 @@ export function AgentChat({
           onUploaded={(atts) => setPendingAttachments((prev) => [...prev, ...atts])}
         />
         <textarea
+          ref={(el) => {
+            if (!el) return
+            // 输入框高度全分身同步：读共享高度；拖动调节松手后写回，所有分身下次渲染同高
+            const saved = localStorage.getItem('agentChatInputHeight')
+            if (saved && el.style.height !== saved) el.style.height = saved
+            el.onmouseup = () => {
+              if (el.offsetHeight >= 40) localStorage.setItem('agentChatInputHeight', `${el.offsetHeight}px`)
+            }
+          }}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -137,9 +146,9 @@ export function AgentChat({
               handleSend()
             }
           }}
-          placeholder="输入你的需求，Enter 发送，Shift+Enter 换行…（拖右下角可调大输入框）"
+          placeholder="输入你的需求，Enter 发送，Shift+Enter 换行…（拖右下角可上下调节，大小全分身同步）"
           rows={1}
-          className="min-h-[40px] max-h-80 flex-1 resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
+          className="min-h-[40px] max-h-96 flex-1 resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
         />
         <button
           onClick={handleSend}
