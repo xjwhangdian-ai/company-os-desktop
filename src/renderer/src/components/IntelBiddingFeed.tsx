@@ -172,6 +172,11 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
     setInput('')
   }
 
+  const [suggestions, setSuggestions] = useState<{ 建议添加: { 词: string; 次数: number }[]; 建议移除: { 词: string; 忽略次数: number }[] } | null>(null)
+  useEffect(() => {
+    window.api.intel.keywordSuggestions?.().then(setSuggestions).catch(() => {})
+  }, [keywords])
+
   return (
     <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-white p-2.5">
       <div className="flex items-center justify-between">
@@ -245,8 +250,37 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
           {saving ? '保存中…' : editing ? '保存修改' : '添加'}
         </button>
       </div>
+      {suggestions && (suggestions.建议添加.length > 0 || suggestions.建议移除.length > 0) && (
+        <div className="mt-2 rounded-md bg-slate-50 p-2">
+          <div className="text-[10px] font-semibold text-slate-500">💡 根据你的跟进/忽略记录，建议优化（点击采纳）：</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {suggestions.建议添加.map((s) => (
+              <button
+                key={'add' + s.词}
+                disabled={saving}
+                onClick={() => save([...keywords, s.词])}
+                title={`跟进过的项目里出现 ${s.次数} 次但词库没有——点击添加`}
+                className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                ＋ {s.词}（跟进{s.次数}次）
+              </button>
+            ))}
+            {suggestions.建议移除.map((s) => (
+              <button
+                key={'rm' + s.词}
+                disabled={saving}
+                onClick={() => save(keywords.filter((k) => k !== s.词))}
+                title={`命中它的项目被忽略 ${s.忽略次数} 次、从未跟进——点击移除减少噪音`}
+                className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[11px] text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+              >
+                － {s.词}（忽略{s.忽略次数}次）
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <p className="mt-1.5 text-[10px] leading-snug text-slate-400">
-        增删改：点词本身=修改，点 × =删除，输入新词回车=添加。词库整合自黄药师管线（安防智能化+警用装备+采购部门，共百余词）。抓取时只保留 项目名称/采购单位/区县 命中任一关键词的公告——标红立即生效，抓取筛选下次「刷新」生效。
+        增删改：点词本身=修改，点 × =删除，输入新词回车=添加。每次点「跟进/忽略」都会记录学习样本，积累后在上方给出词库优化建议。词库整合自黄药师管线（安防智能化+警用装备+采购部门，共百余词）。抓取时只保留 项目名称/采购单位/区县 命中任一关键词的公告——标红立即生效，抓取筛选下次「刷新」生效。
       </p>
     </div>
   )
@@ -309,8 +343,33 @@ export function IntelBiddingFeed({
     setCandidates((prev) => prev.filter((x) => x.key !== c.key))
   }
 
+  const DAY_TABS = useMemo(() => {
+    const fmt = (offset: number): string => {
+      const d = new Date()
+      d.setDate(d.getDate() - offset)
+      const p = (n: number): string => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    }
+    return [
+      { label: '前天' as const, date: fmt(2) },
+      { label: '昨天' as const, date: fmt(1) },
+      { label: '今天' as const, date: fmt(0) }
+    ]
+  }, [])
+  const [dayFilter, setDayFilter] = useState<'前天' | '昨天' | '今天'>('今天')
+  const dayCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const c of candidates) m[c.日期] = (m[c.日期] ?? 0) + 1
+    return m
+  }, [candidates])
+
   const visible = useMemo(() => {
-    let list = onlyRelevant ? candidates.filter((c) => c.相关度 || c.命中关键词 || c.台州公安) : candidates
+    const targetDate = DAY_TABS.find((d) => d.label === dayFilter)?.date
+    // 搜索时跨全部三天找（命中的不能被日期页签藏住）；平时只看选中那天
+    let list = query.trim() ? candidates : candidates.filter((c) => c.日期 === targetDate)
+    // 跟进升级的重点提醒不受日期筛选影响，始终显示
+    if (!query.trim()) list = [...candidates.filter((c) => c.跟进升级 && c.日期 !== targetDate), ...list]
+    if (onlyRelevant) list = list.filter((c) => c.相关度 || c.命中关键词 || c.台州公安)
     // 搜索：空格隔开多个词是"都要命中"，匹配 项目名称/采购单位/中标单位/区县/标签/平台
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
     if (tokens.length > 0) {
@@ -332,7 +391,20 @@ export function IntelBiddingFeed({
     <>
       <div className="px-3 pb-2 pt-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-500">近3天抓取（{visible.length} 条）</span>
+          <div className="flex items-center gap-1">
+            {DAY_TABS.map((d) => (
+              <button
+                key={d.label}
+                onClick={() => setDayFilter(d.label)}
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                  dayFilter === d.label ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
+                }`}
+                title={d.date}
+              >
+                {d.label} {dayCounts[d.date] ?? 0}
+              </button>
+            ))}
+          </div>
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setShowKeywords((v) => !v)}

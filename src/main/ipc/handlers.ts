@@ -58,7 +58,7 @@ import { fetchReportsNow, listIntelReports } from '../fs-io/intel-reports'
 import { downloadTenderFile, probeTenderFile } from '../fs-io/tender-download'
 import { purgeStaleIntelData } from '../fs-io/intel-purge'
 import { fetchIntelNow } from '../fs-io/intel-fetch'
-import { getIntelKeywords, setIntelKeywords } from '../fs-io/intel-keywords'
+import { getIntelKeywords, setIntelKeywords, getKeywordSuggestions } from '../fs-io/intel-keywords'
 import { listLegalDocs, listLegalTemplates, markReviewed, generateLegalRedline } from '../fs-io/legal-workflow'
 import {
   addFollowUp,
@@ -126,6 +126,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.configRepairDataDir, () => repairDataDir(getDataDir()))
   ipcMain.handle(IPC.identityResetAllMembers, () => resetAllTeamMembers())
   ipcMain.handle(IPC.financeProcessInvoices, (_e, files: string[]) => processInvoices(getDataDir(), files))
+  ipcMain.handle(IPC.intelKeywordSuggestions, () => getKeywordSuggestions(getDataDir()))
   ipcMain.handle(IPC.envCheck, () => checkEnv())
   ipcMain.handle(IPC.envInstall, (_e, key: string) => installEnvItem(key))
 

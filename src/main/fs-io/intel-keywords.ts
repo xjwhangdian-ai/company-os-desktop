@@ -49,14 +49,129 @@ export function getIntelKeywords(dataDir: string): string[] {
   }
 }
 
-export function setIntelKeywords(dataDir: string, keywords: string[]): string[] {
-  const cleaned = [...new Set(keywords.map((k) => k.trim()).filter((k) => k.length > 0 && k.length <= 20))]
+function readRaw(dataDir: string): Record<string, unknown> {
+  const p = join(dataDir, KEYWORDS_FILE_REL)
+  if (!existsSync(p)) return {}
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeRaw(dataDir: string, data: Record<string, unknown>): void {
   const p = join(dataDir, KEYWORDS_FILE_REL)
   mkdirSync(dirname(p), { recursive: true })
   const tmp = `${p}.tmp`
-  writeFileSync(tmp, JSON.stringify({ 关键词: cleaned, 更新时间: Date.now() }, null, 2), 'utf-8')
+  writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8')
   renameSync(tmp, p)
+}
+
+export function setIntelKeywords(dataDir: string, keywords: string[]): string[] {
+  const cleaned = [...new Set(keywords.map((k) => k.trim()).filter((k) => k.length > 0 && k.length <= 20))]
+  // 保留学习数据等其他字段，只更新词表
+  writeRaw(dataDir, { ...readRaw(dataDir), 关键词: cleaned, 更新时间: Date.now() })
   return cleaned
+}
+
+// ── 关键词学习：跟进/忽略反馈驱动词库优化 ────────────────────────────────
+// 用户每次点「跟进」或「忽略」，记录该项目的命中词与名称样本；
+// 「⚙ 关键词」面板据此给两类建议（人工一键采纳，不自动改词库）：
+//   建议添加——跟进样本里反复出现、但还不在词库的词片段（说明你关心的方向词库没覆盖全）
+//   建议移除——命中它的项目全被忽略≥3次、从没被跟进过的词（说明它只带来噪音）
+
+interface FeedbackSample {
+  项目名称: string
+  命中关键词: string | null
+  时间: number
+}
+
+interface Learning {
+  样本: { 跟进: FeedbackSample[]; 忽略: FeedbackSample[] }
+  词统计: Record<string, { 跟进: number; 忽略: number }>
+}
+
+function readLearning(dataDir: string): Learning {
+  const raw = readRaw(dataDir)
+  const l = (raw.学习 ?? {}) as Partial<Learning>
+  return {
+    样本: { 跟进: l.样本?.跟进 ?? [], 忽略: l.样本?.忽略 ?? [] },
+    词统计: l.词统计 ?? {}
+  }
+}
+
+/** 跟进/忽略动作回写学习数据（confirm/ignore 时由主进程自动调用） */
+export function recordKeywordFeedback(
+  dataDir: string,
+  sample: { 项目名称: string; 采购单位?: string; 动作: '跟进' | '忽略' }
+): void {
+  const keywords = getIntelKeywords(dataDir)
+  const hit = matchIntelKeyword(`${sample.项目名称}${sample.采购单位 ?? ''}`, keywords)
+  const learning = readLearning(dataDir)
+  const list = learning.样本[sample.动作]
+  list.push({ 项目名称: sample.项目名称, 命中关键词: hit, 时间: Date.now() })
+  if (list.length > 100) list.splice(0, list.length - 100)
+  if (hit) {
+    const st = learning.词统计[hit] ?? { 跟进: 0, 忽略: 0 }
+    st[sample.动作] += 1
+    learning.词统计[hit] = st
+  }
+  writeRaw(dataDir, { ...readRaw(dataDir), 学习: learning })
+}
+
+/** 常见套话/地名，不作为建议词 */
+const SUGGEST_STOP = new Set([
+  '采购', '项目', '公告', '招标', '投标', '工程', '建设', '有限', '公司', '中心', '服务',
+  '管理', '单位', '设备', '系统', '一批', '相关', '进行', '本次', '需求', '意向', '结果',
+  '台州', '椒江', '黄岩', '路桥', '温岭', '临海', '玉环', '天台', '仙居', '三门', '浙江',
+  '市区', '街道', '学校', '医院', '中学', '小学', '幼儿园'
+])
+
+export interface KeywordSuggestions {
+  建议添加: { 词: string; 次数: number }[]
+  建议移除: { 词: string; 忽略次数: number }[]
+}
+
+/** 基于跟进/忽略样本计算词库优化建议（只建议，不自动改） */
+export function getKeywordSuggestions(dataDir: string): KeywordSuggestions {
+  const keywords = getIntelKeywords(dataDir)
+  const learning = readLearning(dataDir)
+
+  // 建议添加：跟进样本项目名称里的 2-4 字中文片段，出现≥2次且与现有词库互不包含
+  const freq = new Map<string, number>()
+  for (const s of learning.样本.跟进) {
+    const name = s.项目名称
+    const seen = new Set<string>()
+    for (let len = 2; len <= 4; len++) {
+      for (let i = 0; i + len <= name.length; i++) {
+        const frag = name.slice(i, i + len)
+        if (!/^[\u4e00-\u9fa5]+$/.test(frag)) continue
+        if (seen.has(frag)) continue
+        seen.add(frag)
+        freq.set(frag, (freq.get(frag) ?? 0) + 1)
+      }
+    }
+  }
+  const candidates = [...freq.entries()]
+    .filter(([w, n]) => n >= 2 && !SUGGEST_STOP.has(w))
+    .filter(([w]) => !keywords.some((k) => k.includes(w) || w.includes(k)))
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+  // 去掉互为子串的重复建议（留长的）
+  const picked: { 词: string; 次数: number }[] = []
+  for (const [w, n] of candidates) {
+    if (picked.some((p2) => p2.词.includes(w) || w.includes(p2.词))) continue
+    picked.push({ 词: w, 次数: n })
+    if (picked.length >= 5) break
+  }
+
+  // 建议移除：忽略≥3次、从没被跟进过的词
+  const removals = Object.entries(learning.词统计)
+    .filter(([w, st]) => keywords.includes(w) && st.忽略 >= 3 && st.跟进 === 0)
+    .map(([w, st]) => ({ 词: w, 忽略次数: st.忽略 }))
+    .sort((a, b) => b.忽略次数 - a.忽略次数)
+    .slice(0, 5)
+
+  return { 建议添加: picked, 建议移除: removals }
 }
 
 /** 返回文本命中的第一个关键词；未命中返回 null */

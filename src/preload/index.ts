@@ -102,6 +102,7 @@ const api: CompanyOsApi = {
     saveReportToSolution: (report: IntelReport) => ipcRenderer.invoke(IPC.intelSaveReportToSolution, report),
     fetchReports: () => ipcRenderer.invoke(IPC.intelFetchReports),
     getKeywords: () => ipcRenderer.invoke(IPC.intelGetKeywords),
+    keywordSuggestions: () => ipcRenderer.invoke(IPC.intelKeywordSuggestions),
     setKeywords: (keywords: string[]) => ipcRenderer.invoke(IPC.intelSetKeywords, keywords)
   },
   legal: {

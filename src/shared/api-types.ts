@@ -167,6 +167,7 @@ export interface CompanyOsApi {
     fetchReports(): Promise<{ ok: boolean; 新增条数: number; 说明: string }>
     /** 招投标信息的兴趣关键词（命中标红+计入「只看相关」；存数据仓库，改词立即生效） */
     getKeywords(): Promise<string[]>
+    keywordSuggestions(): Promise<{ 建议添加: { 词: string; 次数: number }[]; 建议移除: { 词: string; 忽略次数: number }[] }>
     setKeywords(keywords: string[]): Promise<string[]>
   }
   legal: {

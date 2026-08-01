@@ -11,6 +11,7 @@ export const IPC = {
   configRepairDataDir: 'config:repair-data-dir',
   identityResetAllMembers: 'identity:reset-all-members',
   financeProcessInvoices: 'finance:process-invoices',
+  intelKeywordSuggestions: 'intel:keyword-suggestions',
   envCheck: 'env:check',
   envInstall: 'env:install',
 

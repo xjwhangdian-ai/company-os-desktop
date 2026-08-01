@@ -122,7 +122,33 @@ export function AgentChat({
         </div>
       )}
 
-      <div className="flex items-end gap-2 border-t border-slate-200 bg-white p-4">
+      {/* 输入区顶部拖拉条：鼠标按住横线向上/向下拖，直接调输入框可视高度（与右下角手柄等效，更好抓） */}
+      <div
+        title="按住向上拖动，调大输入框（高度全分身同步）"
+        className="group flex h-2 shrink-0 cursor-ns-resize items-center justify-center border-t border-slate-200 bg-white hover:bg-slate-100"
+        onMouseDown={(e) => {
+          e.preventDefault()
+          const container = (e.currentTarget.nextElementSibling as HTMLElement) ?? null
+          const ta = container?.querySelector('textarea')
+          if (!ta) return
+          const startY = e.clientY
+          const startH = ta.offsetHeight
+          const onMove = (me: MouseEvent): void => {
+            const h = Math.min(600, Math.max(40, startH + (startY - me.clientY)))
+            ta.style.height = `${h}px`
+          }
+          const onUp = (): void => {
+            document.removeEventListener('mousemove', onMove)
+            document.removeEventListener('mouseup', onUp)
+            if (ta.offsetHeight >= 40) localStorage.setItem('agentChatInputHeight', `${ta.offsetHeight}px`)
+          }
+          document.addEventListener('mousemove', onMove)
+          document.addEventListener('mouseup', onUp)
+        }}
+      >
+        <span className="h-0.5 w-10 rounded bg-slate-300 group-hover:bg-jushi-accent" />
+      </div>
+      <div className="flex items-end gap-2 bg-white p-4 pt-2">
         <FileDropzone
           compact
           uploadFn={uploadFn ?? ((p: string) => window.api.upload.generic(agent.name, p))}
@@ -148,7 +174,7 @@ export function AgentChat({
           }}
           placeholder="输入你的需求，Enter 发送，Shift+Enter 换行…（拖右下角可上下调节，大小全分身同步）"
           rows={1}
-          className="min-h-[40px] max-h-96 flex-1 resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
+          className="min-h-[40px] max-h-[600px] flex-1 resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
         />
         <button
           onClick={handleSend}

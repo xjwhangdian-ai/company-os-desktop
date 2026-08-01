@@ -4,7 +4,7 @@ import type { IntelCandidate, IntelConfirmResult } from '@shared/agent-types'
 import { ensureBiddingProjectSkeleton } from './upload-router'
 import { readProjectCard, saveProjectCard } from './bidding-workflow'
 import { extractZjgovParams } from './intel-source'
-import { getIntelKeywords, matchIntelKeyword } from './intel-keywords'
+import { getIntelKeywords, matchIntelKeyword, recordKeywordFeedback } from './intel-keywords'
 
 // ============ intel 分身推送的招投标信息流：人工确认后才建招投标项目卡 ============
 // 数据源（都在 outputs/09_情报_intel/招投标每日追踪/，由每日管线与 intel 分身产出）：
@@ -225,6 +225,8 @@ export function ignoreIntelCandidate(dataDir: string, key: string): void {
   const candidate = scanAllCandidates(dataDir).find((c) => c.key === key)
   state[key] = { 动作: '已忽略', 时间: Date.now(), 类型: candidate?.类型 }
   writeState(dataDir, state)
+  // 关键词学习：忽略动作回写样本与词统计（供「⚙ 关键词」面板生成移除建议）
+  if (candidate) recordKeywordFeedback(dataDir, { 项目名称: candidate.项目名称, 采购单位: candidate.采购单位, 动作: '忽略' })
 }
 
 function sanitizeName(name: string): string {
@@ -323,6 +325,8 @@ export function confirmIntelCandidate(dataDir: string, key: string): IntelConfir
   const state = readState(dataDir)
   state[key] = { 动作: '已确认', 时间: Date.now(), 项目文件夹: folderName, 类型: candidate.类型 }
   writeState(dataDir, state)
+  // 关键词学习：跟进动作回写样本与词统计（供「⚙ 关键词」面板生成添加建议）
+  recordKeywordFeedback(dataDir, { 项目名称: candidate.项目名称, 采购单位: candidate.采购单位, 动作: '跟进' })
 
   const canDownload = extractZjgovParams(candidate.链接) !== null
   return {
