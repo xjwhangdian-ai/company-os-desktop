@@ -121,6 +121,7 @@ const api: CompanyOsApi = {
   },
   update: {
     check: () => ipcRenderer.invoke(IPC.updateCheck),
+    appVersion: () => ipcRenderer.invoke(IPC.appVersion),
     download: (info: unknown) => ipcRenderer.invoke(IPC.updateDownload, info),
     getTokenSet: () => ipcRenderer.invoke(IPC.updateGetTokenSet),
     setToken: (token: string | null) => ipcRenderer.invoke(IPC.updateSetToken, token),

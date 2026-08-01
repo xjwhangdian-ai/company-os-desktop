@@ -214,6 +214,37 @@ function extractDeadline(text: string): string {
   return ''
 }
 
+/** 结果公告补抓详情页，提取 中标（成交）供应商 与 中标（成交）金额（列表接口不给这两项） */
+async function enrichZjgovWinners(entries: FeedEntry[]): Promise<void> {
+  const targets = entries
+    .filter((e) => e.类型 === '采购结果公告' && e.平台 === '浙江政采' && !e.中标单位)
+    .slice(0, 15) as (FeedEntry & { _articleId?: string })[]
+  for (const e of targets) {
+    if (!e._articleId) continue
+    try {
+      const resp = await doFetch(`${ZJGOV_BASE}/portal/detail?articleId=${encodeURIComponent(e._articleId)}`, {
+        headers: { 'User-Agent': UA, Referer: `${ZJGOV_BASE}/site/detail` },
+        signal: AbortSignal.timeout(12000)
+      })
+      if (!resp.ok) continue
+      const data = (await resp.json()) as { result?: { data?: { content?: string } } }
+      const text = String(data?.result?.data?.content ?? '').replace(/<[^>]+>/g, ' ')
+      const w = /(?:中标|成交)(?:（成交）)?供应商(?:名称)?[：:]*\s*([^\s，,。；;：:]{4,40}(?:公司|中心|研究院|事务所|厂))/.exec(text)
+      if (w) e.中标单位 = w[1]
+      const m =
+        /(?:中标|成交)(?:（成交）)?金额[（(]?元[）)]?[：:]*\s*([0-9,，.]+)/.exec(text) ||
+        /(?:中标|成交)(?:（成交）)?金额[：:]*\s*([0-9,，.]+)\s*万?元/.exec(text)
+      if (m) {
+        const num = parseFloat(m[1].replace(/[,，]/g, ''))
+        if (isFinite(num) && num > 0) e.中标金额 = /万元/.test(m[0]) ? `¥${num}万` : fmtAmount(num)
+      }
+      await politeDelay()
+    } catch {
+      // 单条失败不影响其余
+    }
+  }
+}
+
 /**
  * 意见征询条目补抓详情页，提取「征询/意见反馈截止日」——这是意见征询阶段最关键的日期
  * （错过截止就没法提意见影响采购需求了）。只对征询类少量条目发详情请求，单条失败不影响其余。
@@ -353,7 +384,9 @@ async function fetchTzygcg(dates: string[]): Promise<FeedEntry[]> {
         中标单位: '',
         中标金额: '',
         征询截止: '',
-        链接: `${TZYGCG_BASE}/NoticeDetail?projectId=${encodeURIComponent(String(it.prjId ?? ''))}&bulletinId=${encodeURIComponent(String(it.bulletinId ?? ''))}`,
+        // 详情页把 query.bulletinId 当内部 autoId 用（且带 projectId 会误入项目公示分支）——
+        // 必须只传 autoId（GUID），否则打开空白页
+        链接: `${TZYGCG_BASE}/NoticeDetail?bulletinId=${encodeURIComponent(String(it.autoId ?? ''))}`,
         平台: '台州阳光采购',
         台州公安: isPolice(title + area),
         日期: pub
@@ -490,6 +523,8 @@ export async function fetchIntelNow(dataDir: string, force = false): Promise<Int
 
   // 意见征询条目补抓详情页提取「征询截止日」（重点关注日期）
   await enrichZjgovConsultDeadlines(kept)
+  // 结果公告补抓 中标单位/中标金额
+  await enrichZjgovWinners(kept)
 
   const { added, addedEntries } = mergeIntoFeeds(dataDir, kept)
   writeFetchState(dataDir)

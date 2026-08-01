@@ -197,6 +197,7 @@ export interface CompanyOsApi {
   }
   update: {
     /** 对比 GitHub Releases 最新版本与当前版本 */
+    appVersion(): Promise<string>
     check(): Promise<{
       hasUpdate: boolean
       current: string

@@ -87,6 +87,7 @@ function scanAllCandidates(dataDir: string): IntelCandidate[] {
           采购单位: String(raw?.采购单位 ?? ''),
           预算: String(raw?.预算 ?? ''),
           中标单位: String(raw?.中标单位 ?? ''),
+          中标金额: String(raw?.中标金额 ?? ''),
           区县: String(raw?.区县 ?? ''),
           标签: '',
           征询截止: String(raw?.征询截止 ?? ''),

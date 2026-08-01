@@ -127,6 +127,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.identityResetAllMembers, () => resetAllTeamMembers())
   ipcMain.handle(IPC.financeProcessInvoices, (_e, files: string[]) => processInvoices(getDataDir(), files))
   ipcMain.handle(IPC.intelKeywordSuggestions, () => getKeywordSuggestions(getDataDir()))
+  ipcMain.handle(IPC.appVersion, () => app.getVersion())
   ipcMain.handle(IPC.envCheck, () => checkEnv())
   ipcMain.handle(IPC.envInstall, (_e, key: string) => installEnvItem(key))
 

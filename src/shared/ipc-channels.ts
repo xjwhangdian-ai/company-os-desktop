@@ -12,6 +12,7 @@ export const IPC = {
   identityResetAllMembers: 'identity:reset-all-members',
   financeProcessInvoices: 'finance:process-invoices',
   intelKeywordSuggestions: 'intel:keyword-suggestions',
+  appVersion: 'app:version',
   envCheck: 'env:check',
   envInstall: 'env:install',
 

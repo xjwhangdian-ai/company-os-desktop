@@ -90,8 +90,13 @@ function CandidateRow({
         {c.采购单位 || '采购单位待确认'}
         {c.区县 ? ` · ${c.区县}` : ''}
         {c.预算 ? ` · ${c.预算}` : ''}
-        {c.中标单位 ? ` · 中标：${c.中标单位}` : ''}
       </div>
+      {c.类型 === '采购结果公告' && (
+        <div className="mt-1 rounded bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
+          🏆 中标单位：{c.中标单位 || '待确认（点标题看原文）'}
+          {' · '}中标价格：{c.中标金额 || '待确认'}
+        </div>
+      )}
       <div className="mt-1 flex flex-wrap items-center gap-1">
         <ConsultDeadlineBadge c={c} />
         {c.相关度 && (
@@ -114,6 +119,7 @@ function CandidateRow({
       {c.理由 && <div className="mt-1 text-[11px] leading-snug text-slate-400">{c.理由}</div>}
       <div className="mt-1.5 flex items-center gap-1.5">
         <span className="text-[10px] text-slate-400">{c.日期}</span>
+        {c.类型 !== '采购结果公告' && (
         <button
           disabled={disabled}
           onClick={onConfirm}
@@ -125,6 +131,8 @@ function CandidateRow({
         >
           {confirming ? '建档中…' : c.跟进升级 ? '跟进（归档进已有项目）' : '跟进'}
         </button>
+        )}
+        {c.类型 !== '采购结果公告' && (
         <button
           disabled={disabled}
           onClick={onIgnore}
@@ -132,6 +140,7 @@ function CandidateRow({
         >
           忽略
         </button>
+        )}
       </div>
     </div>
   )

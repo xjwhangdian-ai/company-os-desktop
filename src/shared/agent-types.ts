@@ -144,6 +144,8 @@ export interface IntelCandidate {
   /** 预算/金额原文（如 "¥500.0万"），项目卡回填时去掉货币符号 */
   预算: string
   中标单位: string
+  /** 结果公告的中标（成交）金额（详情页补抓；提不到为空） */
+  中标金额?: string
   区县: string
   标签: string
   链接: string

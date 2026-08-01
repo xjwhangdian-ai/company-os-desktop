@@ -260,6 +260,11 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [notice, setNotice] = useState<string | null>(null)
   /** 右侧（项目详情+分身对话）整体显隐：三角收起后左栏铺满（与销售支持分身同款交互） */
   const [showRightPane, setShowRightPane] = useState(true)
+  /** 左栏宽度（px），左右分隔条拖动调节并记住 */
+  const [leftWidth, setLeftWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem('biddingLeftWidth'))
+    return saved >= 260 && saved <= 900 ? saved : 384
+  })
   /** 左栏视图：情报（四平台每日抓取，默认视图）| 台账（项目列表） */
   const [leftView, setLeftView] = useState<'台账' | '情报'>('情报')
   const [intelReloadKey, setIntelReloadKey] = useState(0)
@@ -420,7 +425,10 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
 
   return (
     <div className="flex h-full">
-      <div className={`flex flex-col border-r border-slate-200 bg-slate-50 ${showRightPane ? (leftView === '情报' ? 'w-96 shrink-0' : 'w-80 shrink-0') : 'flex-1'}`}>
+      <div
+        style={showRightPane ? { width: leftWidth } : undefined}
+        className={`flex flex-col border-r border-slate-200 bg-slate-50 ${showRightPane ? 'shrink-0' : 'flex-1'}`}
+      >
         {/* 台账 / 每日情报 视图切换（招投标信息从行业情报页整合过来，情报→确认→台账一条线） */}
         <div className="app-drag flex gap-1 px-3 pb-1 pt-3">
           {(['情报', '台账'] as const).map((v) => (
@@ -611,6 +619,31 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         {notice && <div className="border-t border-slate-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">{notice}</div>}
       </div>
 
+      {/* 左右分隔拖拉条：按住左右拖动调节左栏宽度（松手记住） */}
+      {showRightPane && (
+        <div
+          title="按住左右拖动，调节左右栏宽度"
+          className="group flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-slate-100 hover:bg-jushi-accent/30"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            const startX = e.clientX
+            const startW = leftWidth
+            const onMove = (me: MouseEvent): void => {
+              setLeftWidth(Math.min(900, Math.max(260, startW + (me.clientX - startX))))
+            }
+            const onUp = (me: MouseEvent): void => {
+              document.removeEventListener('mousemove', onMove)
+              document.removeEventListener('mouseup', onUp)
+              const w = Math.min(900, Math.max(260, startW + (me.clientX - startX)))
+              localStorage.setItem('biddingLeftWidth', String(w))
+            }
+            document.addEventListener('mousemove', onMove)
+            document.addEventListener('mouseup', onUp)
+          }}
+        >
+          <span className="h-8 w-0.5 rounded bg-slate-300 group-hover:bg-jushi-accent" />
+        </div>
+      )}
       <ChatCollapseRail open={showRightPane} onToggle={() => setShowRightPane((v) => !v)} />
       <div className={`flex flex-col overflow-hidden transition-all ${showRightPane ? 'flex-1' : 'w-0'}`}>
         {showMaterialLib ? (
