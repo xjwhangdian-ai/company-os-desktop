@@ -77,6 +77,18 @@ export interface CompanyOsApi {
     /** 把内置模板里缺失的部分（分身定义/knowledge/骨架）补进当前数据目录——只增不改 */
     repairDataDir(): Promise<{ ok: boolean; copied: number; 说明: string }>
   }
+  brand: {
+    listMatters(): Promise<{
+      key: string
+      名称: string
+      图标: string
+      状态: '未开始' | '进行中' | '待人工' | '已完成'
+      待办: string
+      截止日: string
+      成果: { name: string; path: string; mtimeMs: number }[]
+    }[]>
+    setMatter(key: string, patch: { 状态?: string; 待办?: string; 截止日?: string }): Promise<void>
+  }
   env: {
     check(): Promise<{
       items: {

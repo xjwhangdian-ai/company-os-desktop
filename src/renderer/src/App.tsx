@@ -10,6 +10,7 @@ import { UpdateBanner } from './components/UpdateBanner'
 import { Settings } from './pages/Settings'
 import { GenericAgentPage } from './pages/GenericAgentPage'
 import { BiddingWorkspace } from './pages/BiddingWorkspace'
+import { BrandWorkspace } from './pages/BrandWorkspace'
 import { LegalWorkspace } from './pages/LegalWorkspace'
 import { OperationWorkspace } from './pages/OperationWorkspace'
 import { SalesWorkspace } from './pages/SalesWorkspace'
@@ -226,6 +227,9 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'bidding' && (
           <BiddingWorkspace agent={activeAgent} />
         )}
+        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'brand' && (
+          <BrandWorkspace agent={activeAgent} />
+        )}
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'legal' && (
           <LegalWorkspace agent={activeAgent} />
         )}
@@ -250,7 +254,7 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' &&
           ready &&
           activeAgent &&
-          !['bidding', 'legal', 'operation', 'sales', 'solution', 'intel', 'finance', 'ops-policy'].includes(activeAgent.name) && (
+          !['bidding', 'brand', 'legal', 'operation', 'sales', 'solution', 'intel', 'finance', 'ops-policy'].includes(activeAgent.name) && (
             <GenericAgentPage agent={activeAgent} />
           )}
       </main>

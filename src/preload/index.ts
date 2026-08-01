@@ -33,6 +33,10 @@ const api: CompanyOsApi = {
     initDataDir: (companyId: string) => ipcRenderer.invoke(IPC.configInitDataDir, companyId),
     repairDataDir: () => ipcRenderer.invoke(IPC.configRepairDataDir)
   },
+  brand: {
+    listMatters: () => ipcRenderer.invoke(IPC.brandListMatters),
+    setMatter: (key: string, patch: Record<string, string>) => ipcRenderer.invoke(IPC.brandSetMatter, key, patch)
+  },
   env: {
     check: () => ipcRenderer.invoke(IPC.envCheck),
     install: (key: string) => ipcRenderer.invoke(IPC.envInstall, key)

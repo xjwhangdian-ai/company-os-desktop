@@ -339,6 +339,28 @@ function ProductForm({
 
 // ============ 主工作台 ============
 
+/** 供应商重复导入复核：取文件名与产品库既有供应商名的核心词做双向包含匹配 */
+function matchExistingSuppliers(
+  fileName: string,
+  products: { 供应商名称?: string }[]
+): { 名称: string; 产品数: number }[] {
+  const core = (s: string): string =>
+    s.replace(/(有限公司|有限责任公司|股份有限公司|科技|商贸|贸易|设备|电子|工程)/g, '').replace(/^(台州市?|浙江省?|杭州市?|椒江区?)/, '')
+  const counts = new Map<string, number>()
+  for (const p of products) {
+    const n = (p.供应商名称 ?? '').trim()
+    if (n) counts.set(n, (counts.get(n) ?? 0) + 1)
+  }
+  const hits: { 名称: string; 产品数: number }[] = []
+  for (const [name, cnt] of counts) {
+    const c = core(name)
+    if (c.length >= 2 && (fileName.includes(c) || c.includes(fileName.replace(/\.[^.]+$/, '')))) {
+      hits.push({ 名称: name, 产品数: cnt })
+    }
+  }
+  return hits
+}
+
 export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const config = useConfigStore((s) => s.config)
   const dataDir = config?.companies.find((c) => c.id === config.activeCompanyId)?.dataDir ?? null
@@ -936,6 +958,12 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       ) : (
                         <p className="mt-1">该文件无法机械识别表头，需要 AI 解析（sales 分身提取后由 App 校验入库）。</p>
                       )}
+                      {matchExistingSuppliers(preview.fileName, products).map((h) => (
+                        <p key={h.名称} className="mt-1 rounded bg-rose-50 px-1.5 py-1 font-medium text-rose-600">
+                          ⚠ 复核：产品库已有来自「{h.名称}」的 {h.产品数} 条产品——若是同一批资料请勿重复导入；
+                          若是更新版报价可继续导入（按 品名+型号 合并更新，不会重复建条目）。
+                        </p>
+                      ))}
                     </div>
                     <button onClick={() => setPreviews((prev) => prev.filter((x) => x !== preview))} className="shrink-0 text-slate-400 hover:text-slate-600">
                       ✕
@@ -944,7 +972,11 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   <div className="mt-2 flex gap-2">
                     {preview.fieldMapping && (
                       <button
-                        onClick={() => handleDirectImport(preview)}
+                        onClick={() => {
+                          const hits = matchExistingSuppliers(preview.fileName, products)
+                          if (hits.length > 0 && !window.confirm(`产品库已有「${hits.map((h) => h.名称).join('、')}」的产品共 ${hits.reduce((s, h) => s + h.产品数, 0)} 条。\n\n确认继续导入吗？（同 品名+型号 会合并更新，不会重复）`)) return
+                          handleDirectImport(preview)
+                        }}
                         disabled={busy}
                         className="rounded-md bg-jushi-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
                       >
@@ -953,6 +985,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     )}
                     <button
                       onClick={() => {
+                        const hits = matchExistingSuppliers(preview.fileName, products)
+                        if (hits.length > 0 && !window.confirm(`产品库已有「${hits.map((h) => h.名称).join('、')}」的产品共 ${hits.reduce((s, h) => s + h.产品数, 0)} 条。\n\n确认继续 AI 解析入库吗？（重复条目会按 品名+型号 合并）`)) return
                         setPendingPrompt(buildParsePrompt(preview))
                         setPreviews((prev) => prev.filter((x) => x !== preview))
                       }}

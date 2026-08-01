@@ -25,6 +25,7 @@ import { applyCatalogPairing, extractPdfCatalog, readCatalogProgress } from '../
 import { exportZcyPackage } from '../fs-io/zcy-export'
 import { repairDataDir } from '../config/first-run'
 import { checkEnv, installEnvItem } from '../fs-io/env-check'
+import { listBrandMatters, setBrandMatter } from '../fs-io/brand-workflow'
 import { processInvoices } from '../fs-io/finance-invoice'
 import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
@@ -127,6 +128,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.identityResetAllMembers, () => resetAllTeamMembers())
   ipcMain.handle(IPC.financeProcessInvoices, (_e, files: string[]) => processInvoices(getDataDir(), files))
   ipcMain.handle(IPC.intelKeywordSuggestions, () => getKeywordSuggestions(getDataDir()))
+  ipcMain.handle(IPC.brandListMatters, () => listBrandMatters(getDataDir()))
+  ipcMain.handle(IPC.brandSetMatter, (_e, key: string, patch: Record<string, string>) => setBrandMatter(getDataDir(), key, patch))
   ipcMain.handle(IPC.appVersion, () => app.getVersion())
   ipcMain.handle(IPC.envCheck, () => checkEnv())
   ipcMain.handle(IPC.envInstall, (_e, key: string) => installEnvItem(key))
