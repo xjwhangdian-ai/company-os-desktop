@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AgentDisplayMeta, ChatAttachment, OutputEntry } from '@shared/agent-types'
 import type { FileFilter } from '@shared/api-types'
 import { AgentChat } from '../components/AgentChat'
+import { HDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { FileDropzone } from '../components/FileDropzone'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { GzhStyleButton } from '../components/GzhStyleButton'
@@ -87,6 +88,7 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   const [injectedAttachments, setInjectedAttachments] = useState<ChatAttachment[] | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
   const [showChat, setShowChat] = useState(true)
+  const [chatH, setChatH] = usePersistedSize('operationChatHeight', 340, 200, 800)
   const [refreshKey, setRefreshKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
   const [templates, setTemplates] = useState<TemplateEntry[]>([])
@@ -388,9 +390,13 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
           </div>
         )}
 
+        {/* 弹性占位：对话栏改为固定高后，用它把对话区推到底部 */}
+        <div className="min-h-0 flex-1" />
+
         {platform === '微信公众号' && showChat && <GzhStyleButton />}
 
-        {/* 分身对话收起条 */}
+        {/* 分身对话收起条 + 上下拖拽调高 */}
+        {showChat && <HDragHandle size={chatH} onSize={setChatH} sign={-1} min={200} max={800} />}
         <button
           onClick={() => setShowChat((v) => !v)}
           className="flex shrink-0 items-center gap-1.5 border-t border-slate-200 bg-slate-50 px-4 py-1.5 text-xs text-slate-500 hover:text-jushi-accent"
@@ -398,7 +404,7 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
         >
           {showChat ? '▾' : '▸'} 💬 分身对话
         </button>
-        <div className={`overflow-hidden ${showChat ? 'flex-1' : 'h-0'}`}>
+        <div className="shrink-0 overflow-hidden" style={{ height: showChat ? chatH : 0 }}>
           <AgentChat
             agent={agent}
             pendingPrompt={injectedPrompt}

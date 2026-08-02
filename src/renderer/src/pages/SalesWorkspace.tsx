@@ -15,6 +15,7 @@ import type {
 import { CONTACT_ROLES, CUSTOMER_STATUSES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
+import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -432,6 +433,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [outputsRefresh, setOutputsRefresh] = useState(0)
   const [showOutputs, setShowOutputs] = useState(false)
   const [showChat, setShowChat] = useState(true)
+  const [chatW, setChatW] = usePersistedSize(CHAT_PANE_KEY, CHAT_PANE.def, CHAT_PANE.min, CHAT_PANE.max)
 
   // 收起状态下派了 AI 任务（解析入库/AI 报价/分身推荐/跟进话术），自动展开对话栏
   useEffect(() => {
@@ -1967,10 +1969,11 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       </div>
 
       {/* 中：分身对话（可收起——查产品/出报价都是机械操作，不占对话就把它折起来；派 AI 任务时自动展开） */}
+      {showChat && <VDragHandle size={chatW} onSize={setChatW} sign={-1} min={CHAT_PANE.min} max={CHAT_PANE.max} />}
       <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
-      <div className={`shrink-0 overflow-hidden transition-all ${showChat ? 'w-[400px]' : 'w-0'}`}>
+      <div className="shrink-0 overflow-hidden transition-all" style={{ width: showChat ? chatW : 0 }}>
         {/* 收起时只折宽度不卸载组件，对话记录与进行中的任务都保留 */}
-        <div className="h-full w-[400px]">
+        <div className="h-full" style={{ width: chatW }}>
           <AgentChat
             agent={agent}
             pendingPrompt={pendingPrompt}

@@ -3,6 +3,7 @@ import type { AgentDisplayMeta, ContractCategory, ContractTemplate, LegalDoc } f
 import { CONTRACT_CATEGORIES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
+import { VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { FileDropzone } from '../components/FileDropzone'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -50,6 +51,7 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [templates, setTemplates] = useState<ContractTemplate[]>([])
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(true)
+  const [leftW, setLeftW] = usePersistedSize("legalLeftWidth", 320, 260, 900)
   const [uploadCategory, setUploadCategory] = useState<ContractCategory>('销售合同')
   const [showTemplates, setShowTemplates] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -94,7 +96,7 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
 
   return (
     <div className="flex h-full">
-      <div className={`shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3 ${showChat ? 'w-80' : 'flex-1'}`}>
+      <div className={`shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3 ${showChat ? '' : 'flex-1'}`} style={showChat ? { width: leftW } : undefined}>
         <div className="app-drag mb-2 flex items-center justify-between pt-1">
           <h2 className="text-xs font-semibold text-slate-500">法务工作台</h2>
           <div className="app-no-drag flex items-center gap-2">
@@ -229,6 +231,7 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
         )}
       </div>
 
+      {showChat && <VDragHandle size={leftW} onSize={setLeftW} sign={1} min={260} max={900} />}
       <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
       <div className={`overflow-hidden transition-all ${showChat ? 'flex-1' : 'w-0'}`}>
         <AgentChat

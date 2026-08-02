@@ -3,6 +3,7 @@ import type { AgentDisplayMeta, OpsDocState, OpsGovernanceDoc, OpsPolicyDoc } fr
 import { OPS_DOC_STATES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
+import { VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
@@ -44,6 +45,7 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   const [notice, setNotice] = useState<string | null>(null)
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(true)
+  const [leftW, setLeftW] = usePersistedSize("opsLeftWidth", 440, 300, 900)
 
   useEffect(() => {
     if (pendingPrompt) setShowChat(true)
@@ -95,7 +97,7 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   return (
     <div className="flex h-full">
       {/* 左：治理文件 + 制度文件状态板 */}
-      <div className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50 ${showChat ? 'w-[440px]' : 'flex-1'}`}>
+      <div className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50 ${showChat ? '' : 'flex-1'}`} style={showChat ? { width: leftW } : undefined}>
         <div className="app-drag flex items-center justify-between px-3 pb-2 pt-4">
           <span className="text-xs font-semibold text-slate-500">行政人力 · 制度与治理文件</span>
           <div className="app-no-drag flex items-center gap-1.5">
@@ -239,6 +241,7 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
       </div>
 
       {/* 右：分身对话（可收起） */}
+      {showChat && <VDragHandle size={leftW} onSize={setLeftW} sign={1} min={260} max={900} />}
       <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
       <div className={`overflow-hidden transition-all ${showChat ? 'min-w-0 flex-1' : 'w-0'}`}>
         <AgentChat agent={agent} pendingPrompt={pendingPrompt} onPendingPromptConsumed={() => setPendingPrompt(null)} />

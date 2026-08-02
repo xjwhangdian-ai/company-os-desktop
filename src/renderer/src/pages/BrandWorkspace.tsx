@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AgentDisplayMeta } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
+import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
@@ -38,6 +39,7 @@ export function BrandWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [matters, setMatters] = useState<Matter[]>([])
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(true)
+  const [chatW, setChatW] = usePersistedSize(CHAT_PANE_KEY, CHAT_PANE.def, CHAT_PANE.min, CHAT_PANE.max)
   const [notice, setNotice] = useState<string | null>(null)
 
   function flash(t: string): void {
@@ -153,8 +155,9 @@ export function BrandWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
         </div>
       </div>
 
+      {showChat && <VDragHandle size={chatW} onSize={setChatW} sign={-1} min={CHAT_PANE.min} max={CHAT_PANE.max} />}
       <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
-      <div className={`overflow-hidden transition-all ${showChat ? 'w-[42%] shrink-0' : 'w-0'}`}>
+      <div className="shrink-0 overflow-hidden transition-all" style={{ width: showChat ? chatW : 0 }}>
         <AgentChat agent={agent} pendingPrompt={pendingPrompt} onPendingPromptConsumed={() => setPendingPrompt(null)} />
       </div>
     </div>

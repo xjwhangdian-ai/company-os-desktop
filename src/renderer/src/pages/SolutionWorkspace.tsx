@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { AgentDisplayMeta, OutputEntry, SolutionFile, SolutionFileKind } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
+import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
@@ -86,6 +87,7 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
   const [showChat, setShowChat] = useState(true)
+  const [chatW, setChatW] = usePersistedSize(CHAT_PANE_KEY, CHAT_PANE.def, CHAT_PANE.min, CHAT_PANE.max)
   const [outputsRefresh, setOutputsRefresh] = useState(0)
 
   useEffect(() => {
@@ -395,9 +397,10 @@ export function SolutionWorkspace({ agent }: { agent: AgentDisplayMeta }): React
       </div>
 
       {/* 中：分身对话（可收起） */}
+      {showChat && <VDragHandle size={chatW} onSize={setChatW} sign={-1} min={CHAT_PANE.min} max={CHAT_PANE.max} />}
       <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
-      <div className={`shrink-0 overflow-hidden transition-all ${showChat ? 'w-[400px]' : 'w-0'}`}>
-        <div className="h-full w-[400px]">
+      <div className="shrink-0 overflow-hidden transition-all" style={{ width: showChat ? chatW : 0 }}>
+        <div className="h-full" style={{ width: chatW }}>
           <AgentChat agent={agent} pendingPrompt={pendingPrompt} onPendingPromptConsumed={() => setPendingPrompt(null)} />
         </div>
       </div>

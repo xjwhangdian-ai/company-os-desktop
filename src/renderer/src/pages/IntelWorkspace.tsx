@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { AgentDisplayMeta, AgentName, IntelReport, IntelReportType } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
+import { VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { OutputsPanel } from '../components/OutputsPanel'
 
 type IntelTab = '行业趋势' | '政策文件'
@@ -420,6 +421,7 @@ export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [notice, setNotice] = useState<string | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
   const [showChat, setShowChat] = useState(true)
+  const [leftW, setLeftW] = usePersistedSize("intelLeftWidth", 384, 300, 900)
   const [reloadKey, setReloadKey] = useState(0)
 
   function flash(text: string): void {
@@ -438,7 +440,7 @@ export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
 
   return (
     <div className="flex h-full">
-      <div className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50 ${showChat ? 'w-96' : 'flex-1'}`}>
+      <div className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50 ${showChat ? '' : 'flex-1'}`} style={showChat ? { width: leftW } : undefined}>
         <div className="app-drag flex gap-1 px-3 pb-1 pt-4">
           {TABS.map((t) => (
             <button
@@ -466,6 +468,7 @@ export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
         )}
       </div>
 
+      {showChat && <VDragHandle size={leftW} onSize={setLeftW} sign={1} min={260} max={900} />}
       <ChatCollapseRail open={showChat} onToggle={() => setShowChat((v) => !v)} />
       <div className={`overflow-hidden transition-all ${showChat ? 'flex-1' : 'w-0'}`}>
         <AgentChat agent={agent} />
