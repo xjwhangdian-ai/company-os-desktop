@@ -505,7 +505,7 @@ export function IntelBiddingFeed({
             onClick={() => {
               if (!dataDir) return
               window.api.shell.showItemInFolder(
-                `${dataDir}/outputs/09_情报_intel/招投标每日追踪/招投标信息台账.xlsx`
+                `${dataDir}/outputs/03_招投标_bidding/招投标每日追踪/招投标信息台账.xlsx`
               )
             }}
             className="shrink-0 rounded border border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-jushi-accent hover:text-jushi-accent"

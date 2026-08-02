@@ -7,10 +7,22 @@ import { htmlToText, parseWinnerAnnouncement } from './zjgov-winner'
 // 数据不走 git 同步：git 只管应用程序更新，情报数据由每台电脑的 App 自己抓。
 // 三个纯 HTTP 平台直接抓：浙江政采（政采云）/ 台州公共资源（台州工程）/ 台州阳光采购。
 // 乐采云需要登录态 Chrome、研报(sgpjbg)需要会员登录——仍只在管理员机的每日管线里跑。
-// 产出与管理员机管线**同一格式**写 outputs/09_情报_intel/招投标每日追踪/{日期}_信息流.json，
+// 产出与管理员机管线**同一格式**写 outputs/03_招投标_bidding/招投标每日追踪/{日期}_信息流.json，
 // 按「项目名称」合并去重：已有条目（可能带更全的详情字段）永远保留，抓到的新条目只做补充。
 
-const TRACK_DIR_REL = join('outputs', '09_情报_intel', '招投标每日追踪')
+const TRACK_DIR_REL = join('outputs', '03_招投标_bidding', '招投标每日追踪')
+/** v0.1.10 及之前在 09_情报_intel 下——按业务归属移到招投标分身目录；老机器数据一次性自动搬家 */
+export function migrateTrackDir(dataDir: string): void {
+  const oldDir = join(dataDir, 'outputs', '09_情报_intel', '招投标每日追踪')
+  const newDir = join(dataDir, TRACK_DIR_REL)
+  if (!existsSync(oldDir) || existsSync(newDir)) return
+  try {
+    mkdirSync(join(dataDir, 'outputs', '03_招投标_bidding'), { recursive: true })
+    renameSync(oldDir, newDir)
+  } catch {
+    // 搬不动（如被占用）下次再试；期间读旧写新会各自建目录，不致丢数据
+  }
+}
 const FETCH_STATE_FILE = '_抓取状态.json'
 /** 与三天保留策略对齐：抓最近三天窗口内的公告 */
 const WINDOW_DAYS = 3
@@ -536,6 +548,7 @@ function writeFetchState(dataDir: string): void {
  * force=false 时 30 分钟内不重复抓。三个平台相互独立，单平台失败不影响其余。
  */
 export async function fetchIntelNow(dataDir: string, force = false): Promise<IntelFetchResult> {
+  migrateTrackDir(dataDir)
   if (!force) {
     const state = readFetchState(dataDir)
     if (state.lastFetchAt && Date.now() - state.lastFetchAt < MIN_INTERVAL_MS) {

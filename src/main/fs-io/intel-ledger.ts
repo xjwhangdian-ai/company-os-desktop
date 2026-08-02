@@ -3,11 +3,11 @@ import { join } from 'node:path'
 import type { FeedEntry } from './intel-fetch'
 
 // ============ 招投标信息 Excel 累计台账（只增不覆盖）============
-// 每次抓取的新增条目追加到 outputs/09_情报_intel/招投标每日追踪/招投标信息台账.xlsx。
+// 每次抓取的新增条目追加到 outputs/03_招投标_bidding/招投标每日追踪/招投标信息台账.xlsx。
 // 与「保留3天」策略互补：JSON 信息流 3 天自动清理（工作台只看最新），
 // Excel 台账永久累计（历史留档、可筛可查）。追加前按 类型+项目名称 与已有行去重，双保险防重复。
 
-const LEDGER_REL = join('outputs', '09_情报_intel', '招投标每日追踪', '招投标信息台账.xlsx')
+const LEDGER_REL = join('outputs', '03_招投标_bidding', '招投标每日追踪', '招投标信息台账.xlsx')
 
 const COLUMNS: { header: string; key: string; width: number }[] = [
   { header: '抓取时间', key: '抓取时间', width: 16 },
@@ -41,7 +41,7 @@ export async function appendIntelLedger(
 ): Promise<{ appended: number; path: string }> {
   const ExcelJS = (await import('exceljs')).default
   const path = intelLedgerPath(dataDir)
-  mkdirSync(join(dataDir, 'outputs', '09_情报_intel', '招投标每日追踪'), { recursive: true })
+  mkdirSync(join(dataDir, 'outputs', '03_招投标_bidding', '招投标每日追踪'), { recursive: true })
 
   const wb = new ExcelJS.Workbook()
   let ws: import('exceljs').Worksheet

@@ -2,17 +2,18 @@ import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileS
 import { join } from 'node:path'
 import type { IntelCandidate, IntelConfirmResult } from '@shared/agent-types'
 import { ensureBiddingProjectSkeleton } from './upload-router'
+import { migrateTrackDir } from './intel-fetch'
 import { readProjectCard, saveProjectCard } from './bidding-workflow'
 import { extractZjgovParams } from './intel-source'
 import { getIntelKeywords, matchIntelKeyword, recordKeywordFeedback } from './intel-keywords'
 
 // ============ intel 分身推送的招投标信息流：人工确认后才建招投标项目卡 ============
-// 数据源（都在 outputs/09_情报_intel/招投标每日追踪/，由每日管线与 intel 分身产出）：
+// 数据源（都在 outputs/03_招投标_bidding/招投标每日追踪/，由每日管线与 intel 分身产出）：
 //   {日期}_信息流.json —— 四平台全量抓取，按 采购意向/意见征询/采购公告/采购结果公告 分类（daily_aggregate.py --feed-json）
 //   {日期}_候选项目.json —— intel 分身标注的"有相关度"条目（相关度/理由/标签），按项目名合并到信息流上
 // 处理状态：候选项目处理状态.json（App 托管——已确认/已忽略的不再出现在待确认列表）
 
-const TRACK_DIR_REL = join('outputs', '09_情报_intel', '招投标每日追踪')
+const TRACK_DIR_REL = join('outputs', '03_招投标_bidding', '招投标每日追踪')
 const OUTPUTS_BIDDING_REL = join('outputs', '03_招投标_bidding')
 const STATE_FILE = '候选项目处理状态.json'
 const FEED_FILES = 3
@@ -69,6 +70,7 @@ function listTrackFiles(dataDir: string, suffix: string, limit: number): { date:
 
 /** 全量扫描：信息流（最近几天全部条目）+ intel 候选清单（相关度标注，按 key 合并） */
 function scanAllCandidates(dataDir: string): IntelCandidate[] {
+  migrateTrackDir(dataDir)
   const byKey = new Map<string, IntelCandidate>()
 
   for (const f of listTrackFiles(dataDir, '信息流', FEED_FILES)) {
