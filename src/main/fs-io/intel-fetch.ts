@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getIntelKeywords, matchIntelKeyword } from './intel-keywords'
+import { htmlToText, parseWinnerAnnouncement } from './zjgov-winner'
 
 // ============ App 内置招投标情报抓取（跨平台，mac/Windows 通用） ============
 // 数据不走 git 同步：git 只管应用程序更新，情报数据由每台电脑的 App 自己抓。
@@ -73,7 +74,7 @@ async function getPaths(): Promise<{ name: string; f: typeof fetch }[]> {
   return paths
 }
 
-async function doFetch(url: string, init: RequestInit): Promise<Response> {
+export async function doFetch(url: string, init: RequestInit): Promise<Response> {
   const routes = await getPaths()
   let last: Response | null = null
   let lastErr: unknown = null
@@ -230,16 +231,10 @@ async function enrichZjgovWinners(entries: FeedEntry[]): Promise<void> {
       })
       if (!resp.ok) continue
       const data = (await resp.json()) as { result?: { data?: { content?: string } } }
-      const text = String(data?.result?.data?.content ?? '').replace(/<[^>]+>/g, ' ')
-      const w = /(?:中标|成交)(?:（成交）)?供应商(?:名称)?[：:]*\s*([^\s，,。；;：:]{4,40}(?:公司|中心|研究院|事务所|厂))/.exec(text)
-      if (w) e.中标单位 = w[1]
-      const m =
-        /(?:中标|成交)(?:（成交）)?金额[（(]?元[）)]?[：:]*\s*([0-9,，.]+)/.exec(text) ||
-        /(?:中标|成交)(?:（成交）)?金额[：:]*\s*([0-9,，.]+)\s*万?元/.exec(text)
-      if (m) {
-        const num = parseFloat(m[1].replace(/[,，]/g, ''))
-        if (isFinite(num) && num > 0) e.中标金额 = /万元/.test(m[0]) ? `¥${num}万` : fmtAmount(num)
-      }
+      // 结构化解析中标结果表+专家名单（旧正则会误抓"代理服务收费金额"当中标价）
+      const parsed = parseWinnerAnnouncement(htmlToText(String(data?.result?.data?.content ?? '')))
+      if (parsed.中标单位) e.中标单位 = parsed.中标单位
+      if (parsed.中标金额) e.中标金额 = parsed.中标金额
       await politeDelay()
     } catch {
       // 单条失败不影响其余

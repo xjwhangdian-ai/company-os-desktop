@@ -95,6 +95,7 @@ const api: CompanyOsApi = {
     listCandidates: () => ipcRenderer.invoke(IPC.biddingListCandidates),
     confirmCandidate: (key: string) => ipcRenderer.invoke(IPC.biddingConfirmCandidate, key),
     ignoreCandidate: (key: string) => ipcRenderer.invoke(IPC.biddingIgnoreCandidate, key),
+    followWinner: (key: string) => ipcRenderer.invoke(IPC.biddingFollowWinner, key),
     downloadTender: (folderName: string) => ipcRenderer.invoke(IPC.biddingDownloadTender, folderName),
     probeTender: (folderName: string) => ipcRenderer.invoke(IPC.biddingProbeTender, folderName),
     deleteProject: (folderName: string) => ipcRenderer.invoke(IPC.biddingDeleteProject, folderName)
@@ -107,7 +108,11 @@ const api: CompanyOsApi = {
     fetchReports: () => ipcRenderer.invoke(IPC.intelFetchReports),
     getKeywords: () => ipcRenderer.invoke(IPC.intelGetKeywords),
     keywordSuggestions: () => ipcRenderer.invoke(IPC.intelKeywordSuggestions),
-    setKeywords: (keywords: string[]) => ipcRenderer.invoke(IPC.intelSetKeywords, keywords)
+    setKeywords: (keywords: string[]) => ipcRenderer.invoke(IPC.intelSetKeywords, keywords),
+    ignoreReport: (链接: string) => ipcRenderer.invoke(IPC.intelIgnoreReport, 链接),
+    downloadReport: (report: IntelReport) => ipcRenderer.invoke(IPC.intelDownloadReport, report),
+    getReportKeywords: () => ipcRenderer.invoke(IPC.intelReportKeywordsGet),
+    setReportKeywords: (keywords: string[]) => ipcRenderer.invoke(IPC.intelReportKeywordsSet, keywords)
   },
   legal: {
     listDocs: () => ipcRenderer.invoke(IPC.legalListDocs),

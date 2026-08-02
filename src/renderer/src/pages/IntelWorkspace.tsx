@@ -9,8 +9,39 @@ const TABS: IntelTab[] = ['行业趋势', '政策文件']
 
 
 // ── 研报面板（行业趋势 / 政策文件，按关键词分组）─────────────
-function ReportRow({ r, onNotice }: { r: IntelReport; onNotice: (t: string) => void }): React.JSX.Element {
+function ReportRow({
+  r,
+  onNotice,
+  onRemoved
+}: {
+  r: IntelReport
+  onNotice: (t: string) => void
+  onRemoved: () => void
+}): React.JSX.Element {
   const [saving, setSaving] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [localFile, setLocalFile] = useState<string | null>(null)
+  const downloaded = localFile ?? r.已下载文件
+
+  async function handleDownload(): Promise<void> {
+    setDownloading(true)
+    onNotice('正在下载报告（复用登录态浏览器，约半分钟）…')
+    try {
+      const res = await window.api.intel.downloadReport(r)
+      onNotice(res.说明)
+      if (res.ok && res.文件) {
+        setLocalFile(res.文件)
+        window.api.shell.showItemInFolder(res.文件)
+      } else if (/手动下载/.test(res.说明)) {
+        window.open(r.链接, '_blank')
+      }
+    } catch (err) {
+      onNotice(`下载失败：${err instanceof Error ? err.message : String(err)}——如果刚更新过程序，请完全退出后重新打开再试`)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-2.5">
       <a
@@ -46,6 +77,34 @@ function ReportRow({ r, onNotice }: { r: IntelReport; onNotice: (t: string) => v
           className="ml-auto shrink-0 rounded border border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50"
         >
           {saving ? '存入中…' : '→ 存入方案资料库'}
+        </button>
+        {downloaded ? (
+          <button
+            onClick={() => window.api.shell.openPath(downloaded)}
+            title={`已下载：${downloaded}——点击打开文件`}
+            className="shrink-0 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700"
+          >
+            📄 打开
+          </button>
+        ) : (
+          <button
+            disabled={downloading}
+            onClick={handleDownload}
+            title="自动下载报告文件到 outputs/09_情报_intel/研报文件/（复用登录态浏览器；非管理员机自动改为打开网页）"
+            className="shrink-0 rounded bg-jushi-accent px-1.5 py-0.5 text-[10px] font-medium text-white disabled:opacity-50"
+          >
+            {downloading ? '下载中…' : '下载'}
+          </button>
+        )}
+        <button
+          onClick={async () => {
+            await window.api.intel.ignoreReport(r.链接)
+            onRemoved()
+          }}
+          title="不感兴趣——从列表移除，之后抓到也不再显示"
+          className="shrink-0 rounded border border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500"
+        >
+          忽略
         </button>
       </div>
     </div>
@@ -122,11 +181,113 @@ function ReportsGuide({ dataDir, onNotice }: { dataDir: string; onNotice: (t: st
   )
 }
 
+/** 研报抓取关键词管理（增删改；存管线配置，分组与下次抓取都按它） */
+function ReportKeywordManager({ onClose, onNotice }: { onClose: () => void; onNotice: (t: string) => void }): React.JSX.Element {
+  const [keywords, setKeywords] = useState<string[]>([])
+  const [input, setInput] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    window.api.intel.getReportKeywords().then(setKeywords)
+  }, [])
+
+  async function save(next: string[]): Promise<void> {
+    setSaving(true)
+    try {
+      const r = await window.api.intel.setReportKeywords(next)
+      onNotice(r.说明)
+      if (r.ok) setKeywords(await window.api.intel.getReportKeywords())
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function submit(): void {
+    const val = input.trim()
+    if (!val) return
+    if (editing) {
+      save(keywords.map((k) => (k === editing ? val : k)))
+      setEditing(null)
+    } else if (!keywords.includes(val)) {
+      save([...keywords, val])
+    }
+    setInput('')
+  }
+
+  return (
+    <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-white p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-slate-600">研报关键词（每个词分别搜「行业趋势」与「词+政策」）</span>
+        <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-600">收起 ✕</button>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {keywords.map((k) => (
+          <span
+            key={k}
+            className={`group inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] ${
+              editing === k ? 'bg-jushi-accent text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            <button
+              onClick={() => {
+                setEditing(k)
+                setInput(k)
+              }}
+              title="点击修改这个词"
+            >
+              {k}
+            </button>
+            <button
+              disabled={saving}
+              onClick={() => save(keywords.filter((x) => x !== k))}
+              className="text-slate-400 hover:text-rose-500"
+              title="删除"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {keywords.length === 0 && <span className="text-[11px] text-slate-300">（无关键词——本机可能没有抓取管线配置）</span>}
+      </div>
+      <div className="mt-1.5 flex gap-1">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          placeholder={editing ? `修改「${editing}」为…` : '新增关键词，回车保存'}
+          className="flex-1 rounded border border-slate-200 px-2 py-1 text-[11px] outline-none focus:border-jushi-accent"
+        />
+        <button
+          disabled={saving}
+          onClick={submit}
+          className="rounded bg-jushi-accent px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+        >
+          {editing ? '保存修改' : '添加'}
+        </button>
+        {editing && (
+          <button
+            onClick={() => {
+              setEditing(null)
+              setInput('')
+            }}
+            className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-500"
+          >
+            取消
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-[10px] text-slate-400">改词后明早 07:20 自动生效；想立即看新词结果，点上方「刷新」重抓。</p>
+    </div>
+  )
+}
+
 function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; reloadKey: number; onNotice: (t: string) => void }): React.JSX.Element {
   const [reports, setReports] = useState<IntelReport[]>([])
   const [loaded, setLoaded] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
+  const [showKeywords, setShowKeywords] = useState(false)
   const [dataDir, setDataDir] = useState('')
 
   async function refresh(): Promise<void> {
@@ -179,6 +340,15 @@ function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; re
           </span>
           <div className="app-no-drag flex items-center gap-1.5">
             <button
+              onClick={() => setShowKeywords((v) => !v)}
+              className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                showKeywords ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
+              }`}
+              title="管理研报抓取关键词（增删改，抓取与分组都按它）"
+            >
+              ⚙ 关键词
+            </button>
+            <button
               onClick={() => setShowGuide((v) => !v)}
               className={`rounded-full border px-2 py-0.5 text-[11px] ${
                 showGuide ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
@@ -202,6 +372,7 @@ function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; re
         </p>
       </div>
       {showGuide && <ReportsGuide dataDir={dataDir} onNotice={onNotice} />}
+      {showKeywords && <ReportKeywordManager onClose={() => setShowKeywords(false)} onNotice={onNotice} />}
       <div className="flex-1 space-y-2 overflow-y-auto p-3 pt-0">
         {loaded && mine.length === 0 && (
           <div className="py-6 text-center text-xs leading-relaxed text-slate-400">
@@ -225,7 +396,12 @@ function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; re
             </div>
             <div className="space-y-1.5 bg-slate-50 p-2">
               {items.map((r) => (
-                <ReportRow key={r.链接} r={r} onNotice={onNotice} />
+                <ReportRow
+                  key={r.链接}
+                  r={r}
+                  onNotice={onNotice}
+                  onRemoved={() => setReports((prev) => prev.filter((x) => x.链接 !== r.链接))}
+                />
               ))}
             </div>
           </div>

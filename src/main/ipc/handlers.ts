@@ -55,7 +55,15 @@ import {
   saveProjectCard
 } from '../fs-io/bidding-workflow'
 import { confirmIntelCandidate, ignoreIntelCandidate, listIntelCandidates } from '../fs-io/intel-candidates'
-import { fetchReportsNow, listIntelReports } from '../fs-io/intel-reports'
+import { followWinnerAnnouncement } from '../fs-io/intel-winner-follow'
+import {
+  downloadIntelReport,
+  fetchReportsNow,
+  getReportKeywords,
+  ignoreIntelReport,
+  listIntelReports,
+  setReportKeywords
+} from '../fs-io/intel-reports'
 import { downloadTenderFile, probeTenderFile } from '../fs-io/tender-download'
 import { purgeStaleIntelData } from '../fs-io/intel-purge'
 import { fetchIntelNow } from '../fs-io/intel-fetch'
@@ -269,6 +277,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.intelFetchReports, () => fetchReportsNow(getDataDir()))
   ipcMain.handle(IPC.intelGetKeywords, () => getIntelKeywords(getDataDir()))
   ipcMain.handle(IPC.intelSetKeywords, (_e, keywords: string[]) => setIntelKeywords(getDataDir(), keywords))
+  ipcMain.handle(IPC.intelIgnoreReport, (_e, 链接: string) => ignoreIntelReport(getDataDir(), 链接))
+  ipcMain.handle(IPC.intelDownloadReport, (_e, report: IntelReport) => downloadIntelReport(getDataDir(), report))
+  ipcMain.handle(IPC.intelReportKeywordsGet, () => getReportKeywords(getDataDir()))
+  ipcMain.handle(IPC.intelReportKeywordsSet, (_e, keywords: string[]) => setReportKeywords(getDataDir(), keywords))
+  ipcMain.handle(IPC.biddingFollowWinner, (_e, key: string) => followWinnerAnnouncement(getDataDir(), key))
 
   ipcMain.handle(IPC.legalListDocs, () => listLegalDocs(getDataDir()))
   ipcMain.handle(IPC.legalMarkReviewed, (_e, fileName: string) => markReviewed(getDataDir(), fileName))

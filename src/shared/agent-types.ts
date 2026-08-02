@@ -211,6 +211,8 @@ export interface IntelReport {
   发布日期: string
   VIP: boolean
   抓取日期: string
+  /** 已通过「下载」按钮落盘的相对路径（存在时按钮变「打开」） */
+  已下载文件?: string
 }
 
 export interface BiddingUploadResult {

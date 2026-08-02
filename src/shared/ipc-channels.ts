@@ -63,6 +63,11 @@ export const IPC = {
   intelFetchReports: 'intel:fetch-reports',
   intelGetKeywords: 'intel:get-keywords',
   intelSetKeywords: 'intel:set-keywords',
+  intelIgnoreReport: 'intel:ignore-report',
+  intelDownloadReport: 'intel:download-report',
+  intelReportKeywordsGet: 'intel:report-keywords-get',
+  intelReportKeywordsSet: 'intel:report-keywords-set',
+  biddingFollowWinner: 'bidding:follow-winner',
 
   legalListDocs: 'legal:list-docs',
   legalMarkReviewed: 'legal:mark-reviewed',

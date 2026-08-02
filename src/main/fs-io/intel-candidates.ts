@@ -222,6 +222,19 @@ export function listIntelCandidates(dataDir: string): IntelCandidate[] {
   })
 }
 
+export function findIntelCandidateByKey(dataDir: string, key: string): IntelCandidate | null {
+  return scanAllCandidates(dataDir).find((c) => c.key === key) ?? null
+}
+
+/** 中标公告「跟进」归档后标记已处理（从待确认列表消失）+ 关键词学习 */
+export function markWinnerFollowed(dataDir: string, key: string): void {
+  const state = readState(dataDir)
+  const candidate = scanAllCandidates(dataDir).find((c) => c.key === key)
+  state[key] = { 动作: '已确认', 时间: Date.now(), 类型: candidate?.类型 }
+  writeState(dataDir, state)
+  if (candidate) recordKeywordFeedback(dataDir, { 项目名称: candidate.项目名称, 采购单位: candidate.采购单位, 动作: '跟进' })
+}
+
 export function ignoreIntelCandidate(dataDir: string, key: string): void {
   const state = readState(dataDir)
   const candidate = scanAllCandidates(dataDir).find((c) => c.key === key)

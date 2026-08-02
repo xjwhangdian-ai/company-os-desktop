@@ -49,13 +49,15 @@ function CandidateRow({
   confirming,
   disabled,
   onConfirm,
-  onIgnore
+  onIgnore,
+  onFollowWinner
 }: {
   c: IntelCandidate
   confirming: boolean
   disabled: boolean
   onConfirm: () => void
   onIgnore: () => void
+  onFollowWinner: () => void
 }): React.JSX.Element {
   return (
     <div
@@ -124,20 +126,29 @@ function CandidateRow({
       {c.理由 && <div className="mt-1 text-[11px] leading-snug text-slate-400">{c.理由}</div>}
       <div className="mt-1.5 flex items-center gap-1.5">
         <span className="text-[10px] text-slate-400">{c.日期}</span>
-        {c.类型 !== '采购结果公告' && (
-        <button
-          disabled={disabled}
-          onClick={onConfirm}
-          style={{ marginLeft: 'auto' }}
-          title="建项目档并进入左侧台账（意见征询项目自动带上征询截止日）"
-          className={`rounded px-3 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
-            c.跟进升级 ? 'bg-amber-500' : 'bg-jushi-accent'
-          }`}
-        >
-          {confirming ? '建档中…' : c.跟进升级 ? '跟进（归档进已有项目）' : '跟进'}
-        </button>
+        {c.类型 === '采购结果公告' ? (
+          <button
+            disabled={disabled}
+            onClick={onFollowWinner}
+            style={{ marginLeft: 'auto' }}
+            title="中标信息+评审专家（标注采购人代表）入中标公告台账.xlsx，公告附件自动下载归档"
+            className="rounded bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+          >
+            {confirming ? '归档中…' : '跟进'}
+          </button>
+        ) : (
+          <button
+            disabled={disabled}
+            onClick={onConfirm}
+            style={{ marginLeft: 'auto' }}
+            title="建项目档并进入左侧台账（意见征询项目自动带上征询截止日）"
+            className={`rounded px-3 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
+              c.跟进升级 ? 'bg-amber-500' : 'bg-jushi-accent'
+            }`}
+          >
+            {confirming ? '建档中…' : c.跟进升级 ? '跟进（归档进已有项目）' : '跟进'}
+          </button>
         )}
-        {c.类型 !== '采购结果公告' && (
         <button
           disabled={disabled}
           onClick={onIgnore}
@@ -145,7 +156,6 @@ function CandidateRow({
         >
           忽略
         </button>
-        )}
       </div>
     </div>
   )
@@ -356,6 +366,17 @@ export function IntelBiddingFeed({
     await window.api.bidding.ignoreCandidate(c.key)
     setCandidates((prev) => prev.filter((x) => x.key !== c.key))
   }
+  /** 结果公告的跟进：不建投标项目档，走中标归档（台账+附件+专家索引） */
+  async function handleFollowWinner(c: IntelCandidate): Promise<void> {
+    setConfirmingKey(c.key)
+    try {
+      const r = await window.api.bidding.followWinner(c.key)
+      onNotice(r.ok ? `${r.说明}——台账见 outputs/09_情报_intel/中标公告台账.xlsx` : r.说明)
+      if (r.ok) await refresh()
+    } finally {
+      setConfirmingKey(null)
+    }
+  }
 
   const DAY_TABS = useMemo(() => {
     const fmt = (offset: number): string => {
@@ -530,6 +551,7 @@ export function IntelBiddingFeed({
                       disabled={confirmingKey !== null}
                       onConfirm={() => handleConfirm(c)}
                       onIgnore={() => handleIgnore(c)}
+                      onFollowWinner={() => handleFollowWinner(c)}
                     />
                   ))}
                 </div>

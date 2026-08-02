@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 // ============ 合同修订版生成：把分身的修改意见以 Word「修订模式」写回原合同 ============
 // 输入：原合同 .docx + 修订清单 [{原文, 修改为, 理由}]（原文必须逐字来自合同）。
 // 做法：解包 docx → 逐段落把命中"原文"的文字改写成 <w:del>原文</w:del><w:ins>修改为</w:ins>，
-// 保留原 run 的字体格式；作者署名"炬视法务分身"。Word/WPS 打开即是标准修订模式，
+// 保留原 run 的字体格式；作者署名"炬视科技法务"。Word/WPS 打开即是标准修订模式，
 // 人工可逐条"接受/拒绝修订"。理由不进正文（正文保持干净），随意见书查看。
 
 export interface RedlineItem {
@@ -21,7 +21,7 @@ export interface RedlineResult {
   说明: string
 }
 
-const AUTHOR = '炬视法务分身'
+const AUTHOR = '炬视科技法务'
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')

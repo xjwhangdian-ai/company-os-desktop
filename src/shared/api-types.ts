@@ -159,6 +159,8 @@ export interface CompanyOsApi {
     /** 人工确认跟进：建项目档+项目卡（自动填业主单位/预算金额）+ 写机读溯源 sidecar；不下载招标文件 */
     confirmCandidate(key: string): Promise<IntelConfirmResult>
     ignoreCandidate(key: string): Promise<void>
+    /** 采购结果公告「跟进」——中标信息+评审专家（标注采购人代表）入中标公告台账.xlsx，附件下载归档 */
+    followWinner(key: string): Promise<{ ok: boolean; 说明: string; 归档目录?: string }>
     /** 下载某项目的招标文件（浙江政采源，登录感知）→ inbox 01_招标文件/，并回填招标编号 */
     downloadTender(folderName: string): Promise<TenderDownloadResult>
     /** 下载前探测招标公告附件清单（不下载），供 UI 弹「人工确认后再下载」提示 */
@@ -181,6 +183,13 @@ export interface CompanyOsApi {
     getKeywords(): Promise<string[]>
     keywordSuggestions(): Promise<{ 建议添加: { 词: string; 次数: number }[]; 建议移除: { 词: string; 忽略次数: number }[] }>
     setKeywords(keywords: string[]): Promise<string[]>
+    /** 研报「忽略」——按链接记入处理状态，不再出现在列表 */
+    ignoreReport(链接: string): Promise<void>
+    /** 研报「下载」——复用登录态调试 Chrome 拿直链落盘 outputs/09_情报_intel/研报文件/；仅管理员 Mac */
+    downloadReport(report: IntelReport): Promise<{ ok: boolean; 说明: string; 文件?: string }>
+    /** 研报抓取关键词（存管线 reports_config.json，分组与下次抓取都用它） */
+    getReportKeywords(): Promise<string[]>
+    setReportKeywords(keywords: string[]): Promise<{ ok: boolean; 说明: string }>
   }
   legal: {
     listDocs(): Promise<{ pending: LegalDoc[]; reviewed: LegalDoc[] }>
