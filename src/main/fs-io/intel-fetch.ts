@@ -28,6 +28,8 @@ export interface FeedEntry {
   中标金额: string
   /** 意见征询条目的征询/意见反馈截止日（YYYY-MM-DD，从详情页提取；提不到为空） */
   征询截止: string
+  /** 采购意向详情页「采购需求概况」摘要（标题常常只写单位名，真正的产品信息在这里） */
+  需求概况?: string
   链接: string
   平台: string
   台州公安: boolean
@@ -269,6 +271,65 @@ async function enrichZjgovConsultDeadlines(entries: FeedEntry[]): Promise<void> 
       // 详情页失败不影响列表数据
     }
   }
+}
+
+/**
+ * 采购意向按「采购需求概况」复筛：意向公告的标题常常只写"XX单位2026年X月采购意向"，
+ * 真正的产品/需求信息在详情页的「采购需求概况」栏里——只按标题筛会漏掉大量相关意向。
+ * 做法：对窗口内的浙江政采采购意向条目补抓详情页（标题未命中的优先），
+ * 用正文再匹配一轮关键词：命中的捞回保留，并把概况摘要写进条目供列表展示；
+ * 标题已命中的也顺带补上概况摘要。控制总请求量，单条失败不影响其余。
+ */
+async function rescueIntentsByDemand(
+  all: FeedEntry[],
+  kept: FeedEntry[],
+  kws: string[]
+): Promise<{ checked: number; rescued: number }> {
+  const keptSet = new Set(kept)
+  const intents = all.filter((e) => e.类型 === '采购意向' && e.平台 === '浙江政采') as (FeedEntry & { _articleId?: string })[]
+  // 未被标题命中的排前面（它们才是可能被漏掉的），已命中的只为补概况摘要
+  const targets = [...intents.filter((e) => !keptSet.has(e)), ...intents.filter((e) => keptSet.has(e))].slice(0, 25)
+  let checked = 0
+  let rescued = 0
+  for (const e of targets) {
+    if (!e._articleId) continue
+    try {
+      const resp = await doFetch(`${ZJGOV_BASE}/portal/detail?articleId=${encodeURIComponent(e._articleId)}`, {
+        headers: { 'User-Agent': UA, Referer: `${ZJGOV_BASE}/site/detail` },
+        signal: AbortSignal.timeout(12000)
+      })
+      if (!resp.ok) continue
+      const data = (await resp.json()) as { result?: { data?: { content?: string } } }
+      const text = String(data?.result?.data?.content ?? '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (!text) continue
+      checked += 1
+      const hit = matchIntelKeyword(text, kws)
+      // 摘要优先取命中关键词前后文，其次取「采购需求概况」栏之后的一段
+      let snippet = ''
+      if (hit) {
+        const i = text.indexOf(hit)
+        snippet = text.slice(Math.max(0, i - 20), i + 100)
+      } else {
+        const i = text.indexOf('采购需求概况')
+        if (i >= 0) snippet = text.slice(i + 6, i + 126)
+      }
+      if (snippet) e.需求概况 = snippet.trim().slice(0, 120)
+      if (isPolice(text)) e.台州公安 = true
+      if (!keptSet.has(e) && (hit !== null || e.台州公安)) {
+        kept.push(e)
+        keptSet.add(e)
+        rescued += 1
+      }
+      await politeDelay()
+    } catch {
+      // 单条详情失败不影响其余
+    }
+  }
+  return { checked, rescued }
 }
 
 // ── 平台二：台州公共资源（ggzy.tzztb.zjtz.gov.cn，工程类）──────────────────
@@ -520,6 +581,10 @@ export async function fetchIntelNow(dataDir: string, force = false): Promise<Int
   const beforeFilter = all.length
   const kept = all.filter((e) => e.台州公安 || matchIntelKeyword(`${e.项目名称}${e.采购单位}${e.区县}`, kws) !== null)
   if (beforeFilter > kept.length) 平台结果.push(`关键词筛除 ${beforeFilter - kept.length} 条`)
+
+  // 采购意向复筛：标题没命中的意向补抓详情页，用「采购需求概况」正文再匹配一轮（命中捞回）
+  const demand = await rescueIntentsByDemand(all, kept, kws)
+  if (demand.checked > 0) 平台结果.push(`意向按需求概况复筛 ${demand.checked} 条，捞回 ${demand.rescued} 条`)
 
   // 意见征询条目补抓详情页提取「征询截止日」（重点关注日期）
   await enrichZjgovConsultDeadlines(kept)

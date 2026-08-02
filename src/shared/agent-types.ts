@@ -155,6 +155,8 @@ export interface IntelCandidate {
   命中关键词?: string | null
   /** 意见征询条目的征询截止日（YYYY-MM-DD，从公告详情页提取；提不到为空） */
   征询截止?: string
+  /** 采购意向详情页「采购需求概况」摘要（关键词复筛与列表展示用；没抓到为空） */
+  需求概况?: string
   /** intel 分身标注的相关度；未标注（纯信息流条目）为 null */
   相关度: '高' | '中' | null
   理由: string

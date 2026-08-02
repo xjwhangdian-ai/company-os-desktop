@@ -91,6 +91,11 @@ function CandidateRow({
         {c.区县 ? ` · ${c.区县}` : ''}
         {c.预算 ? ` · ${c.预算}` : ''}
       </div>
+      {c.需求概况 && (
+        <div className="mt-1 rounded bg-slate-50 px-2 py-1 text-[11px] leading-snug text-slate-500" title={c.需求概况}>
+          📋 需求概况：{c.需求概况}
+        </div>
+      )}
       {c.类型 === '采购结果公告' && (
         <div className="mt-1 rounded bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
           🏆 中标单位：{c.中标单位 || '待确认（点标题看原文）'}
@@ -383,7 +388,7 @@ export function IntelBiddingFeed({
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
     if (tokens.length > 0) {
       list = list.filter((c) => {
-        const hay = [c.项目名称, c.采购单位, c.中标单位, c.区县, c.标签, c.平台, c.预算].join(' ').toLowerCase()
+        const hay = [c.项目名称, c.采购单位, c.中标单位, c.区县, c.标签, c.平台, c.预算, c.需求概况 ?? ''].join(' ').toLowerCase()
         return tokens.every((t) => hay.includes(t))
       })
     }
