@@ -451,6 +451,9 @@ function MemberSection({ onFlash }: { onFlash: (text: string) => void }): React.
       <p className="text-xs text-slate-400">
         账号由管理员在这里统一分配，初始 PIN 都是 <b>123456</b>（成员首次登录会被提示修改）。
         管理员：可进设置页、可见全部 9 个分身。普通员工：只见分配给 TA 的分身（不勾选=全部可见）。此为界面级权限，不是安全体系。
+        <br />
+        📡 <b>跨电脑下发</b>：这里的成员与分身分配会自动写入数据仓库（.claude/team-roster.json）——改完点侧栏「一键同步」推送；
+        员工电脑打开 App 或点同步后自动按最新花名册生效（员工机上的本地增删会被花名册覆盖）。PIN 各机独立保管，不随仓库同步。
       </p>
       <AddMemberInline onFlash={onFlash} />
       <div className="space-y-1.5">

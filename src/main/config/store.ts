@@ -413,7 +413,103 @@ function toPublicMember(m: TeamMemberRecord): TeamMember {
   }
 }
 
+// ── 团队花名册随数据仓库下发（跨机器权限分配）─────────────────────────────
+// 痛点：成员/角色/可见分身此前只存各机本地配置，员工电脑上管理员管不到。
+// 方案：管理员在任意一台机上改动成员配置 → 同步写数据仓库 .claude/team-roster.json
+// （随「一键同步」git 推送）→ 成员机打开 App / 同步后自动按花名册对齐本机成员表。
+// PIN 哈希绝不进花名册（密码不进 git 红线）：各机本地保管，新同步来的成员用初始 PIN。
+// 仍是界面级权限（防误用不防恶意），与设置页文案口径一致。
+
+interface RosterMember {
+  name: string
+  role: MemberRole
+  可见分身?: AgentName[]
+}
+
+const ROSTER_REL = join('.claude', 'team-roster.json')
+
+function activeDataDir(): string | null {
+  const all = readAll()
+  const co = all.companies.find((c) => c.id === all.activeCompanyId)
+  return co?.dataDir ?? null
+}
+
+/** 成员变更后导出花名册到数据仓库（无数据目录时静默跳过） */
+function exportRoster(): void {
+  const dir = activeDataDir()
+  if (!dir || !existsSync(dir)) return
+  try {
+    const members: RosterMember[] = readAll().teamMembers.map((m) => ({
+      name: m.name,
+      role: roleOf(m),
+      ...(m.可见分身 ? { 可见分身: m.可见分身 } : {})
+    }))
+    mkdirSync(join(dir, '.claude'), { recursive: true })
+    writeFileSync(
+      join(dir, ROSTER_REL),
+      JSON.stringify(
+        {
+          说明: '团队成员与分身分配（管理员改动自动写入，随「一键同步」下发到全部电脑；PIN 各机本地保管，绝不进本文件）',
+          updatedAt: Date.now(),
+          members
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    )
+  } catch {
+    // 花名册写不进仓库不阻塞本机操作
+  }
+}
+
+let lastAppliedRosterMtime = 0
+
+/** 按仓库花名册对齐本机成员表（mtime 变化才执行；无花名册文件=兼容旧行为不动） */
+function applyRosterIfChanged(): void {
+  const dir = activeDataDir()
+  if (!dir) return
+  const p = join(dir, ROSTER_REL)
+  if (!existsSync(p)) return
+  try {
+    const mtime = require('node:fs').statSync(p).mtimeMs as number
+    if (mtime === lastAppliedRosterMtime) return
+    lastAppliedRosterMtime = mtime
+    const roster = JSON.parse(readFileSync(p, 'utf-8')) as { members?: RosterMember[] }
+    const wanted = (roster.members ?? []).filter((m) => m?.name?.trim())
+    if (wanted.length === 0) return // 空花名册不执行清空，防误锁
+    const all = readAll()
+    const byName = new Map(all.teamMembers.map((m) => [m.name, m]))
+    const next: TeamMemberRecord[] = []
+    for (const w of wanted) {
+      const local = byName.get(w.name)
+      if (local) {
+        local.role = w.role
+        local.可见分身 = w.role === 'member' ? w.可见分身 : undefined
+        next.push(local)
+      } else {
+        next.push({
+          id: randomUUID(),
+          name: w.name,
+          pinHash: DEFAULT_PIN_HASH,
+          role: w.role,
+          可见分身: w.role === 'member' ? w.可见分身 : undefined
+        })
+      }
+    }
+    // 花名册没有的本机成员：移除（管理员在别的机器上删了 TA）；但绝不移到一个管理员都不剩
+    if (!next.some((m) => roleOf(m) === 'admin')) {
+      const keepAdmin = all.teamMembers.find((m) => roleOf(m) === 'admin')
+      if (keepAdmin) next.push(keepAdmin)
+    }
+    writeAll({ ...all, teamMembers: next })
+  } catch {
+    // 花名册损坏时保持本机现状
+  }
+}
+
 export function listTeamMembers(): TeamMember[] {
+  applyRosterIfChanged()
   return readAll().teamMembers.map(toPublicMember)
 }
 
@@ -432,6 +528,7 @@ export function addTeamMember(name: string, role?: MemberRole, 可见分身?: Ag
     可见分身: finalRole === 'member' ? 可见分身 : undefined
   }
   writeAll({ ...all, teamMembers: [...all.teamMembers, record] })
+  exportRoster()
   return toPublicMember(record)
 }
 
@@ -473,11 +570,13 @@ export function setMemberAgents(id: string, agents: AgentName[] | null): void {
   if (!member) return
   member.可见分身 = agents ?? undefined
   writeAll(all)
+  exportRoster()
 }
 
 export function removeTeamMember(id: string): void {
   const all = readAll()
   writeAll({ ...all, teamMembers: all.teamMembers.filter((m) => m.id !== id) })
+  exportRoster()
 }
 
 /** 改角色時兜底：不允许把最后一个管理员降级，防止把自己锁在设置页外面 */
@@ -493,6 +592,7 @@ export function setMemberRole(id: string, role: MemberRole): { ok: boolean; mess
   }
   target.role = role
   writeAll(all)
+  exportRoster()
   return { ok: true }
 }
 
