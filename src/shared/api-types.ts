@@ -191,6 +191,12 @@ export interface CompanyOsApi {
     getReportKeywords(): Promise<string[]>
     setReportKeywords(keywords: string[]): Promise<{ ok: boolean; 说明: string }>
   }
+  mba: {
+    /** 课程列表（inbox/10_MBA学习_mba/ 下的课程文件夹与三类文件计数） */
+    listCourses(): Promise<{ name: string; 课件数: number; 作业数: number; 录音数: number }[]>
+    /** 按课程归档上传：课件 / 作业与要求 / 课堂录音（含钉钉A1导出的转写与音频） */
+    uploadCourse(course: string, category: '课件' | '作业与要求' | '课堂录音', sourcePath: string): Promise<{ absPath: string; relativePath: string }>
+  }
   legal: {
     listDocs(): Promise<{ pending: LegalDoc[]; reviewed: LegalDoc[] }>
     markReviewed(fileName: string): Promise<void>

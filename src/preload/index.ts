@@ -56,6 +56,11 @@ const api: CompanyOsApi = {
   dialog: {
     pickFiles: (filters?: FileFilter[]) => ipcRenderer.invoke(IPC.dialogPickFiles, filters)
   },
+  mba: {
+    listCourses: () => ipcRenderer.invoke(IPC.mbaListCourses),
+    uploadCourse: (course: string, category: '课件' | '作业与要求' | '课堂录音', sourcePath: string) =>
+      ipcRenderer.invoke(IPC.mbaUploadCourse, course, category, sourcePath)
+  },
   shell: {
     showItemInFolder: (path: string) => ipcRenderer.invoke(IPC.shellShowItemInFolder, path),
     saveAsCopy: (path: string) => ipcRenderer.invoke(IPC.shellSaveAsCopy, path),

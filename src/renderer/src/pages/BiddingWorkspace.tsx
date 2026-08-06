@@ -280,6 +280,8 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
       try {
         await window.api.intel.purgeStale()
         setIntelReloadKey((k) => k + 1)
+        // 首屏先用缓存数据渲染并可交互，联网抓取延后启动（抓完再刷一次）
+        await new Promise((r) => setTimeout(r, 1200))
         const r = await window.api.intel.fetchNow()
         if (r.新增条数 > 0) flash(r.说明 + (r.平台结果.length > 0 ? `（${r.平台结果.join('、')}）` : ''))
         setIntelReloadKey((k) => k + 1)

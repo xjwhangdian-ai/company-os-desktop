@@ -602,16 +602,18 @@ export async function fetchIntelNow(dataDir: string, force = false): Promise<Int
   const { added, addedEntries } = mergeIntoFeeds(dataDir, kept)
   writeFetchState(dataDir)
 
-  // 新增条目累计追加进 Excel 台账（只增不覆盖；3天清理只清 JSON，不动它）
+  // 新增条目累计追加进 Excel 台账（只增不覆盖；3天清理只清 JSON，不动它）。
+  // 后台执行不阻塞返回：exceljs 解析大台账有同步重活，放在请求路径上会卡住全部 IPC（日期页签点击卡顿的元凶之一）
   let ledgerNote = ''
   if (addedEntries.length > 0) {
-    try {
-      const { appendIntelLedger } = await import('./intel-ledger')
-      const r = await appendIntelLedger(dataDir, addedEntries)
-      if (r.appended > 0) ledgerNote = `；已追加 ${r.appended} 条到信息台账.xlsx`
-    } catch (err) {
-      ledgerNote = `；台账追加失败（${err instanceof Error ? err.message.slice(0, 30) : '未知'}，若正开着 Excel 请先关闭）`
-    }
+    ledgerNote = '；台账后台追加中'
+    setTimeout(() => {
+      import('./intel-ledger')
+        .then(({ appendIntelLedger }) => appendIntelLedger(dataDir, addedEntries))
+        .catch(() => {
+          // 台账追加失败不影响信息流（多为 Excel 正被打开占用），下次抓取会按去重逻辑补上
+        })
+    }, 1500)
   }
 
   return {

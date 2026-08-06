@@ -56,6 +56,7 @@ import {
 } from '../fs-io/bidding-workflow'
 import { confirmIntelCandidate, ignoreIntelCandidate, listIntelCandidates } from '../fs-io/intel-candidates'
 import { followWinnerAnnouncement } from '../fs-io/intel-winner-follow'
+import { listMbaCourses, uploadToMbaCourse } from '../fs-io/upload-router'
 import {
   downloadIntelReport,
   fetchReportsNow,
@@ -282,6 +283,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.intelReportKeywordsGet, () => getReportKeywords(getDataDir()))
   ipcMain.handle(IPC.intelReportKeywordsSet, (_e, keywords: string[]) => setReportKeywords(getDataDir(), keywords))
   ipcMain.handle(IPC.biddingFollowWinner, (_e, key: string) => followWinnerAnnouncement(getDataDir(), key))
+  ipcMain.handle(IPC.mbaListCourses, () => listMbaCourses(getDataDir()))
+  ipcMain.handle(IPC.mbaUploadCourse, (_e, course: string, category: '课件' | '作业与要求' | '课堂录音', sourcePath: string) => uploadToMbaCourse(getDataDir(), course, category, sourcePath))
 
   ipcMain.handle(IPC.legalListDocs, () => listLegalDocs(getDataDir()))
   ipcMain.handle(IPC.legalMarkReviewed, (_e, fileName: string) => markReviewed(getDataDir(), fileName))

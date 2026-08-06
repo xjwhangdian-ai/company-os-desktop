@@ -343,3 +343,55 @@ export function listRecentOperationArticles(dataDir: string, limit = 10): Recent
   walk(root, '', 0)
   return out.sort((a, b) => b.mtime - a.mtime).slice(0, limit)
 }
+
+// ── MBA 学习分身：按课程归档（inbox/10_MBA学习_mba/{课程}/{分类}/）────────────
+export type MbaUploadCategory = '课件' | '作业与要求' | '课堂录音'
+
+export function uploadToMbaCourse(
+  dataDir: string,
+  course: string,
+  category: MbaUploadCategory,
+  sourcePath: string
+): { absPath: string; relativePath: string } {
+  const c = sanitizeSeg(course).slice(0, 40) || '未分类课程'
+  const rel = join('inbox', '10_MBA学习_mba', c, category)
+  const destDir = join(dataDir, rel)
+  mkdirSync(destDir, { recursive: true })
+  const dest = join(destDir, basename(sourcePath))
+  copyFileSync(sourcePath, dest)
+  return { absPath: dest, relativePath: join(rel, basename(sourcePath)) }
+}
+
+export interface MbaCourseInfo {
+  name: string
+  课件数: number
+  作业数: number
+  录音数: number
+}
+
+export function listMbaCourses(dataDir: string): MbaCourseInfo[] {
+  const root = join(dataDir, 'inbox', '10_MBA学习_mba')
+  if (!existsSync(root)) return []
+  const count = (p: string): number => {
+    try {
+      return readdirSync(p).filter((n) => !n.startsWith('.')).length
+    } catch {
+      return 0
+    }
+  }
+  return readdirSync(root)
+    .filter((n) => {
+      try {
+        return !n.startsWith('.') && !n.startsWith('_') && statSync(join(root, n)).isDirectory()
+      } catch {
+        return false
+      }
+    })
+    .map((name) => ({
+      name,
+      课件数: count(join(root, name, '课件')),
+      作业数: count(join(root, name, '作业与要求')),
+      录音数: count(join(root, name, '课堂录音'))
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
+}

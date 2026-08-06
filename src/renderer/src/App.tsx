@@ -9,6 +9,7 @@ import { SyncButton } from './components/SyncButton'
 import { UpdateBanner } from './components/UpdateBanner'
 import { Settings } from './pages/Settings'
 import { GenericAgentPage } from './pages/GenericAgentPage'
+import { MbaWorkspace } from './pages/MbaWorkspace'
 import { BiddingWorkspace } from './pages/BiddingWorkspace'
 import { BrandWorkspace } from './pages/BrandWorkspace'
 import { LegalWorkspace } from './pages/LegalWorkspace'
@@ -251,10 +252,13 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'ops-policy' && (
           <OpsPolicyWorkspace agent={activeAgent} />
         )}
+        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'mba' && (
+          <MbaWorkspace agent={activeAgent} />
+        )}
         {view !== 'settings' &&
           ready &&
           activeAgent &&
-          !['bidding', 'brand', 'legal', 'operation', 'sales', 'solution', 'intel', 'finance', 'ops-policy'].includes(activeAgent.name) && (
+          !['bidding', 'brand', 'legal', 'operation', 'sales', 'solution', 'intel', 'finance', 'ops-policy', 'mba'].includes(activeAgent.name) && (
             <GenericAgentPage agent={activeAgent} />
           )}
       </main>

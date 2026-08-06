@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useState } from 'react'
 import type { IntelCandidate, IntelFeedType } from '@shared/agent-types'
 import { INTEL_FEED_TYPES } from '@shared/agent-types'
 
@@ -430,7 +430,7 @@ export function IntelBiddingFeed({
             {DAY_TABS.map((d) => (
               <button
                 key={d.label}
-                onClick={() => setDayFilter(d.label)}
+                onClick={() => startTransition(() => setDayFilter(d.label))}
                 className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                   dayFilter === d.label ? 'border-jushi-accent bg-jushi-accent text-white' : 'border-slate-300 text-slate-500'
                 }`}

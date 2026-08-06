@@ -68,6 +68,8 @@ export const IPC = {
   intelReportKeywordsGet: 'intel:report-keywords-get',
   intelReportKeywordsSet: 'intel:report-keywords-set',
   biddingFollowWinner: 'bidding:follow-winner',
+  mbaListCourses: 'mba:list-courses',
+  mbaUploadCourse: 'mba:upload-course',
 
   legalListDocs: 'legal:list-docs',
   legalMarkReviewed: 'legal:mark-reviewed',
