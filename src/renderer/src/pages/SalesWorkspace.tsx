@@ -583,9 +583,10 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   async function handleDirectImport(preview: PreviewCard): Promise<void> {
     setBusy(true)
     try {
-      const { added, updated, skipped } = await window.api.sales.importExcel(preview.relativePath)
+      const { added, updated, skipped, attachedImages } = await window.api.sales.importExcel(preview.relativePath)
       flash(
         `「${preview.fileName}」已直接导入：新增 ${added} 条、更新 ${updated} 条` +
+          ((attachedImages ?? 0) > 0 ? `、表格内嵌图片自动挂图 ${attachedImages} 张` : '') +
           (skipped > 0 ? `、跳过 ${skipped} 条（多条同名产品无法定位，请手动更新）` : '')
       )
       setPreviews((prev) => prev.filter((x) => x !== preview))

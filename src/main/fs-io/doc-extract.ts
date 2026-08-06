@@ -35,6 +35,8 @@ function cellToString(value: ExcelJS.CellValue): string {
 export interface SheetData {
   name: string
   rows: string[][]
+  /** 与 rows 对齐的原始 Excel 行号（1 基）——includeEmpty:false 跳过空行后行号会错位，内嵌图片按它对齐 */
+  rowNumbers: number[]
 }
 
 export async function readWorkbookRows(filePath: string): Promise<SheetData[]> {
@@ -48,11 +50,13 @@ export async function readWorkbookRows(filePath: string): Promise<SheetData[]> {
   const sheets: SheetData[] = []
   workbook.eachSheet((ws) => {
     const rows: string[][] = []
-    ws.eachRow({ includeEmpty: false }, (row) => {
+    const rowNumbers: number[] = []
+    ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       const values = Array.isArray(row.values) ? row.values.slice(1) : []
       rows.push(values.map((v) => cellToString(v as ExcelJS.CellValue).trim()))
+      rowNumbers.push(rowNumber)
     })
-    sheets.push({ name: ws.name, rows })
+    sheets.push({ name: ws.name, rows, rowNumbers })
   })
   return sheets
 }
@@ -141,6 +145,8 @@ export interface HeaderDetection {
   /** 字段名 → 命中的列序号 */
   fieldMapping: Record<string, number>
   dataRows: string[][]
+  /** 与 dataRows 对齐的原始 Excel 行号（1 基），内嵌图片按行归属产品 */
+  dataRowNumbers: number[]
 }
 
 function mapHeaderRow(row: string[]): Record<string, number> {
@@ -192,18 +198,54 @@ export function detectHeader(sheets: SheetData[]): HeaderDetection | null {
     }
     if (best) {
       const { i, mapping } = best
-      return {
-        sheetName: sheet.name,
-        headerRowIndex: i,
-        headers: sheet.rows[i],
-        fieldMapping: mapping,
-        dataRows: sheet.rows.slice(i + 1).filter((r) => {
-          const name = (r[mapping['产品名称']] ?? '').trim()
-          // 汇总行（"合计(元)"落在名称列）不是产品
-          return name !== '' && !/^合\s*计/.test(name)
-        })
+      const dataRows: string[][] = []
+      const dataRowNumbers: number[] = []
+      for (let j = i + 1; j < sheet.rows.length; j++) {
+        const r = sheet.rows[j]
+        const name = (r[mapping['产品名称']] ?? '').trim()
+        // 汇总行（"合计(元)"落在名称列）不是产品
+        if (name === '' || /^合\s*计/.test(name)) continue
+        dataRows.push(r)
+        dataRowNumbers.push(sheet.rowNumbers[j])
       }
+      return { sheetName: sheet.name, headerRowIndex: i, headers: sheet.rows[i], fieldMapping: mapping, dataRows, dataRowNumbers }
     }
   }
   return null
+}
+
+/**
+ * 读取 xlsx 内嵌图片，按锚点行归属：Map<"工作表名|Excel行号(1基)", {ext, buffer}>。
+ * 供应商清单常把产品图浮动锚在对应行上——每行取第一张；csv/无图返回空 Map。
+ */
+export async function readWorkbookRowImages(filePath: string): Promise<Map<string, { ext: string; buffer: Buffer }>> {
+  const map = new Map<string, { ext: string; buffer: Buffer }>()
+  if (extname(filePath).toLowerCase() !== '.xlsx') return map
+  const workbook = new ExcelJS.Workbook()
+  try {
+    await workbook.xlsx.readFile(filePath)
+  } catch {
+    return map
+  }
+  workbook.eachSheet((ws) => {
+    let images: { imageId: string; range: { tl?: { nativeRow?: number } } }[] = []
+    try {
+      images = ws.getImages() as typeof images
+    } catch {
+      return
+    }
+    for (const img of images) {
+      const excelRow = Math.floor(Number(img.range?.tl?.nativeRow ?? -1)) + 1
+      if (excelRow <= 0) continue
+      const key = `${ws.name}|${excelRow}`
+      if (map.has(key)) continue
+      try {
+        const media = workbook.getImage(Number(img.imageId)) as unknown as { extension?: string; buffer?: Buffer }
+        if (media?.buffer) map.set(key, { ext: media.extension || 'png', buffer: Buffer.from(media.buffer) })
+      } catch {
+        // 单张图取不出跳过
+      }
+    }
+  })
+  return map
 }

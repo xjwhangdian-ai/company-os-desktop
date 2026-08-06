@@ -23,7 +23,7 @@ import type {
 } from '@shared/agent-types'
 import { generateQuoteXlsx, type QuoteRow } from '../docgen/quote-xlsx'
 import type { CellValue } from 'exceljs'
-import { detectHeader, readWorkbookRows } from './doc-extract'
+import { detectHeader, readWorkbookRows, readWorkbookRowImages } from './doc-extract'
 
 // ============ 销售工作台的数据层 ============
 // 统一 inbox/outputs 约定后，供应商资料原件在输入侧 inbox/01_销售_sales/供应商资料/（见 upload-router），
@@ -193,6 +193,8 @@ export interface MergeResult {
   updated: number
   /** 供应商为空且按产品名匹配到多条同名产品——不知道该更新哪条，跳过待人工处理 */
   skipped: number
+  /** 从表格内嵌图片自动挂到产品的张数（机械导入 xlsx 时按锚点行归属） */
+  attachedImages?: number
 }
 
 /**
@@ -358,19 +360,48 @@ export async function importExcelByHeader(dataDir: string, relativePath: string)
   const detection = detectHeader(sheets)
   if (!detection) throw new Error('没有识别到可用表头（至少要有"产品名称"列），请改用 AI 解析')
   const sourceFile = basename(relativePath)
+  // 表格内嵌产品图：按锚点行号归属到对应产品行（供应商清单常见做法）
+  const rowImages = await readWorkbookRowImages(full)
   const entries: ProductFields[] = []
-  for (const row of detection.dataRows) {
+  const entryImages: ({ ext: string; buffer: Buffer } | null)[] = []
+  for (let idx = 0; idx < detection.dataRows.length; idx++) {
+    const row = detection.dataRows[idx]
     const raw: Record<string, unknown> = { 来源文件: sourceFile }
     for (const [field, col] of Object.entries(detection.fieldMapping)) {
       raw[field] = row[col] ?? ''
     }
     const clean = sanitizeFields(raw)
-    if (clean) entries.push(clean)
+    if (clean) {
+      entries.push(clean)
+      entryImages.push(rowImages.get(`${detection.sheetName}|${detection.dataRowNumbers[idx]}`) ?? null)
+    }
   }
   const db = readProductDb(dataDir)
   const result = mergeEntries(db, entries)
+  // 附图：写入图片库并挂到对应产品（按 名称+型号+品牌 找回刚合并的记录；已有图片的不覆盖）
+  let attached = 0
+  if (entryImages.some(Boolean)) {
+    ensureSalesDirs(dataDir)
+    for (let i = 0; i < entries.length; i++) {
+      const img = entryImages[i]
+      if (!img) continue
+      const e = entries[i]
+      const target = [...db.products]
+        .reverse()
+        .find((p) => p.产品名称 === e.产品名称 && (p.型号 ?? '') === (e.型号 ?? '') && (p.品牌 ?? '') === (e.品牌 ?? ''))
+      if (!target || target.图片) continue
+      const fileName = `${normName(target.产品名称).slice(0, 40)}_${target.id.slice(0, 8)}.${img.ext.replace(/^\./, '') || 'png'}`
+      try {
+        writeFileSync(join(dataDir, IMAGE_DIR_REL, fileName), img.buffer)
+        target.图片 = `销售/产品库/图片库/${fileName}`
+        attached += 1
+      } catch {
+        // 单张写入失败不影响导入
+      }
+    }
+  }
   writeProductDb(dataDir, db)
-  return result
+  return { ...result, attachedImages: attached }
 }
 
 /** 把报价单勾选产品的图片导出到报价产出目录的 图片/ 子文件夹（文件名=产品名称），返回导出情况 */
