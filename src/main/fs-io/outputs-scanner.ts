@@ -12,7 +12,8 @@ export const AGENT_OUTPUT_FOLDER: Record<AgentName, string> = {
   brand: '06_品牌_brand',
   'ops-policy': '07_行政人力_ops-policy',
   finance: '08_财务_finance',
-  intel: '09_情报_intel'
+  intel: '09_情报_intel',
+  mba: '10_MBA学习_mba'
 }
 
 const IGNORE_NAMES = new Set(['.DS_Store', 'README.md'])

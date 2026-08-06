@@ -13,7 +13,8 @@ const KNOWN_AGENT_NAMES: AgentName[] = [
   'brand',
   'ops-policy',
   'finance',
-  'intel'
+  'intel',
+  'mba'
 ]
 
 interface AgentFrontmatter {

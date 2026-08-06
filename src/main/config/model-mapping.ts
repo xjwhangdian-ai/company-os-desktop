@@ -18,6 +18,7 @@ const AGENT_DISPLAY_META: Record<AgentName, Omit<AgentDisplayMeta, 'name'>> = {
   'ops-policy': { displayName: '行政人力', role: '行政/人力', whenToUse: '规章制度 / SOP / 招聘', color: '#4d7c0f', icon: 'ClipboardList' },
   finance: { displayName: '财务测算', role: '财务', whenToUse: '财税 / 成本 / 预算', color: '#0891b2', icon: 'Calculator' },
   intel: { displayName: '行业情报', role: '跨职能支持', whenToUse: '行业趋势 / 政策 / 竞品', color: '#525252', icon: 'Radar' }
+  mba: { displayName: 'MBA学习', role: '个人·学习', whenToUse: '课程作业 / 论文 / 案例分析', color: '#0369a1', icon: 'GraduationCap' },
 }
 
 /**

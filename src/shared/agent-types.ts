@@ -10,6 +10,7 @@ export type AgentName =
   | 'ops-policy'
   | 'finance'
   | 'intel'
+  | 'mba'
 
 export interface AgentDefinition {
   name: AgentName
