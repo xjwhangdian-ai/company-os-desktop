@@ -280,7 +280,7 @@ export interface CompanyOsApi {
     /** 供应商资料/投标报价文件上传到 销售/产品库/原始资料/，生成伴生提取文本，xlsx/csv 顺带做表头识别预览 */
     uploadSupplierDoc(sourcePath: string): Promise<SupplierDocPreview>
     /** 按表头识别结果把 xlsx/csv 机械导入产品库（不经过 AI） */
-    importExcel(relativePath: string): Promise<{ added: number; updated: number; skipped: number }>
+    importExcel(relativePath: string): Promise<{ added: number; updated: number; skipped: number; attachedImages?: number }>
     /** 把报价单产品的图片导出到 outputs 报价目录的 图片/ 子文件夹 */
     exportQuoteImages(productIds: string[], customerName: string): Promise<{ dir: string; exported: number; missing: string[] }>
     /** PDF 产品手册 → 供应商报价清单骨架：分身先提取 JSON（needExtract 时），App 机械填模板生成 xlsx */
