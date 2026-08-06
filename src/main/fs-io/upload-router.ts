@@ -345,7 +345,8 @@ export function listRecentOperationArticles(dataDir: string, limit = 10): Recent
 }
 
 // ── MBA 学习分身：按课程归档（inbox/10_MBA学习_mba/{课程}/{分类}/）────────────
-export type MbaUploadCategory = '课件' | '作业与要求' | '课堂录音'
+/** 课程三类 + 论文材料分类（开题与选题/文献/数据与案例/导师沟通），统一走本通道 */
+export type MbaUploadCategory = string
 
 export function uploadToMbaCourse(
   dataDir: string,
@@ -354,7 +355,8 @@ export function uploadToMbaCourse(
   sourcePath: string
 ): { absPath: string; relativePath: string } {
   const c = sanitizeSeg(course).slice(0, 40) || '未分类课程'
-  const rel = join('inbox', '10_MBA学习_mba', c, category)
+  const cat = sanitizeSeg(category).slice(0, 20) || '未分类'
+  const rel = join('inbox', '10_MBA学习_mba', c, cat)
   const destDir = join(dataDir, rel)
   mkdirSync(destDir, { recursive: true })
   const dest = join(destDir, basename(sourcePath))
@@ -387,11 +389,26 @@ export function listMbaCourses(dataDir: string): MbaCourseInfo[] {
         return false
       }
     })
-    .map((name) => ({
-      name,
-      课件数: count(join(root, name, '课件')),
-      作业数: count(join(root, name, '作业与要求')),
-      录音数: count(join(root, name, '课堂录音'))
-    }))
+    .map((name) => {
+      // 直接丢在课程根目录的散文件（历史习惯）计入课件数，别让用户以为文件丢了
+      let loose = 0
+      try {
+        loose = readdirSync(join(root, name)).filter((n) => {
+          try {
+            return !n.startsWith('.') && statSync(join(root, name, n)).isFile()
+          } catch {
+            return false
+          }
+        }).length
+      } catch {
+        // 忽略
+      }
+      return {
+        name,
+        课件数: count(join(root, name, '课件')) + loose,
+        作业数: count(join(root, name, '作业与要求')),
+        录音数: count(join(root, name, '课堂录音'))
+      }
+    })
     .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
 }
