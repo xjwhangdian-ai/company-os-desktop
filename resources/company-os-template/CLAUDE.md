@@ -87,7 +87,7 @@
 - tools/gzh/：公众号一键排版引擎（**自然语言触发**，由 operation 分身用；详见 tools/gzh/README.md）。
   - 写好公众号 .md 后，说"**把这篇公众号排版 / 美化一下这篇推文**" → 跑 `tools/gzh/gzh_style.js` 生成炬视固定风格 HTML → 浏览器「一键复制」粘贴进公众号编辑器。
   - 固定风格的单一来源是 `tools/gzh/theme.js`（炬视 VI 配色），**改全局风格只改它**，不在单篇里改样式。等效快捷命令 `/公众号排版`。
-- tools/video-gen/：数字人短视频内容工厂（由 operation 分身用；详见 tools/video-gen/README.md）。先生成可审核的选题、口播、分镜、平台文案与复盘材料包；仅当人工已提供经授权的人像/声音素材并完成本地配置时，才可生成试制视频。数字人素材只放 `inbox/05_运营_operation/_数字人素材/`，成品与材料包统一归档到 `outputs/05_运营_operation/{日期}_{主题}_数字人短视频/`。
+- tools/video-gen/：数字人短视频创意蓝图工厂（由 operation 分身用；详见 tools/video-gen/README.md）。先输出 ChatGPT 图像模型静态关键帧提示词与可审核分镜，再按每镜头导出 Seedance 2.5 / Kling 3.0 图生视频提示词；人工把已选关键帧和提示词上传到视频平台生成动态镜头。分身不读取或保存平台密钥。数字人素材只放 `inbox/05_运营_operation/_数字人素材/`，蓝图、关键帧、动态镜头与复盘统一归档到 `outputs/05_运营_operation/{日期}_{主题}_数字人短视频/`。
 - tools/intel-reports/：研报情报管线（intel 分身用，行业趋势+政策文件；从 sgpjbg.com 抓元数据+下载页链接，不下 PDF；详见 tools/intel-reports/README.md）。launchd 每天 07:20 跑 `run_reports.sh` → `outputs/09_情报_intel/研报追踪/{日期}_研报信息流.json`。凭 Chrome 调试 profile 登录态，账号密码绝不写文件。
 - tools/bidding-intel/：招投标每日追踪管线（intel 分身用，原 OpenClaw「黄药师」迁移版；详见 tools/bidding-intel/README.md）。
   - launchd 每天 07:00 自动跑 `run_daily.sh`：抓取浙江政采/台州公共资源/乐采云/台州阳光采购四平台 → 聚合文本+当日 JSON 落 `inbox/09_情报_intel/招投标每日/{日期}/`。
