@@ -101,6 +101,7 @@ export const IPC = {
   syncLastAt: 'sync:last-at',
 
   salesListProducts: 'sales:list-products',
+  salesListCategoryDict: 'sales:list-category-dict',
   salesSaveProduct: 'sales:save-product',
   salesRemoveProduct: 'sales:remove-product',
   salesSetProductImage: 'sales:set-product-image',

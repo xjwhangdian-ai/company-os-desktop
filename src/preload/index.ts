@@ -169,6 +169,7 @@ const api: CompanyOsApi = {
   },
   sales: {
     listProducts: () => ipcRenderer.invoke(IPC.salesListProducts),
+    listCategoryDict: () => ipcRenderer.invoke(IPC.salesListCategoryDict),
     saveProduct: (fields: ProductFields, id?: string) => ipcRenderer.invoke(IPC.salesSaveProduct, fields, id),
     removeProduct: (id: string) => ipcRenderer.invoke(IPC.salesRemoveProduct, id),
     setProductImage: (id: string, sourcePath: string) => ipcRenderer.invoke(IPC.salesSetProductImage, id, sourcePath),

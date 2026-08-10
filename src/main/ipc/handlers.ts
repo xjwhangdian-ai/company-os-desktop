@@ -77,6 +77,7 @@ import {
   generateSupplierQuoteList,
   importExcelByHeader,
   linkCustomerFile,
+  listCategoryDict,
   listCustomers,
   listProducts,
   listQuotationTemplates,
@@ -355,6 +356,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   // ============ 销售工作台 ============
   ipcMain.handle(IPC.salesListProducts, () => listProducts(getDataDir()))
+  ipcMain.handle(IPC.salesListCategoryDict, () => listCategoryDict(getDataDir()))
   ipcMain.handle(IPC.salesSaveProduct, (_e, fields: ProductFields, id?: string) => saveProduct(getDataDir(), fields, id))
   ipcMain.handle(IPC.salesRemoveProduct, (_e, id: string) => removeProduct(getDataDir(), id))
 

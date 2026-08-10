@@ -5,6 +5,7 @@ import type {
   BidProjectCard,
   BiddingProject,
   BiddingUploadResult,
+  CategoryL1,
   Company,
   ContractCategory,
   ContractTemplate,
@@ -272,6 +273,8 @@ export interface CompanyOsApi {
   sales: {
     /** 读取产品库（会先自动合并 _待入库/ 里 agent 暂存的解析结果）；skipped=同名多供应商无法定位的更新条目数 */
     listProducts(): Promise<{ products: ProductEntry[]; ingested: number; skipped: number }>
+    /** 读《产品分类规范》分类字典，供一级/二级分类下拉取值；字典文件缺失返回空数组 */
+    listCategoryDict(): Promise<CategoryL1[]>
     /** 新增（不传 id）或整体更新（传 id）一条产品记录 */
     saveProduct(fields: ProductFields, id?: string): Promise<ProductEntry>
     removeProduct(id: string): Promise<void>

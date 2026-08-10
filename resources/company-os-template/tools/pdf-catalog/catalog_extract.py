@@ -336,7 +336,7 @@ def _save_final(im, dst, min_side=800):
     im.save(dst, quality=92)
 
 
-_SHEET_COLS = ["序号", "产品名称", "产品类别", "品牌", "型号 / 规格", "生产制造商", "产地",
+_SHEET_COLS = ["序号", "产品名称", "一级分类", "二级分类", "产品类别", "品牌", "型号 / 规格", "生产制造商", "产地",
                "技术规格参数", "单位", "税率", "质保期(月)", "供货价(含税单价/元)", "交货周期(天)",
                "最小起订量", "开票类型", "备注", "对应画册抠图的序列"]
 
@@ -369,7 +369,7 @@ def _write_product_sheet(out, rows):
             c = ws.cell(row=3, column=ci, value=name)
             c.font = Font(bold=True)
             c.fill = head_fill
-        widths = [6, 22, 14, 12, 18, 14, 8, 50, 6, 8, 10, 16, 12, 10, 10, 12, 20]
+        widths = [6, 22, 16, 16, 14, 12, 18, 14, 8, 50, 6, 8, 10, 16, 12, 10, 10, 12, 20]  # 与 _SHEET_COLS 逐列对应
         for ci, w in enumerate(widths, 1):
             ws.column_dimensions[ws.cell(row=3, column=ci).column_letter].width = w
         img_col_letter = ws.cell(row=3, column=len(_SHEET_COLS)).column_letter
@@ -461,6 +461,8 @@ def apply_pairing(out, clean=False):
         sheet_rows.append({
             "序号": seq,
             "产品名称": it.get("产品名称") or "",
+            "一级分类": "",   # 分类字典 A-L 的名称，画册推不出来，留空由人工/分身按《产品分类规范》补
+            "二级分类": "",
             "产品类别": it.get("分类") or "",
             "品牌": brand,
             "生产制造商": brand,

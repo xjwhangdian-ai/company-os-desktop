@@ -12,6 +12,7 @@ import {
 } from 'node:fs'
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import type {
+  CategoryL1,
   CustomerEntry,
   CustomerFields,
   LinkedFile,
@@ -45,6 +46,8 @@ const STAGING_DIR_REL = join('销售', '产品库', '_待入库')
 const STAGING_DONE_REL = join('销售', '产品库', '_待入库', '已合并')
 const IMAGE_DIR_REL = join('销售', '产品库', '图片库')
 const TEMPLATE_DIR_REL = join('销售', '_模板', '报价模板')
+/** 产品分类规范：一级/二级固定枚举的唯一来源（人工维护，App 只读） */
+const CATEGORY_DICT_REL = join('销售', '产品库', '分类字典.json')
 
 interface ProductDb {
   version: number
@@ -101,6 +104,8 @@ function writeJsonAtomic(path: string, data: unknown): void {
 
 const PRODUCT_FIELD_KEYS: (keyof ProductFields)[] = [
   '产品名称',
+  '一级分类',
+  '二级分类',
   '产品分类',
   '品牌',
   '型号',
@@ -128,8 +133,14 @@ const PRODUCT_FIELD_KEYS: (keyof ProductFields)[] = [
 const V3_NEW_KEYS = ['品牌', '型号', '生产制造商', '产地', '单位', '税率', '质保期', '物料代码'] as const
 /** v3.1 追加：我方自编型号与交货期（对外报价关键项），老库同样补空串 */
 const V3_1_NEW_KEYS = ['瑾智型号', '交货期'] as const
+/** v3.2 追加：按《产品分类规范》把分类拆成一级/二级（固定枚举）+ 产品分类（三级细分） */
+const V3_2_NEW_KEYS = ['一级分类', '二级分类'] as const
 
-/** v1（单价字段）→ v2（三档价格）→ v3（品牌/型号/制造商等贸易字段）就地迁移 */
+/**
+ * v1（单价字段）→ v2（三档价格）→ v3（品牌/型号/制造商等贸易字段）→ v3.2（分类三级拆分）就地迁移。
+ * v3.2 迁移顺带把老库里写成路径的分类（"视频监控与智能感知/摄像机与云台/云台"，旧 UI 用 / 分隔
+ * 表示层级）按位拆到一级/二级/三级，不丢原有的分类导航结构。
+ */
 function readProductDb(dataDir: string): ProductDb {
   const path = join(dataDir, PRODUCT_DB_REL)
   const db = readJson<ProductDb>(path, { version: 3, products: [] })
@@ -140,9 +151,30 @@ function readProductDb(dataDir: string): ProductDb {
       delete p.单价
       changed = true
     }
-    for (const k of ['产品分类', '成本价', '建议销售价', '投标报价', ...V3_NEW_KEYS, ...V3_1_NEW_KEYS] as const) {
+    const 缺分类字段 = p.一级分类 === undefined && p.二级分类 === undefined
+    for (const k of [
+      '产品分类',
+      '成本价',
+      '建议销售价',
+      '投标报价',
+      ...V3_NEW_KEYS,
+      ...V3_1_NEW_KEYS,
+      ...V3_2_NEW_KEYS
+    ] as const) {
       if (p[k] === undefined) {
         p[k] = ''
+        changed = true
+      }
+    }
+    if (缺分类字段 && p.产品分类) {
+      const parts = p.产品分类
+        .split(/[/＞>]/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+      if (parts.length > 1) {
+        p.一级分类 = parts[0]
+        p.二级分类 = parts[1] ?? ''
+        p.产品分类 = parts.slice(2).join('/')
         changed = true
       }
     }
@@ -151,8 +183,27 @@ function readProductDb(dataDir: string): ProductDb {
     db.version = 3
     changed = true
   }
+  // 迁移补出来的字段会追加在 JSON 对象末尾（一级分类排到了备注后面）。
+  // 产品库.json 是人会直接打开看的文件，键序乱了就按 PRODUCT_FIELD_KEYS 的口径重排一次。
+  const ordered = db.products.map(orderKeys)
+  if (ordered.some((p, i) => Object.keys(p).join() !== Object.keys(db.products[i]).join())) {
+    db.products = ordered
+    changed = true
+  }
   if (changed && existsSync(path)) writeJsonAtomic(path, db)
   return db
+}
+
+/** 按 PRODUCT_FIELD_KEYS 规定的顺序重建一条记录（id 在前、更新时间在后） */
+function orderKeys(p: ProductEntry): ProductEntry {
+  const src = p as unknown as Record<string, unknown>
+  const out: Record<string, unknown> = { id: p.id }
+  for (const k of PRODUCT_FIELD_KEYS) out[k] = src[k] ?? ''
+  for (const k of Object.keys(src)) {
+    if (k !== 'id' && k !== '更新时间' && !(k in out)) out[k] = src[k]
+  }
+  out.更新时间 = p.更新时间
+  return out as unknown as ProductEntry
 }
 
 function writeProductDb(dataDir: string, db: ProductDb): void {
@@ -295,6 +346,34 @@ export function listProducts(dataDir: string): { products: ProductEntry[]; inges
   if (ingested > 0) writeProductDb(dataDir, db)
   const products = [...db.products].sort((a, b) => b.更新时间 - a.更新时间)
   return { products, ingested, skipped }
+}
+
+/**
+ * 读《产品分类规范》分类字典（销售/产品库/分类字典.json）供一级/二级下拉取值。
+ * 字典由人工维护、App 只读；文件缺失或格式不对就返回空数组——UI 降级成自由填写，不阻塞录入。
+ */
+export function listCategoryDict(dataDir: string): CategoryL1[] {
+  const path = join(dataDir, CATEGORY_DICT_REL)
+  if (!existsSync(path)) return []
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf-8')) as { 分类树?: unknown }
+    if (!Array.isArray(raw.分类树)) return []
+    return (raw.分类树 as Record<string, unknown>[])
+      .filter((a) => typeof a?.名称 === 'string' && a.名称)
+      .map((a) => ({
+        编码: String(a.编码 ?? ''),
+        名称: String(a.名称),
+        二级: (Array.isArray(a.二级) ? (a.二级 as Record<string, unknown>[]) : [])
+          .filter((b) => typeof b?.名称 === 'string' && b.名称)
+          .map((b) => ({
+            编码: String(b.编码 ?? ''),
+            名称: String(b.名称),
+            三级: (Array.isArray(b.三级) ? b.三级 : []).map((c) => String(c)).filter(Boolean)
+          }))
+      }))
+  } catch {
+    return []
+  }
 }
 
 export function saveProduct(dataDir: string, fields: ProductFields, id?: string): ProductEntry {

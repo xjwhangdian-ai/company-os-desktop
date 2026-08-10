@@ -11,6 +11,8 @@ import type { CellValue } from 'exceljs'
 interface ProductLike {
   id: string
   产品名称: string
+  一级分类: string
+  二级分类: string
   产品分类: string
   品牌: string
   型号: string
@@ -28,7 +30,7 @@ const CONTROLLED_RE = /警棍|手铐|脚铐|催泪|辣椒水|电击|警械|镇�
 const LICENSE_RE = /执法记录|金属探测|X光|X射线|酒精|背散射|核素|辐射|剂量|防弹|防刺|头盔|盾牌|对讲|图传|无线/
 
 function classify(p: ProductLike): '⛔ 管制-禁止公开上架' | '⚠ 需资质核验' | '✅ 可上架' {
-  const hay = `${p.产品名称} ${p.产品分类} ${p.技术参数}`
+  const hay = `${p.产品名称} ${p.一级分类} ${p.二级分类} ${p.产品分类} ${p.技术参数}`
   if (CONTROLLED_RE.test(hay)) return '⛔ 管制-禁止公开上架'
   if (LICENSE_RE.test(hay)) return '⚠ 需资质核验'
   return '✅ 可上架'
