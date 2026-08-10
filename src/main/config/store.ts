@@ -1,8 +1,8 @@
-import { app } from 'electron'
+import { app, safeStorage } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AgentName, AppConfig, Company, MemberRole, ModelMapping, ProviderConfig, ProviderId, TeamMember } from '@shared/agent-types'
+import type { AgentName, AppConfig, Company, MemberRole, ModelMapping, ProviderConfig, ProviderId, TeamMember, VideoModelConfigPatch } from '@shared/agent-types'
 
 // 手写的极简本地 JSON 配置持久化，替代 electron-store：
 // 1) electron-store v10 依赖的 conf v14 是纯 exports-map 包，在本项目
@@ -104,6 +104,16 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
   }
 }
 
+interface StoredVideoModelConfig {
+  seedance: { enabled: boolean; apiKeyCipherText?: string; modelId: string }
+  kling: { enabled: boolean; accessKeyCipherText?: string; secretKeyCipherText?: string; modelId: string }
+}
+
+const DEFAULT_STORED_VIDEO_MODELS: StoredVideoModelConfig = {
+  seedance: { enabled: false, modelId: 'doubao-seedance-2-5' },
+  kling: { enabled: false, modelId: 'kling-v3' }
+}
+
 /** PIN 只做"防止别人顺手冒充你"的轻量校验，不是真账号安全——纯本地 sha256，不加盐，跟这个威胁模型相称就够了。
  *  role 同理是界面级权限（管理员/普通员工），不是安全边界。 */
 interface TeamMemberRecord {
@@ -121,6 +131,8 @@ interface StoreSchemaV4 {
   activeCompanyId: string | null
   activeProviderId: ProviderId
   providers: Record<ProviderId, ProviderConfig>
+  /** 数字人短视频模型凭证，只保存在本机 userData 配置文件，不同步到公司数据仓库。 */
+  videoModels?: StoredVideoModelConfig
   teamMembers: TeamMemberRecord[]
   /** 每公司最近一次成功同步的时间戳（驱动每日开/关同步提示）；老配置没有此字段 */
   lastSyncAt?: Record<string, number>
@@ -265,6 +277,7 @@ const DEFAULTS: StoreSchemaV4 = {
   activeCompanyId: null,
   activeProviderId: 'anthropic',
   providers: DEFAULT_PROVIDERS,
+  videoModels: DEFAULT_STORED_VIDEO_MODELS,
   teamMembers: []
 }
 
@@ -311,7 +324,11 @@ function readAll(): StoreSchemaV4 {
     } else {
       // 补全新增供应商预设（用户配置文件可能是旧版本 app 写入的，缺新供应商的默认槽位）
       const providers = { ...structuredClone(DEFAULT_PROVIDERS), ...raw.providers }
-      schema = { ...structuredClone(DEFAULTS), ...raw, providers }
+      const videoModels: StoredVideoModelConfig = {
+        seedance: { ...DEFAULT_STORED_VIDEO_MODELS.seedance, enabled: Boolean(raw.videoModels?.seedance?.enabled), modelId: raw.videoModels?.seedance?.modelId || DEFAULT_STORED_VIDEO_MODELS.seedance.modelId, apiKeyCipherText: raw.videoModels?.seedance?.apiKeyCipherText },
+        kling: { ...DEFAULT_STORED_VIDEO_MODELS.kling, enabled: Boolean(raw.videoModels?.kling?.enabled), modelId: raw.videoModels?.kling?.modelId || DEFAULT_STORED_VIDEO_MODELS.kling.modelId, accessKeyCipherText: raw.videoModels?.kling?.accessKeyCipherText, secretKeyCipherText: raw.videoModels?.kling?.secretKeyCipherText }
+      }
+      schema = { ...structuredClone(DEFAULTS), ...raw, providers, videoModels }
     }
     const { schema: single, changed } = collapseToSingleCompany(schema)
     const { schema: final, changed: provChanged } = reconcileProviders(single)
@@ -327,8 +344,18 @@ function writeAll(data: StoreSchemaV4): void {
 }
 
 export function getConfig(): AppConfig {
-  const { companies, activeCompanyId, activeProviderId, providers } = readAll()
-  return { companies, activeCompanyId, activeProviderId, providers }
+  const { companies, activeCompanyId, activeProviderId, providers, videoModels } = readAll()
+  const stored = videoModels ?? structuredClone(DEFAULT_STORED_VIDEO_MODELS)
+  return {
+    companies,
+    activeCompanyId,
+    activeProviderId,
+    providers,
+    videoModels: {
+      seedance: { enabled: stored.seedance.enabled, modelId: stored.seedance.modelId, apiKeyConfigured: Boolean(stored.seedance.apiKeyCipherText) },
+      kling: { enabled: stored.kling.enabled, modelId: stored.kling.modelId, accessKeyConfigured: Boolean(stored.kling.accessKeyCipherText), secretKeyConfigured: Boolean(stored.kling.secretKeyCipherText) }
+    }
+  }
 }
 
 export function listCompanies(): Company[] {
@@ -371,6 +398,30 @@ export function setProviderConfig(id: ProviderId, patch: Partial<Omit<ProviderCo
   const all = readAll()
   const current = all.providers[id]
   writeAll({ ...all, providers: { ...all.providers, [id]: { ...current, ...patch } } })
+}
+
+export function setVideoModelConfig(patch: VideoModelConfigPatch): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('此设备无法使用系统加密存储，视频模型凭证没有保存；请启用系统钥匙串/凭据保护后重试')
+  }
+  const all = readAll()
+  const current = all.videoModels ?? structuredClone(DEFAULT_STORED_VIDEO_MODELS)
+  const videoModels: StoredVideoModelConfig = {
+    seedance: {
+      ...current.seedance,
+      enabled: patch.seedance?.enabled ?? current.seedance.enabled,
+      modelId: patch.seedance?.modelId?.trim() || current.seedance.modelId,
+      apiKeyCipherText: patch.seedance?.apiKey ? safeStorage.encryptString(patch.seedance.apiKey).toString('base64') : current.seedance.apiKeyCipherText
+    },
+    kling: {
+      ...current.kling,
+      enabled: patch.kling?.enabled ?? current.kling.enabled,
+      modelId: patch.kling?.modelId?.trim() || current.kling.modelId,
+      accessKeyCipherText: patch.kling?.accessKey ? safeStorage.encryptString(patch.kling.accessKey).toString('base64') : current.kling.accessKeyCipherText,
+      secretKeyCipherText: patch.kling?.secretKey ? safeStorage.encryptString(patch.kling.secretKey).toString('base64') : current.kling.secretKeyCipherText
+    }
+  }
+  writeAll({ ...all, videoModels })
 }
 
 export function getDataDir(): string {

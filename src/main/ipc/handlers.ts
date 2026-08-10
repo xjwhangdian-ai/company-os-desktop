@@ -1,5 +1,5 @@
 import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
-import { addCompany, addTeamMember, resetAllTeamMembers, changePin, getActiveCompany, getConfig, getDataDir, getGithubToken, getLastSyncAt, listTeamMembers, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setGithubToken, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, syncTeamRoster, verifyPin } from '../config/store'
+import { addCompany, addTeamMember, resetAllTeamMembers, changePin, getActiveCompany, getConfig, getDataDir, getGithubToken, getLastSyncAt, listTeamMembers, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setGithubToken, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, setVideoModelConfig, syncTeamRoster, verifyPin } from '../config/store'
 import { copyFileSync, cpSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc-channels'
@@ -124,6 +124,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.configSetProviderConfig, (_e, id: ProviderId, patch: Partial<Omit<ProviderConfig, 'id'>>) =>
     setProviderConfig(id, patch)
   )
+  ipcMain.handle(IPC.configSetVideoModelConfig, (_e, patch) => setVideoModelConfig(patch))
 
   ipcMain.handle(IPC.configAddCompany, (_e, name: string) => addCompany(name))
   ipcMain.handle(IPC.configRemoveCompany, (_e, id: string) => removeCompany(id))

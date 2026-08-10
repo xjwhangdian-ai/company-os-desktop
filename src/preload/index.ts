@@ -15,6 +15,7 @@ import type {
   ProductFields,
   ProviderConfig,
   ProviderId,
+  VideoModelConfigPatch,
   QuoteLineInput,
   SolutionFileKind,
 } from '@shared/agent-types'
@@ -26,6 +27,7 @@ const api: CompanyOsApi = {
     setActiveProvider: (id: ProviderId) => ipcRenderer.invoke(IPC.configSetActiveProvider, id),
     setProviderConfig: (id: ProviderId, patch: Partial<Omit<ProviderConfig, 'id'>>) =>
       ipcRenderer.invoke(IPC.configSetProviderConfig, id, patch),
+    setVideoModelConfig: (patch: VideoModelConfigPatch) => ipcRenderer.invoke(IPC.configSetVideoModelConfig, patch),
     addCompany: (name: string) => ipcRenderer.invoke(IPC.configAddCompany, name),
     removeCompany: (id: string) => ipcRenderer.invoke(IPC.configRemoveCompany, id),
     setCompanyDataDir: (id: string, dir: string) => ipcRenderer.invoke(IPC.configSetCompanyDataDir, id, dir),

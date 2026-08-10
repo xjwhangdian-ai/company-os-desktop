@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppConfig, Company, ProviderConfig, ProviderId } from '@shared/agent-types'
+import type { AppConfig, Company, ProviderConfig, ProviderId, VideoModelConfigPatch } from '@shared/agent-types'
 
 interface ConfigState {
   config: AppConfig | null
@@ -12,6 +12,7 @@ interface ConfigState {
   setActiveCompany: (id: string) => Promise<void>
   setActiveProvider: (id: ProviderId) => Promise<void>
   saveProviderConfig: (id: ProviderId, patch: Partial<Omit<ProviderConfig, 'id'>>) => Promise<void>
+  saveVideoModelConfig: (patch: VideoModelConfigPatch) => Promise<void>
 }
 
 export const useConfigStore = create<ConfigState>((set, get) => ({
@@ -47,6 +48,10 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   },
   saveProviderConfig: async (id: ProviderId, patch: Partial<Omit<ProviderConfig, 'id'>>) => {
     await window.api.config.setProviderConfig(id, patch)
+    await get().load()
+  },
+  saveVideoModelConfig: async (patch: VideoModelConfigPatch) => {
+    await window.api.config.setVideoModelConfig(patch)
     await get().load()
   }
 }))

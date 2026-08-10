@@ -491,6 +491,27 @@ export interface ProviderConfig {
   modelMapping: ModelMapping
 }
 
+/** 数字人短视频模型的公开配置状态；API 凭证绝不返回到渲染层。 */
+export interface VideoModelConfig {
+  seedance: {
+    enabled: boolean
+    apiKeyConfigured: boolean
+    modelId: string
+  }
+  kling: {
+    enabled: boolean
+    accessKeyConfigured: boolean
+    secretKeyConfigured: boolean
+    modelId: string
+  }
+}
+
+/** 设置页写入的字段；凭证由主进程即时送入操作系统加密存储，绝不回传。 */
+export interface VideoModelConfigPatch {
+  seedance?: { enabled?: boolean; apiKey?: string; modelId?: string }
+  kling?: { enabled?: boolean; accessKey?: string; secretKey?: string; modelId?: string }
+}
+
 /** 一家公司 = 一个独立的 company-os 数据目录。团队成员/模型供应商配置是全局的，不按公司拆分——
  * 同一个人、同一套 API Key 可能两家公司的活都要干，只有"分身读哪套 knowledge/bidding/outputs"按公司区分。 */
 export interface Company {
@@ -504,6 +525,7 @@ export interface AppConfig {
   activeCompanyId: string | null
   activeProviderId: ProviderId
   providers: Record<ProviderId, ProviderConfig>
+  videoModels: VideoModelConfig
 }
 
 // ============ 财务工作台（记账/报税/工资社保） ============

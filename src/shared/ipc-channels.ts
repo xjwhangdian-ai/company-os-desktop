@@ -3,6 +3,7 @@ export const IPC = {
   configPickDataDir: 'config:pick-data-dir',
   configSetActiveProvider: 'config:set-active-provider',
   configSetProviderConfig: 'config:set-provider-config',
+  configSetVideoModelConfig: 'config:set-video-model-config',
 
   configAddCompany: 'config:add-company',
   configRemoveCompany: 'config:remove-company',

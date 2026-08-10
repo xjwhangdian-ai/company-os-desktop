@@ -31,6 +31,7 @@ import type {
   ProductFields,
   ProviderConfig,
   ProviderId,
+  VideoModelConfigPatch,
   QuotationTemplate,
   QuoteLineInput,
   QuoteXlsxResult,
@@ -69,6 +70,7 @@ export interface CompanyOsApi {
     pickDataDir(): Promise<string | null>
     setActiveProvider(id: ProviderId): Promise<void>
     setProviderConfig(id: ProviderId, patch: Partial<Omit<ProviderConfig, 'id'>>): Promise<void>
+    setVideoModelConfig(patch: VideoModelConfigPatch): Promise<void>
     addCompany(name: string): Promise<Company>
     removeCompany(id: string): Promise<void>
     setCompanyDataDir(id: string, dir: string): Promise<void>
