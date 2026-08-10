@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { copyFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { app } from 'electron'
 import matter from 'gray-matter'
 import type { AgentDefinition, AgentDisplayMeta, AgentName } from '@shared/agent-types'
 import { loadAgentDisplayMeta } from '../config/model-mapping'
@@ -16,6 +17,26 @@ const KNOWN_AGENT_NAMES: AgentName[] = [
   'mba'
 ]
 
+/**
+ * v0.1.14 前的公司数据目录只带 legal.md 与 ops-policy.md。合并入口上线后，
+ * 不迁移任何合同/制度文件，也不删除旧定义，只补写新的入口定义，保证升级后能立刻显示。
+ */
+function ensureAdminLegalAgent(dataDir: string): void {
+  const agentsDir = join(dataDir, '.claude', 'agents')
+  const target = join(agentsDir, 'admin-legal.md')
+  if (existsSync(target)) return
+  if (!existsSync(join(agentsDir, 'legal.md')) && !existsSync(join(agentsDir, 'ops-policy.md'))) return
+  const templateRoot = app.isPackaged
+    ? join(process.resourcesPath, 'company-os-template')
+    : join(app.getAppPath(), 'resources', 'company-os-template')
+  const source = join(templateRoot, '.claude', 'agents', 'admin-legal.md')
+  try {
+    if (existsSync(source)) copyFileSync(source, target)
+  } catch {
+    // 模板不可用时继续按现有定义加载，不阻塞其他工作台。
+  }
+}
+
 interface AgentFrontmatter {
   name?: string
   description?: string
@@ -30,6 +51,7 @@ interface AgentFrontmatter {
  * 这里不重新拼装、不替 SDK 做那部分工作。
  */
 export function loadAgentDefinitions(dataDir: string): AgentDefinition[] {
+  ensureAdminLegalAgent(dataDir)
   const agentsDir = join(dataDir, '.claude', 'agents')
   let files: string[] = []
   try {
