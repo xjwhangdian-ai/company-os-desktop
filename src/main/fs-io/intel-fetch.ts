@@ -103,7 +103,9 @@ export async function doFetch(url: string, init: RequestInit): Promise<Response>
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
 }
 
-const POLICE_KW = ['公安', '交警', '交通警察', '特警', '巡特警', '海警', '消防', '应急管理']
+// 「公安系统」标签只能表示公安系统单位或警务业务；消防、应急管理虽同属公共安全领域，
+// 但它们的普通采购（例如医院消防设备）不能误标为公安项目。
+const POLICE_SYSTEM_KW = ['公安局', '公安分局', '公安机关', '公安', '交警', '交通警察', '特警', '巡特警', '海警', '派出所', '警务', '警用']
 const TZ_LOCATION_KW = ['台州', '椒江', '黄岩', '路桥', '温岭', '临海', '玉环', '天台', '仙居', '三门']
 const YJZQ_TITLE_KW = ['意见征询', '征求意见', '需求公示', '采前公示']
 
@@ -138,7 +140,7 @@ function fmtAmount(val: unknown): string {
 }
 
 function isPolice(text: string): boolean {
-  return POLICE_KW.some((k) => text.includes(k))
+  return POLICE_SYSTEM_KW.some((k) => text.includes(k))
 }
 
 /** 请求间礼貌延时（与 python 管线的 sleep 对齐），别把政府接口打限流 */
