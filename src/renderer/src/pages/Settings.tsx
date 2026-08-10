@@ -557,10 +557,9 @@ const ALL_AGENTS: { name: import('@shared/agent-types').AgentName; label: string
   { name: 'sales', label: '销售' },
   { name: 'solution', label: '解决方案' },
   { name: 'bidding', label: '招投标' },
-  { name: 'legal', label: '法务' },
+  { name: 'admin-legal', label: '行政法务' },
   { name: 'operation', label: '运营' },
   { name: 'brand', label: '品牌' },
-  { name: 'ops-policy', label: '行政人力' },
   { name: 'finance', label: '财务' },
   { name: 'intel', label: '行业情报' }
 ]

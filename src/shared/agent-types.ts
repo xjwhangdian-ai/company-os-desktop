@@ -5,6 +5,7 @@ export type AgentName =
   | 'solution'
   | 'bidding'
   | 'legal'
+  | 'admin-legal'
   | 'operation'
   | 'brand'
   | 'ops-policy'

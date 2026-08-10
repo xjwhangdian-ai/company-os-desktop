@@ -8,6 +8,7 @@ export const AGENT_OUTPUT_FOLDER: Record<AgentName, string> = {
   solution: '02_解决方案_solution',
   bidding: '03_招投标_bidding',
   legal: '04_法务_legal',
+  'admin-legal': '07_行政人力_ops-policy',
   operation: '05_运营_operation',
   brand: '06_品牌_brand',
   'ops-policy': '07_行政人力_ops-policy',

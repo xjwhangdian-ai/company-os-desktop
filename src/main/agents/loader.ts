@@ -8,10 +8,9 @@ const KNOWN_AGENT_NAMES: AgentName[] = [
   'sales',
   'solution',
   'bidding',
-  'legal',
+  'admin-legal',
   'operation',
   'brand',
-  'ops-policy',
   'finance',
   'intel',
   'mba'

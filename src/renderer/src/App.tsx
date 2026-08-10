@@ -12,13 +12,12 @@ import { GenericAgentPage } from './pages/GenericAgentPage'
 import { MbaWorkspace } from './pages/MbaWorkspace'
 import { BiddingWorkspace } from './pages/BiddingWorkspace'
 import { BrandWorkspace } from './pages/BrandWorkspace'
-import { LegalWorkspace } from './pages/LegalWorkspace'
+import { AdminLegalWorkspace } from './pages/AdminLegalWorkspace'
 import { OperationWorkspace } from './pages/OperationWorkspace'
 import { SalesWorkspace } from './pages/SalesWorkspace'
 import { IntelWorkspace } from './pages/IntelWorkspace'
 import { SolutionWorkspace } from './pages/SolutionWorkspace'
 import { FinanceWorkspace } from './pages/FinanceWorkspace'
-import { OpsPolicyWorkspace } from './pages/OpsPolicyWorkspace'
 
 type View = 'settings' | { agent: AgentName }
 
@@ -231,9 +230,7 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'brand' && (
           <BrandWorkspace agent={activeAgent} />
         )}
-        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'legal' && (
-          <LegalWorkspace agent={activeAgent} />
-        )}
+        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'admin-legal' && <AdminLegalWorkspace agent={activeAgent} />}
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'operation' && (
           <OperationWorkspace agent={activeAgent} />
         )}
@@ -249,16 +246,13 @@ export default function App(): React.JSX.Element {
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'finance' && (
           <FinanceWorkspace agent={activeAgent} />
         )}
-        {view !== 'settings' && ready && activeAgent && activeAgent.name === 'ops-policy' && (
-          <OpsPolicyWorkspace agent={activeAgent} />
-        )}
         {view !== 'settings' && ready && activeAgent && activeAgent.name === 'mba' && (
           <MbaWorkspace agent={activeAgent} />
         )}
         {view !== 'settings' &&
           ready &&
           activeAgent &&
-          !['bidding', 'brand', 'legal', 'operation', 'sales', 'solution', 'intel', 'finance', 'ops-policy', 'mba'].includes(activeAgent.name) && (
+          !['bidding', 'brand', 'admin-legal', 'operation', 'sales', 'solution', 'intel', 'finance', 'mba'].includes(activeAgent.name) && (
             <GenericAgentPage agent={activeAgent} />
           )}
       </main>
