@@ -10,6 +10,7 @@ export const IPC = {
   configSetActiveCompany: 'config:set-active-company',
   configRepairDataDir: 'config:repair-data-dir',
   identityResetAllMembers: 'identity:reset-all-members',
+  identitySyncRoster: 'identity:sync-roster',
   financeProcessInvoices: 'finance:process-invoices',
   intelKeywordSuggestions: 'intel:keyword-suggestions',
   brandListMatters: 'brand:list-matters',

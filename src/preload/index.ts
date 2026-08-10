@@ -159,6 +159,7 @@ const api: CompanyOsApi = {
     remove: (id: string) => ipcRenderer.invoke(IPC.identityRemove, id),
     verifyPin: (id: string, pin?: string) => ipcRenderer.invoke(IPC.identityVerifyPin, id, pin),
     resetAllMembers: () => ipcRenderer.invoke(IPC.identityResetAllMembers),
+    syncRoster: () => ipcRenderer.invoke(IPC.identitySyncRoster),
     setRole: (id: string, role: MemberRole) => ipcRenderer.invoke(IPC.identitySetRole, id, role),
     notifyLogin: (name: string) => ipcRenderer.invoke(IPC.identityNotifyLogin, name)
   },

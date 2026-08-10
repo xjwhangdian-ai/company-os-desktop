@@ -36,7 +36,8 @@ const PROD_COLS: { key: string; label: string }[] = [
   { key: '型号', label: '产品型号' },
   { key: '制造商', label: '生产制造商' },
   { key: '产地', label: '产地' },
-  { key: '分类', label: '分类' },
+  { key: '分类', label: '一级分类' },
+  { key: '二级分类', label: '二级分类' },
   { key: '参数', label: '技术参数' },
   { key: '税率', label: '税率' },
   { key: '成本价', label: '成本价' },
@@ -213,6 +214,11 @@ function catParts(p: { 一级分类?: string; 二级分类?: string; 产品分�
 function catText(p: { 一级分类?: string; 二级分类?: string; 产品分类?: string }): string {
   const parts = catParts(p)
   return parts[0] === '未分类' ? '' : parts.join(' / ')
+}
+
+/** 左侧目录只承担一级、二级筛选；三级细分仍可在表格详情与搜索中使用。 */
+function navCatParts(p: { 一级分类?: string; 二级分类?: string; 产品分类?: string }): string[] {
+  return catParts(p).slice(0, 2)
 }
 
 interface CatNode {
@@ -510,6 +516,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     制造商: 96,
     产地: 64,
     分类: 132,
+    二级分类: 132,
     参数: 240,
     税率: 56,
     成本价: 80,
@@ -624,13 +631,13 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     [catCodeByName]
   )
 
-  /** 分类导航树（一级/二级/三级）：每级 名称→数量，按数量排序 */
+  /** 分类导航树（仅一级/二级）：每级 名称→数量，按数量排序 */
   const categoryTree = useMemo(() => {
     const root: CatNode[] = []
     for (const p of products) {
       let list = root
       const acc: string[] = []
-      for (const part of catParts(p)) {
+      for (const part of navCatParts(p)) {
         acc.push(part)
         let node = list.find((n) => n.name === part)
         if (!node) {
@@ -1408,6 +1415,9 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                             title={catCodeOf(p) ? `${catCodeOf(p)} ${catText(p)}` : catText(p)}
                           >
                             {catText(p) || '—'}
+                          </td>
+                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.二级分类}>
+                            {p.二级分类 || '—'}
                           </td>
                           <td className="px-1 py-0.5">
                             {editingParamId === p.id ? (

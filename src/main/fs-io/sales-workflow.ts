@@ -178,6 +178,14 @@ function readProductDb(dataDir: string): ProductDb {
         changed = true
       }
     }
+    // 既有库里留下的未分类产品也按当前分类字典补齐一、二级，避免升级后历史清单仍全是“—”。
+    const inferred = autoFillCategory(dataDir, p as unknown as ProductFields) as unknown as Record<string, string>
+    for (const key of ['一级分类', '二级分类', '产品分类'] as const) {
+      if (inferred[key] !== p[key]) {
+        p[key] = inferred[key]
+        changed = true
+      }
+    }
   }
   if (db.version !== 3) {
     db.version = 3
@@ -230,6 +238,51 @@ function sanitizeFields(raw: Record<string, unknown>): ProductFields | null {
   return fields as unknown as ProductFields
 }
 
+/**
+ * 供应商资料常常没有按我方规范填写分类。这里仅按《产品分类规范》的二级/三级名称做可解释的
+ * 关键字匹配：唯一命中才自动补齐一级、二级，多个候选则宁可留给人工确认，绝不硬归类。
+ */
+function autoFillCategory(dataDir: string, fields: ProductFields): ProductFields {
+  if (fields.一级分类 && fields.二级分类) return fields
+  const dict = listCategoryDict(dataDir)
+  if (dict.length === 0) return fields
+  const text = [fields.产品名称, fields.产品分类, fields.技术参数, fields.品牌, fields.型号].join(' ').toLowerCase()
+  if (!text.trim()) return fields
+
+  const candidates: { l1: CategoryL1; l2: CategoryL1['二级'][number]; score: number; l3?: string }[] = []
+  for (const l1 of dict) {
+    if (fields.一级分类 && fields.一级分类 !== l1.名称) continue
+    for (const l2 of l1.二级) {
+      if (fields.二级分类 && fields.二级分类 !== l2.名称) continue
+      let score = text.includes(l2.名称.toLowerCase()) ? 80 : 0
+      // 二级名里的并列功能词（如「摄像机与云台」）也是稳定的归类线索；
+      // 这样「热成像双光谱 MINI 云台」即使没写完整品类，也能落到 E1。
+      for (const term of l2.名称.split(/[与和、及]/).map((s) => s.trim()).filter((s) => s.length >= 2)) {
+        if (text.includes(term.toLowerCase())) score = Math.max(score, 70 + term.length)
+      }
+      let matchedL3: string | undefined
+      for (const l3 of l2.三级) {
+        const term = l3.trim().toLowerCase()
+        if (term.length >= 2 && text.includes(term) && term.length + 100 > score) {
+          score = term.length + 100
+          matchedL3 = l3
+        }
+      }
+      if (score > 0) candidates.push({ l1, l2, score, l3: matchedL3 })
+    }
+  }
+  candidates.sort((a, b) => b.score - a.score)
+  const best = candidates[0]
+  // 同分不同二级说明语义不够明确，例如“手持设备”，不自动选择。
+  if (!best || candidates.filter((c) => c.score === best.score && c.l2.名称 !== best.l2.名称).length > 0) return fields
+  return {
+    ...fields,
+    一级分类: fields.一级分类 || best.l1.名称,
+    二级分类: fields.二级分类 || best.l2.名称,
+    产品分类: fields.产品分类 || best.l3 || ''
+  }
+}
+
 function normName(s: string): string {
   return s.replace(/\s/g, '')
 }
@@ -255,7 +308,7 @@ export interface MergeResult {
  *   唯一命中→更新那条；多条同名（不同供应商）→跳过（宁可不动也不改错）；没命中→新增。
  * - 更新时"非空值覆盖"，暂存里的空字段不会抹掉库里已有的信息。
  */
-function mergeEntries(db: ProductDb, incoming: ProductFields[]): MergeResult {
+function mergeEntries(dataDir: string, db: ProductDb, incoming: ProductFields[]): MergeResult {
   const byKey = new Map<string, ProductEntry>()
   for (const p of db.products) byKey.set(dedupKey(p), p)
 
@@ -270,7 +323,8 @@ function mergeEntries(db: ProductDb, incoming: ProductFields[]): MergeResult {
   let added = 0
   let updated = 0
   let skipped = 0
-  for (const fields of incoming) {
+  for (const rawFields of incoming) {
+    const fields = autoFillCategory(dataDir, rawFields)
     let target: ProductEntry | undefined
     if (normName(fields.供应商名称)) {
       target = byKey.get(dedupKey(fields))
@@ -327,7 +381,7 @@ function ingestStaging(dataDir: string, db: ProductDb): { ingested: number; skip
         .map(sanitizeFields)
         .filter((e): e is ProductFields => e !== null)
       if (entries.length > 0) {
-        const r = mergeEntries(db, entries)
+        const r = mergeEntries(dataDir, db, entries)
         ingested += r.added + r.updated
         skipped += r.skipped
       }
@@ -378,7 +432,8 @@ export function listCategoryDict(dataDir: string): CategoryL1[] {
 
 export function saveProduct(dataDir: string, fields: ProductFields, id?: string): ProductEntry {
   const db = readProductDb(dataDir)
-  const clean = sanitizeFields(fields as unknown as Record<string, unknown>)
+  const cleaned = sanitizeFields(fields as unknown as Record<string, unknown>)
+  const clean = cleaned && autoFillCategory(dataDir, cleaned)
   if (!clean) throw new Error('产品名称不能为空')
   if (id) {
     const existing = db.products.find((p) => p.id === id)
@@ -456,7 +511,7 @@ export async function importExcelByHeader(dataDir: string, relativePath: string)
     }
   }
   const db = readProductDb(dataDir)
-  const result = mergeEntries(db, entries)
+  const result = mergeEntries(dataDir, db, entries)
   // 附图：写入图片库并挂到对应产品（按 名称+型号+品牌 找回刚合并的记录；已有图片的不覆盖）
   let attached = 0
   if (entryImages.some(Boolean)) {

@@ -141,7 +141,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     flash(`正在识别 ${paths.length} 张发票（本机离线OCR，约每张1-2秒）…`)
     try {
       const r = await window.api.finance.processInvoices(paths)
-      flash(r.说明 + '——台账已打开定位')
+      flash(r.说明 + '——输出文件夹已打开定位')
       await window.api.shell.showItemInFolder(r.台账路径)
       if (r.失败.length > 0) {
         setTimeout(() => flash(`识别失败明细：${r.失败.map((f) => `${f.原文件}(${f.原因})`).join('；').slice(0, 160)}`), 6500)
@@ -249,7 +249,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                 <button
                   disabled={invoiceBusy}
                   onClick={handleProcessInvoices}
-                  title="选发票图片（可多选）：本机OCR提取 发票号码/日期/购销双方/价税合计（红字负数），按「日期-购买方-金额」重命名归档到票据月份文件夹，并追加进累计《发票台账.xlsx》（发票号码去重、销项/进项自动判定）。仅 macOS。"
+                  title="选发票图片（可多选）：本机OCR提取 发票号码/日期/购销双方/价税合计（红字负数），按「日期-购买方-金额」重命名；重命名发票与累计《发票台账.xlsx》统一输出到 outputs/08_财务_finance/发票台账/。仅 macOS。"
                   className="rounded-md border border-jushi-accent px-3 py-1.5 text-xs font-medium text-jushi-accent hover:bg-jushi-accent/5 disabled:opacity-50"
                 >
                   {invoiceBusy ? '识别中…' : '🧾 发票识别入台账'}

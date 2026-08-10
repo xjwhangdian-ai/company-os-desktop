@@ -1,12 +1,13 @@
 import { spawn } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { augmentedPath } from './env-check'
 
 // ============ 财务：发票 OCR 识别入台账（纯机械，不经过 AI）============
 // 选发票图片 → macOS Vision OCR 提取（发票号码/日期/购销双方/价税合计，红字负数）→
-// 按「开票日期-购买方-金额」重命名归档进 inbox/08_财务_finance/票据/{开票月份}/ →
-// 追加进 outputs/08_财务_finance/发票台账/发票台账.xlsx（只增不覆盖，按发票号码去重）。
+// 按「开票日期-购买方-金额」重命名；输入侧保留一份到 inbox/08_财务_finance/票据/{开票月份}/，
+// 输出侧把重命名发票与累计台账统一放进 outputs/08_财务_finance/发票台账/。
+// 台账只增不覆盖，按发票号码去重；识别失败件统一放同一输出目录下的 待人工/。
 // 方向自动判定：销售方含我方主体词=销项(开出)，购买方含=进项(收到)。
 
 const LEDGER_DIR_REL = join('outputs', '08_财务_finance', '发票台账')
@@ -87,9 +88,24 @@ function runOcr(dataDir: string, files: string[]): Promise<{ records: InvoiceRec
 
 const COLS = ['录入时间', '发票号码', '开票日期', '方向', '购买方名称', '销售方名称', '价税合计金额(元)', '归档文件', '备注']
 
+/** 同名但不是同一张发票时追加发票号/序号，避免覆盖已有成果。 */
+function uniqueOutputName(dir: string, suggested: string, invoiceNo: string): string {
+  if (!existsSync(join(dir, suggested))) return suggested
+  const ext = extname(suggested)
+  const stem = suggested.slice(0, suggested.length - ext.length)
+  const suffix = invoiceNo.replace(/\D/g, '').slice(-8)
+  const first = `${stem}-${suffix || '副本'}${ext}`
+  if (!existsSync(join(dir, first))) return first
+  for (let i = 2; ; i++) {
+    const candidate = `${stem}-${suffix || '副本'}-${i}${ext}`
+    if (!existsSync(join(dir, candidate))) return candidate
+  }
+}
+
 /**
  * 处理一批发票图片：OCR → 重命名归档 → 台账追加（发票号码去重）。
- * 台账为累计 Excel（只增不覆盖）；红字发票金额为负、行标黄；识别失败的原样归档进 票据/待人工/。
+ * 台账与重命名发票统一输出在 发票台账/；输入侧票据目录保留副本供 AI 记账读取。
+ * 红字发票金额为负、行标黄；识别失败件放 发票台账/待人工/，输入侧也保留副本。
  */
 export async function processInvoices(dataDir: string, files: string[]): Promise<InvoiceProcessResult> {
   const { records, failures } = await runOcr(dataDir, files)
@@ -101,6 +117,7 @@ export async function processInvoices(dataDir: string, files: string[]): Promise
 
   const wb = new ExcelJS.Workbook()
   let ws: import('exceljs').Worksheet
+  let ledgerChanged = false
   if (existsSync(ledgerPath)) {
     try {
       await wb.xlsx.readFile(ledgerPath)
@@ -121,6 +138,26 @@ export async function processInvoices(dataDir: string, files: string[]): Promise
     if (n > 1) seen.add(String(row.getCell(2).value ?? ''))
   })
 
+  // v0.1.14 前的台账把发票只归档在 inbox/票据/{月份}/，第 8 列写「票据/月份/文件名」。
+  // 读旧台账时机械补齐到输出目录，并把第 8 列改成与台账同目录的文件名。
+  ws.eachRow((row, n) => {
+    if (n <= 1) return
+    const stored = String(row.getCell(8).value ?? '').trim()
+    if (!stored || !stored.startsWith('票据/')) return
+    const outputName = basename(stored)
+    const source = join(dataDir, 'inbox', '08_财务_finance', stored)
+    const output = join(ledgerDir, outputName)
+    try {
+      if (existsSync(source) && !existsSync(output)) copyFileSync(source, output)
+      if (existsSync(output)) {
+        row.getCell(8).value = outputName
+        ledgerChanged = true
+      }
+    } catch {
+      // 源文件缺失时保留旧路径，避免把台账改成无效链接
+    }
+  })
+
   const now = new Date()
   const p2 = (n: number): string => String(n).padStart(2, '0')
   const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`
@@ -135,19 +172,22 @@ export async function processInvoices(dataDir: string, files: string[]): Promise
       continue
     }
     seen.add(r.发票号码)
-    // 归档：inbox/08_财务_finance/票据/{开票月份}/{建议文件名}
+    // 输出成果：台账与重命名发票放同一目录；输入侧仍保留副本供后续 AI 记账。
     const ym = r.开票日期.slice(0, 7)
-    const destDir = join(dataDir, RECEIPTS_REL, ym)
-    mkdirSync(destDir, { recursive: true })
-    const dest = join(destDir, r.建议文件名)
+    const outputName = uniqueOutputName(ledgerDir, r.建议文件名, r.发票号码)
+    const outputDest = join(ledgerDir, outputName)
+    const inputDir = join(dataDir, RECEIPTS_REL, ym)
+    mkdirSync(inputDir, { recursive: true })
     try {
-      if (!existsSync(dest)) copyFileSync(r.原路径, dest)
+      copyFileSync(r.原路径, outputDest)
+      const inputDest = join(inputDir, outputName)
+      if (!existsSync(inputDest)) copyFileSync(r.原路径, inputDest)
     } catch {
       // 归档失败不阻塞台账
     }
     const amount = Number(r.金额)
     const 备注 = amount < 0 ? '红字发票（负数）' : ''
-    const row = ws.addRow([stamp, r.发票号码, r.开票日期, r.方向, r.购买方, r.销售方, amount, `票据/${ym}/${r.建议文件名}`, 备注])
+    const row = ws.addRow([stamp, r.发票号码, r.开票日期, r.方向, r.购买方, r.销售方, amount, outputName, 备注])
     row.getCell(7).numFmt = '#,##0.00'
     if (amount < 0 || r.方向 === '待确认') {
       row.eachCell((cell) => {
@@ -159,20 +199,24 @@ export async function processInvoices(dataDir: string, files: string[]): Promise
     成功 += 1
   }
 
-  // 识别失败的原样归档进 票据/待人工/，不丢件
+  // 识别失败件放输出目录的 待人工/；输入侧也保留副本，不丢件。
   for (const f of failures as { 原文件: string; 原路径?: string; 原因: string }[]) {
     if (!f.原路径) continue
-    const destDir = join(dataDir, RECEIPTS_REL, '待人工')
-    mkdirSync(destDir, { recursive: true })
+    const outputPending = join(ledgerDir, '待人工')
+    const inputPending = join(dataDir, RECEIPTS_REL, '待人工')
+    mkdirSync(outputPending, { recursive: true })
+    mkdirSync(inputPending, { recursive: true })
     try {
-      const dest = join(destDir, f.原文件)
-      if (!existsSync(dest)) copyFileSync(f.原路径, dest)
+      const outputDest = join(outputPending, f.原文件)
+      const inputDest = join(inputPending, f.原文件)
+      if (!existsSync(outputDest)) copyFileSync(f.原路径, outputDest)
+      if (!existsSync(inputDest)) copyFileSync(f.原路径, inputDest)
     } catch {
       // 忽略
     }
   }
 
-  if (成功 > 0) await wb.xlsx.writeFile(ledgerPath)
+  if (成功 > 0 || ledgerChanged) await wb.xlsx.writeFile(ledgerPath)
 
   return {
     ok: true,
@@ -185,7 +229,7 @@ export async function processInvoices(dataDir: string, files: string[]): Promise
     说明:
       `识别入账 ${成功} 张` +
       (重复 > 0 ? `，跳过重复 ${重复} 张` : '') +
-      (failures.length > 0 ? `，失败 ${failures.length} 张（已归档 票据/待人工/）` : '') +
-      `；本批销项 ¥${销项合计.toFixed(2)}、进项 ¥${进项合计.toFixed(2)}`
+      (failures.length > 0 ? `，失败 ${failures.length} 张（已放入 发票台账/待人工/）` : '') +
+      `；本批销项 ¥${销项合计.toFixed(2)}、进项 ¥${进项合计.toFixed(2)}；台账与重命名发票已统一输出到 发票台账/`
   }
 }

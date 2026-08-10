@@ -513,6 +513,13 @@ export function listTeamMembers(): TeamMember[] {
   return readAll().teamMembers.map(toPublicMember)
 }
 
+/** 同步完成后强制按仓库花名册重建本机账号，换机/清理旧账号时初始 PIN 回到 123456。 */
+export function syncTeamRoster(): TeamMember[] {
+  lastAppliedRosterMtime = 0
+  applyRosterIfChanged()
+  return readAll().teamMembers.map(toPublicMember)
+}
+
 /**
  * 添加成员（账号由管理员在设置页统一分配；登录页仅在"零成员"时允许创建首个管理员）。
  * 初始 PIN 固定 123456，成员首次登录会被提示修改。第一个成员强制管理员。
@@ -551,6 +558,8 @@ export function changePin(id: string, oldPin: string, newPin: string): { ok: boo
  */
 export function resetAllTeamMembers(): void {
   const all = readAll()
+  // 清理后允许同一份花名册再次落地；否则 mtime 未变化时会错误地保持空账号列表。
+  lastAppliedRosterMtime = 0
   writeAll({ ...all, teamMembers: [] })
 }
 
