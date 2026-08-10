@@ -13,6 +13,7 @@ const AGENT_DISPLAY_META: Record<AgentName, Omit<AgentDisplayMeta, 'name'>> = {
   solution: { displayName: '解决方案', role: '解决方案', whenToUse: '产品/方案支撑（知识源头）', color: '#0d9488', icon: 'Lightbulb' },
   bidding: { displayName: '招投标', role: '解决方案·招投标', whenToUse: '处理招标文件、投标', color: '#7c3aed', icon: 'FileCheck2' },
   legal: { displayName: '法务审核', role: '法务', whenToUse: '审合同 / 法律材料', color: '#b45309', icon: 'Scale' },
+  'admin-legal': { displayName: '行政法务助手', role: '行政法务', whenToUse: '制度 / SOP / 人事 / 合同审核', color: '#a16207', icon: 'Scale' },
   operation: { displayName: '运营推广', role: '运营', whenToUse: '新媒体 / 营销运营', color: '#db2777', icon: 'Rocket' },
   brand: { displayName: '品牌视觉', role: '运营·品牌', whenToUse: '品牌与官网', color: '#dc2626', icon: 'Palette' },
   'ops-policy': { displayName: '行政人力', role: '行政/人力', whenToUse: '规章制度 / SOP / 招聘', color: '#4d7c0f', icon: 'ClipboardList' },

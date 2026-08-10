@@ -224,8 +224,10 @@ function MemberTile({
  */
 export function IdentityGate(): React.JSX.Element {
   const { members, loaded, loadMembers } = useIdentityStore()
-  const { config, loading: configLoading, setActiveCompany } = useConfigStore()
+  const { config, loading: configLoading, setActiveCompany, pickCompanyDataDir } = useConfigStore()
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
   useEffect(() => {
     loadMembers()
@@ -241,7 +243,34 @@ export function IdentityGate(): React.JSX.Element {
     }
   }
 
+  async function syncAccounts(): Promise<void> {
+    await commitCompany()
+    const company = config?.companies.find((c) => c.id === selectedCompanyId)
+    if (!company?.dataDir) {
+      setSyncMessage('请先选择管理员提供的 company-os 公司数据目录，再同步账号信息。')
+      return
+    }
+    setSyncing(true)
+    setSyncMessage(null)
+    try {
+      // 即便远程 Git 同步失败，也先尝试应用当前目录已有花名册：重装/换机时可恢复初始 PIN。
+      const roster = await window.api.identity.syncRoster()
+      await loadMembers()
+      const result = await window.api.sync.now('首次登录同步')
+      if (!result.ok) {
+        setSyncMessage(roster.length > 0 ? `已读取本机花名册并恢复员工初始 PIN（123456）；远程同步未完成：${result.message || '请确认所选目录已绑定公司 Git 仓库'}` : (result.message || '同步失败，请确认网络与公司数据目录后重试'))
+        return
+      }
+      setSyncMessage(roster.length > 0 ? `已同步 ${roster.length} 个管理员分配的账号；初始 PIN 为 123456。` : '同步成功，但未找到账号花名册；请联系管理员在「设置 → 团队成员」分配账号。')
+    } catch {
+      setSyncMessage('同步失败，请确认网络、Git 连接和公司数据目录后重试。')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const noop = (): void => {}
+  const selectedCompany = config?.companies.find((c) => c.id === selectedCompanyId)
 
   if (!loaded || configLoading) {
     return <div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>
@@ -259,8 +288,38 @@ export function IdentityGate(): React.JSX.Element {
 
       <CompanyPicker onSelect={setSelectedCompanyId} />
 
+      <div className="w-72 rounded-xl border border-sky-200 bg-sky-50 p-4 text-center">
+        <p className="text-sm font-medium text-slate-700">首次安装或换电脑？</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">Windows 首次使用：先选择管理员提供的公司数据目录，再同步账号；员工账号会恢复为初始 PIN 123456。</p>
+        <button
+            onClick={async () => {
+              if (!selectedCompanyId) return
+              await pickCompanyDataDir(selectedCompanyId)
+              await commitCompany()
+              setSyncMessage('已选择公司数据目录，请点击“一键同步账号信息”。')
+            }}
+            disabled={!selectedCompanyId}
+            className="mt-3 rounded-lg border border-jushi-accent bg-white px-3 py-1.5 text-xs font-medium text-jushi-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {selectedCompany?.dataDir ? '更换公司数据目录' : '先选择公司数据目录'}
+          </button>
+        <button
+          onClick={syncAccounts}
+          disabled={syncing || !selectedCompanyId}
+          title={!selectedCompanyId ? '请先选择或创建公司' : '从公司数据仓库同步账号信息'}
+          className="mt-3 rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {syncing ? '正在同步…' : '☁️ 一键同步账号信息'}
+        </button>
+        {syncMessage && <p className="mt-2 text-xs text-slate-600">{syncMessage}</p>}
+      </div>
+
       {members.length === 0 ? (
-        <AddMemberForm onBeforeLogin={commitCompany} onDone={noop} />
+        selectedCompany?.dataDir ? (
+          <p className="max-w-sm text-center text-xs leading-5 text-slate-400">尚未同步到可用账号。请点击上方“一键同步账号信息”；若仍没有账号，请联系管理员在“设置 → 团队成员”分配。</p>
+        ) : (
+          <AddMemberForm onBeforeLogin={commitCompany} onDone={noop} />
+        )
       ) : (
         <div className="flex flex-wrap justify-center gap-3">
           {members.map((m) => (
@@ -285,7 +344,7 @@ export function IdentityGate(): React.JSX.Element {
               }}
               className="text-xs text-slate-400 underline-offset-2 hover:text-jushi-accent hover:underline"
             >
-              忘记 PIN？重置本机账号
+              PIN 一直不对？清除本机旧账号后重新同步
             </button>
           </div>
         </div>

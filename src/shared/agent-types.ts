@@ -5,6 +5,7 @@ export type AgentName =
   | 'solution'
   | 'bidding'
   | 'legal'
+  | 'admin-legal'
   | 'operation'
   | 'brand'
   | 'ops-policy'
@@ -293,9 +294,30 @@ export interface SyncResult {
 // 字段名直接用中文——用户会直接打开这两个 JSON 看，也和上传的供应商资料表头对得上。
 // 采购侧敏感字段（供应商联系人/联系方式）只进产品库，绝不进对外报价文件。
 
+/**
+ * 产品分类规范（销售/产品库/分类字典.json 的「分类树」）：一级 A-L、二级 A1-L6 为固定枚举，
+ * 三级随入库生长。App 端的一级/二级下拉只能从这里取值，字典文件缺失时降级为自由填写。
+ */
+export interface CategoryL2 {
+  编码: string
+  名称: string
+  三级: string[]
+}
+
+export interface CategoryL1 {
+  编码: string
+  名称: string
+  二级: CategoryL2[]
+}
+
 export interface ProductEntry {
   id: string
   产品名称: string
+  /** 一级分类：分类字典 A-L 的「名称」（如「视频监控与智能感知」），固定枚举，只能从字典取值 */
+  一级分类: string
+  /** 二级分类：分类字典 A1-L6 的「名称」（如「摄像机与云台」），随一级联动，固定枚举 */
+  二级分类: string
+  /** 三级分类（细分品类，如「双光谱测温云台」）。字典里的三级随入库生长，允许自由填写 */
   产品分类: string
   /** 对外报价单的"品牌"列只取这个字段（供应商名称可能是经销渠道，属采购侧信息） */
   品牌: string
@@ -469,6 +491,27 @@ export interface ProviderConfig {
   modelMapping: ModelMapping
 }
 
+/** 数字人短视频模型的公开配置状态；API 凭证绝不返回到渲染层。 */
+export interface VideoModelConfig {
+  seedance: {
+    enabled: boolean
+    apiKeyConfigured: boolean
+    modelId: string
+  }
+  kling: {
+    enabled: boolean
+    accessKeyConfigured: boolean
+    secretKeyConfigured: boolean
+    modelId: string
+  }
+}
+
+/** 设置页写入的字段；凭证由主进程即时送入操作系统加密存储，绝不回传。 */
+export interface VideoModelConfigPatch {
+  seedance?: { enabled?: boolean; apiKey?: string; modelId?: string }
+  kling?: { enabled?: boolean; accessKey?: string; secretKey?: string; modelId?: string }
+}
+
 /** 一家公司 = 一个独立的 company-os 数据目录。团队成员/模型供应商配置是全局的，不按公司拆分——
  * 同一个人、同一套 API Key 可能两家公司的活都要干，只有"分身读哪套 knowledge/bidding/outputs"按公司区分。 */
 export interface Company {
@@ -482,6 +525,7 @@ export interface AppConfig {
   activeCompanyId: string | null
   activeProviderId: ProviderId
   providers: Record<ProviderId, ProviderConfig>
+  videoModels: VideoModelConfig
 }
 
 // ============ 财务工作台（记账/报税/工资社保） ============

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useConfigStore } from '../stores/useConfigStore'
 import { useIdentityStore } from '../stores/useIdentityStore'
-import type { ModelMapping, ProviderId } from '@shared/agent-types'
+import type { ModelMapping, ProviderId, VideoModelConfig } from '@shared/agent-types'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
@@ -27,10 +27,16 @@ const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
 
 export function Settings(): React.JSX.Element {
   const { config, pickCompanyDataDir, setActiveProvider, saveProviderConfig } = useConfigStore()
+  const currentUser = useIdentityStore((s) => s.currentUser)
+  const environmentOnly = currentUser?.role === 'member'
   const [viewingId, setViewingId] = useState<ProviderId>('anthropic')
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [baseUrlInput, setBaseUrlInput] = useState('')
   const [mapping, setMapping] = useState<ModelMapping>({ opus: '', sonnet: '', haiku: '' })
+  const [videoModels, setVideoModels] = useState<VideoModelConfig | null>(null)
+  const [seedanceKeyInput, setSeedanceKeyInput] = useState('')
+  const [klingAccessKeyInput, setKlingAccessKeyInput] = useState('')
+  const [klingSecretKeyInput, setKlingSecretKeyInput] = useState('')
   const [savedHint, setSavedHint] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,6 +53,14 @@ export function Settings(): React.JSX.Element {
     setMapping(viewingProvider.modelMapping)
     setApiKeyInput('')
   }, [viewingProvider])
+
+  useEffect(() => {
+    if (!config) return
+    setVideoModels(config.videoModels)
+    setSeedanceKeyInput('')
+    setKlingAccessKeyInput('')
+    setKlingSecretKeyInput('')
+  }, [config?.videoModels])
 
   function flashSaved(text: string): void {
     setSavedHint(text)
@@ -80,8 +94,51 @@ export function Settings(): React.JSX.Element {
     flashSaved(`${viewingProvider.label} 配置已保存`)
   }
 
+  async function handleSaveVideoModels(): Promise<void> {
+    if (!videoModels) return
+    const values = [seedanceKeyInput, klingAccessKeyInput, klingSecretKeyInput].filter(Boolean)
+    if (values.some((key) => /\s/.test(key) || /[\u4e00-\u9fa5]/.test(key) || key.length < 8)) {
+      flashSaved('❌ API 凭证格式不正确——请粘贴平台控制台生成的完整密钥，不要包含空格、中文或说明文字')
+      return
+    }
+    try {
+      await useConfigStore.getState().saveVideoModelConfig({
+        seedance: { enabled: videoModels.seedance.enabled, modelId: videoModels.seedance.modelId, ...(seedanceKeyInput ? { apiKey: seedanceKeyInput } : {}) },
+        kling: {
+          enabled: videoModels.kling.enabled,
+          modelId: videoModels.kling.modelId,
+          ...(klingAccessKeyInput ? { accessKey: klingAccessKeyInput } : {}),
+          ...(klingSecretKeyInput ? { secretKey: klingSecretKeyInput } : {})
+        }
+      })
+      setSeedanceKeyInput('')
+      setKlingAccessKeyInput('')
+      setKlingSecretKeyInput('')
+      flashSaved('视频模型配置已用系统加密存储保存，仅本机可用')
+    } catch (err) {
+      flashSaved(`❌ ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   if (!config || !viewingProvider) {
     return <div className="p-8 text-sm text-slate-400">加载中…</div>
+  }
+
+  // 普通成员可自行修复当前电脑（尤其 Windows）的 Python、PDF、OCR 等环境；
+  // 公司数据目录、模型密钥和成员权限仍由管理员统一管理。
+  if (environmentOnly) {
+    return (
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto max-w-2xl space-y-6 p-8 pb-24">
+          <div>
+            <h1 className="text-lg font-semibold text-slate-800">本机环境设置</h1>
+            <p className="mt-1 text-sm text-slate-400">可直接检查并修复这台电脑的运行依赖；公司目录、模型和成员权限仍由管理员统一管理。</p>
+          </div>
+          <EnvSection onFlash={flashSaved} />
+          {savedHint && <div className="fixed bottom-6 right-6 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">{savedHint}</div>}
+        </div>
+      </div>
+    )
   }
 
   const doc = PROVIDER_DOCS[viewingId]
@@ -235,6 +292,21 @@ export function Settings(): React.JSX.Element {
           </button>
         </div>
       </section>
+
+      {videoModels && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-medium text-slate-700">数字人视频模型</h3>
+            <p className="text-xs text-slate-400">运营分身可使用 Seedance 2.5 / Kling 3.0 生成图生视频镜头。API 凭证由 macOS 钥匙串或 Windows 系统保护加密，仅保存在当前电脑，不同步到 GitHub 或公司数据目录。</p>
+          </div>
+          <div className="space-y-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+            <div className="flex items-center justify-between gap-3"><div><h4 className="text-sm font-semibold text-slate-700">Seedance 2.5</h4><p className="text-[11px] text-slate-500">火山方舟图生视频：把 ChatGPT 静态关键帧转换为动态镜头。</p></div><label className="flex items-center gap-1.5 text-xs text-slate-600"><input type="checkbox" checked={videoModels.seedance.enabled} onChange={(e) => setVideoModels((v) => v && ({ ...v, seedance: { ...v.seedance, enabled: e.target.checked } }))} /> 启用</label></div>
+            <div className="grid gap-2 sm:grid-cols-2"><div><label className="mb-1 block text-xs text-slate-500">模型 ID</label><input value={videoModels.seedance.modelId} onChange={(e) => setVideoModels((v) => v && ({ ...v, seedance: { ...v.seedance, modelId: e.target.value } }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-jushi-accent" /></div><div><label className="mb-1 block text-xs text-slate-500">ARK API Key</label><input type="password" value={seedanceKeyInput} onChange={(e) => setSeedanceKeyInput(e.target.value)} placeholder={videoModels.seedance.apiKeyConfigured ? '已配置（留空保存不会清除）' : '在此粘贴 ARK API Key'} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:border-jushi-accent" /></div></div>
+            <div className="border-t border-violet-100 pt-4"><div className="flex items-center justify-between gap-3"><div><h4 className="text-sm font-semibold text-slate-700">Kling 3.0</h4><p className="text-[11px] text-slate-500">可灵图生视频备选，适合对比不同镜头动态表现。</p></div><label className="flex items-center gap-1.5 text-xs text-slate-600"><input type="checkbox" checked={videoModels.kling.enabled} onChange={(e) => setVideoModels((v) => v && ({ ...v, kling: { ...v.kling, enabled: e.target.checked } }))} /> 启用</label></div><div className="mt-2 grid gap-2 sm:grid-cols-3"><div><label className="mb-1 block text-xs text-slate-500">模型 ID</label><input value={videoModels.kling.modelId} onChange={(e) => setVideoModels((v) => v && ({ ...v, kling: { ...v.kling, modelId: e.target.value } }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-jushi-accent" /></div><div><label className="mb-1 block text-xs text-slate-500">Access Key</label><input type="password" value={klingAccessKeyInput} onChange={(e) => setKlingAccessKeyInput(e.target.value)} placeholder={videoModels.kling.accessKeyConfigured ? '已配置（留空不清除）' : '在此粘贴 Access Key'} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:border-jushi-accent" /></div><div><label className="mb-1 block text-xs text-slate-500">Secret Key</label><input type="password" value={klingSecretKeyInput} onChange={(e) => setKlingSecretKeyInput(e.target.value)} placeholder={videoModels.kling.secretKeyConfigured ? '已配置（留空不清除）' : '在此粘贴 Secret Key'} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:border-jushi-accent" /></div></div></div>
+            <button onClick={handleSaveVideoModels} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">保存视频模型配置</button>
+          </div>
+        </section>
+      )}
 
       <EnvSection onFlash={flashSaved} />
 
@@ -557,10 +629,9 @@ const ALL_AGENTS: { name: import('@shared/agent-types').AgentName; label: string
   { name: 'sales', label: '销售' },
   { name: 'solution', label: '解决方案' },
   { name: 'bidding', label: '招投标' },
-  { name: 'legal', label: '法务' },
+  { name: 'admin-legal', label: '行政法务' },
   { name: 'operation', label: '运营' },
   { name: 'brand', label: '品牌' },
-  { name: 'ops-policy', label: '行政人力' },
   { name: 'finance', label: '财务' },
   { name: 'intel', label: '行业情报' }
 ]

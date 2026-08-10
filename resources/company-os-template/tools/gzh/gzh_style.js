@@ -41,12 +41,13 @@ function resolveImg(rel){
 }
 
 // 大图先缩到 1080px 再内嵌——手机原图动辄十几 MB，base64 后公众号编辑器根本粘不动。
-// 用 macOS 自带 sips 缩放；不可用/失败则退回原图（图片照样能显示，只是体积大）。
+// macOS 用系统 sips 缩放；Windows 不强依赖图像工具，保留原图以保证排版流程不中断。
 function shrunk(p, ext){
   try{
     if(fs.statSync(p).size < 500*1024) return p;                 // 小图不折腾
     if(!(ext==='jpg'||ext==='jpeg'||ext==='png')) return p;      // 只缩位图
     const tmp = path.join(os.tmpdir(), `gzh_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext==='png'?'png':'jpg'}`);
+    if(process.platform !== 'darwin') return p;
     execFileSync('/usr/bin/sips', ['-Z', '1080', p, '--out', tmp], { stdio: 'ignore' });
     // EXIF 方向转正：iPhone 竖拍照片像素是横的、靠方向标记显示——浏览器认标记，
     // 公众号编辑器不认，粘贴后就旋转90度。这里把像素按标记真正转正并清掉标记。

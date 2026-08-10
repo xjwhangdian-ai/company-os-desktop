@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type {
   AgentDisplayMeta,
+  CategoryL1,
   ContactRole,
   CustomerContact,
   CustomerEntry,
@@ -33,8 +34,12 @@ const PROD_COLS: { key: string; label: string }[] = [
   { key: '品牌', label: '品牌' },
   { key: '名称', label: '产品名称' },
   { key: '型号', label: '产品型号' },
-  { key: '分类', label: '分类' },
+  { key: '制造商', label: '生产制造商' },
+  { key: '产地', label: '产地' },
+  { key: '分类', label: '一级分类' },
+  { key: '二级分类', label: '二级分类' },
   { key: '参数', label: '技术参数' },
+  { key: '税率', label: '税率' },
   { key: '成本价', label: '成本价' },
   { key: '建议售价', label: '建议售价' },
   { key: '操作', label: '操作' }
@@ -81,6 +86,8 @@ interface NeedMatch {
 
 const EMPTY_PRODUCT_FORM: ProductFields = {
   产品名称: '',
+  一级分类: '',
+  二级分类: '',
   产品分类: '',
   品牌: '',
   型号: '',
@@ -123,6 +130,16 @@ function defaultQuotePrice(p: ProductEntry): string {
   return p.建议销售价 || p.投标报价 || p.成本价
 }
 
+/** 税率展示：库里存的是 Excel 原文（0.13 / 13 / 13%），列表统一显示成百分数 */
+function fmtTaxRate(s: string): string {
+  const raw = (s ?? '').trim()
+  if (!raw) return '—'
+  if (raw.endsWith('%')) return raw
+  const n = parseFloat(raw)
+  if (!isFinite(n)) return raw
+  return `${n <= 1 ? +(n * 100).toFixed(2) : n}%`
+}
+
 function priceNum(s: string): number | null {
   const n = parseFloat((s ?? '').replace(/[^\d.]/g, ''))
   return isFinite(n) && /\d/.test(s ?? '') ? n : null
@@ -138,7 +155,7 @@ function scoreProduct(p: ProductEntry, tokens: string[]): number {
   for (const t of tokens) {
     if (p.产品名称.includes(t)) score += 5
     if (p.品牌.includes(t) || p.型号.includes(t)) score += 3
-    if (p.产品分类.includes(t)) score += 3
+    if (catText(p).includes(t)) score += 3
     if (p.技术参数.includes(t)) score += 1
     if ((p.备注 ?? '').includes(t)) score += 1
   }
@@ -148,8 +165,11 @@ function scoreProduct(p: ProductEntry, tokens: string[]): number {
 /**
  * 产品库搜索（SPS 式）：空格分词 AND 匹配——每个词都要命中任一字段才算；
  * 返回相关度得分用于排序（0 = 不匹配），型号精确命中排最前。
+ *
+ * 分类可直接当搜索词用：既能搜分类名（"摄像机与云台"），也能搜分类编码（"E1"）——
+ * 编码走前缀匹配，搜 "E" 出整个一级、搜 "E1" 收敛到该二级。
  */
-function searchScore(p: ProductEntry, tokens: string[]): number {
+function searchScore(p: ProductEntry, tokens: string[], catCode: (p: ProductEntry) => string): number {
   let total = 0
   for (const t of tokens) {
     const T = t.toLowerCase()
@@ -160,8 +180,15 @@ function searchScore(p: ProductEntry, tokens: string[]): number {
     if (p.产品名称.toLowerCase() === T) s = Math.max(s, 80)
     else if (p.产品名称.toLowerCase().includes(T)) s = Math.max(s, 25)
     if (p.品牌.toLowerCase().includes(T)) s = Math.max(s, 15)
-    if (p.产品分类.toLowerCase().includes(T)) s = Math.max(s, 10)
-    if (p.生产制造商.toLowerCase().includes(T) || p.供应商名称.toLowerCase().includes(T)) s = Math.max(s, 8)
+    const code = catCode(p).toLowerCase()
+    if (code && code.startsWith(T)) s = Math.max(s, 20)
+    if (catText(p).toLowerCase().includes(T)) s = Math.max(s, 10)
+    if (
+      p.生产制造商.toLowerCase().includes(T) ||
+      p.供应商名称.toLowerCase().includes(T) ||
+      (p.产地 ?? '').toLowerCase().includes(T)
+    )
+      s = Math.max(s, 8)
     if (p.技术参数.toLowerCase().includes(T) || (p.备注 ?? '').toLowerCase().includes(T)) s = Math.max(s, 5)
     if (s === 0) return 0 // AND 语义：有一个词不命中就整条出局
     total += s
@@ -169,14 +196,29 @@ function searchScore(p: ProductEntry, tokens: string[]): number {
   return total
 }
 
-/** 产品分类支持最多 3 级，用 / 、＞ 、> 分隔（如「取证装备/移动取证/云台」）；没写分隔符就是 1 级 */
-function catParts(s: string): string[] {
-  const parts = (s || '未分类')
+/**
+ * 一条产品的分类路径（一级/二级/三级）。一二级取《产品分类规范》固定枚举字段；
+ * 三级取 产品分类（细分品类，仍允许用 / 再分层，多余层级截断到 3 级）。
+ * 三个都空 → 未分类；一级空但三级有值（老数据/外部导入）→ 直接把三级当一级展示，不丢条目。
+ */
+function catParts(p: { 一级分类?: string; 二级分类?: string; 产品分类?: string }): string[] {
+  const tail = (p.产品分类 || '')
     .split(/[/＞>]/)
     .map((t) => t.trim())
     .filter(Boolean)
-    .slice(0, 3)
+  const parts = [(p.一级分类 || '').trim(), (p.二级分类 || '').trim(), ...tail].filter(Boolean).slice(0, 3)
   return parts.length > 0 ? parts : ['未分类']
+}
+
+/** 分类的一行展示文本（表格「分类」列、搜索命中都用它） */
+function catText(p: { 一级分类?: string; 二级分类?: string; 产品分类?: string }): string {
+  const parts = catParts(p)
+  return parts[0] === '未分类' ? '' : parts.join(' / ')
+}
+
+/** 左侧目录只承担一级、二级筛选；三级细分仍可在表格详情与搜索中使用。 */
+function navCatParts(p: { 一级分类?: string; 二级分类?: string; 产品分类?: string }): string[] {
+  return catParts(p).slice(0, 2)
 }
 
 interface CatNode {
@@ -253,7 +295,7 @@ function buildParsePrompt(preview: PreviewCard): string {
       `解析这份投标报价文件，提取各产品的投标报价写入暂存区。`,
       `文件：${readTarget}`,
       `要求：`,
-      `1. 每个产品提取为一个 JSON 对象，只填两个字段的值：产品名称、投标报价；其余字段（产品分类、品牌、型号、瑾智型号、生产制造商、产地、技术参数、单位、税率、质保期、交货期、物料代码、成本价、建议销售价、供应商名称、供应商联系人、供应商联系方式、备注）一律填空字符串""，来源文件填"${preview.fileName}"。`,
+      `1. 每个产品提取为一个 JSON 对象，只填两个字段的值：产品名称、投标报价；其余字段（一级分类、二级分类、产品分类、品牌、型号、瑾智型号、生产制造商、产地、技术参数、单位、税率、质保期、交货期、物料代码、成本价、建议销售价、供应商名称、供应商联系人、供应商联系方式、备注）一律填空字符串""，来源文件填"${preview.fileName}"。`,
       `2. 产品名称照抄文件原文写法（App 会按名称匹配到产品库里的已有条目回填投标报价）；投标报价保留原文（含单位/含税说明）。`,
       `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身。`,
       `4. 不要修改 销售/产品库/产品库.json。`,
@@ -265,7 +307,8 @@ function buildParsePrompt(preview: PreviewCard): string {
     `资料文件：${readTarget}`,
     `要求：`,
     `0. 只提取"产品明细表格里的真实产品行"（每行有型号/规格和价格）；表头行、标题、致供应商说明、填写说明/须知、示例行（备注写着"示例"）、公司落款、日期/联系人等一律不是产品，绝对不要提取。`,
-    `1. 每个产品提取为一个 JSON 对象，字段名严格使用：产品名称、产品分类、品牌、型号、瑾智型号、生产制造商、产地、技术参数、单位、税率、质保期、交货期、物料代码、成本价、建议销售价、投标报价、供应商名称、供应商联系人、供应商联系方式、备注、来源文件（来源文件统一填"${preview.fileName}"）。瑾智型号是我方自编型号（资料里通常没有，留空）；交货期照原文（如"30天/现货"）。`,
+    `1. 每个产品提取为一个 JSON 对象，字段名严格使用：产品名称、一级分类、二级分类、产品分类、品牌、型号、瑾智型号、生产制造商、产地、技术参数、单位、税率、质保期、交货期、物料代码、成本价、建议销售价、投标报价、供应商名称、供应商联系人、供应商联系方式、备注、来源文件（来源文件统一填"${preview.fileName}"）。瑾智型号是我方自编型号（资料里通常没有，留空）；交货期照原文（如"30天/现货"）。`,
+    `1.1 分类按《产品分类规范》填：先读 销售/产品库/分类字典.json 的「分类树」和「归属规则」，一级分类填字典里一级的"名称"原文（如"视频监控与智能感知"），二级分类填该一级下二级的"名称"原文（如"摄像机与云台"），产品分类填三级细分品类（字典三级里有就用原文，没有就照产品自身品类写短词）。一款产品只能归一个三级分类；拿不准归哪类就把三个分类字段都留空由人工补，禁止硬凑。`,
     `2. 供应商报价表里的价格是给我们的进货价，填进"成本价"；资料里明确写了建议零售价/指导价才填"建议销售价"，没有就留空。品牌/型号/生产制造商/产地/单位/税率照资料原文填（质保期折算成月数，如"三年"填"36"）；注意区分：品牌是产品品牌（如海康威视），供应商名称是把货卖给我们的渠道公司，两者可能不同。技术参数把规格/关键参数拼成一段完整文字；所有价格保留资料原文写法（含单位、含税说明）；资料里没有的字段填空字符串""，禁止编造。`,
     `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身，不要包裹代码块或其它文字。`,
     `4. 不要修改 销售/产品库/产品库.json——那是桌面 App 托管的规范库，你写的暂存文件会由 App 校验后合并进去。`,
@@ -277,18 +320,27 @@ function buildParsePrompt(preview: PreviewCard): string {
 
 function ProductForm({
   initial,
+  catDict,
   onSave,
   onCancel
 }: {
   initial: ProductFields
+  /** 《产品分类规范》分类字典；为空（字典文件缺失）时一级/二级降级成自由填写 */
+  catDict: CategoryL1[]
   onSave: (fields: ProductFields) => void
   onCancel: () => void
 }): React.JSX.Element {
   const [form, setForm] = useState<ProductFields>(initial)
   const set = (k: keyof ProductFields, v: string): void => setForm((f) => ({ ...f, [k]: v }))
+  const l1 = catDict.find((c) => c.名称 === form.一级分类) ?? null
+  const l2List = l1?.二级 ?? []
+  const l3List = l2List.find((c) => c.名称 === form.二级分类)?.三级 ?? []
+  // Excel 导入/老数据里的分类值可能不在字典里（错字、字典还没收录）。下拉里补一个"字典外"选项
+  // 把原值显示出来——否则 select 渲染成空白，看着像数据丢了，人一保存就真丢了。
+  const offDictL1 = Boolean(form.一级分类) && !l1
+  const offDictL2 = Boolean(form.二级分类) && !l2List.some((c) => c.名称 === form.二级分类)
   const FIELDS: { key: keyof ProductFields; label: string; wide?: boolean }[] = [
     { key: '产品名称', label: '产品名称 *' },
-    { key: '产品分类', label: '产品分类' },
     { key: '品牌', label: '品牌（对外报价用）' },
     { key: '型号', label: '型号' },
     { key: '生产制造商', label: '生产制造商' },
@@ -310,6 +362,63 @@ function ProductForm({
   ]
   return (
     <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3">
+      {/* 分类三级：一级/二级从《产品分类规范》分类字典取值（固定枚举），三级随入库生长可自由填写 */}
+      <div className="mb-2 grid grid-cols-3 gap-2 rounded-md bg-slate-50 p-2">
+        <div>
+          <label className="mb-0.5 block text-xs text-slate-400">一级分类</label>
+          <select
+            value={form.一级分类 ?? ''}
+            onChange={(e) => setForm((f) => ({ ...f, 一级分类: e.target.value, 二级分类: '', 产品分类: '' }))}
+            disabled={catDict.length === 0}
+            className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none focus:border-jushi-accent disabled:bg-slate-100"
+          >
+            <option value="">— 未分类 —</option>
+            {offDictL1 && <option value={form.一级分类}>{form.一级分类}（字典外，建议改选）</option>}
+            {catDict.map((c) => (
+              <option key={c.编码} value={c.名称}>
+                {c.编码} {c.名称}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-0.5 block text-xs text-slate-400">二级分类</label>
+          <select
+            value={form.二级分类 ?? ''}
+            onChange={(e) => setForm((f) => ({ ...f, 二级分类: e.target.value, 产品分类: '' }))}
+            disabled={l2List.length === 0 && !offDictL2}
+            className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none focus:border-jushi-accent disabled:bg-slate-100"
+          >
+            <option value="">{l1 ? '— 请选择 —' : '— 先选一级 —'}</option>
+            {offDictL2 && <option value={form.二级分类}>{form.二级分类}（字典外，建议改选）</option>}
+            {l2List.map((c) => (
+              <option key={c.编码} value={c.名称}>
+                {c.编码} {c.名称}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-0.5 block text-xs text-slate-400">三级分类（细分品类）</label>
+          <input
+            list="cat-l3-options"
+            value={form.产品分类 ?? ''}
+            onChange={(e) => set('产品分类', e.target.value)}
+            placeholder={l3List.length > 0 ? '从字典选或直接填新品类' : '选完二级后可选'}
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
+          />
+          <datalist id="cat-l3-options">
+            {l3List.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </div>
+        {catDict.length === 0 && (
+          <p className="col-span-3 text-[11px] text-amber-600">
+            没读到分类字典（销售/产品库/分类字典.json），一二级下拉不可用——补上字典文件后重开工作台即可。
+          </p>
+        )}
+      </div>
       <div className="grid grid-cols-3 gap-2">
         {FIELDS.map((f) => (
           <div key={f.key} className={f.wide ? 'col-span-3' : ''}>
@@ -368,6 +477,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
 
   const [tab, setTab] = useState<SalesTab>('产品库')
   const [products, setProducts] = useState<ProductEntry[]>([])
+  /** 《产品分类规范》分类字典（销售/产品库/分类字典.json），一级/二级下拉的取值来源 */
+  const [catDict, setCatDict] = useState<CategoryL1[]>([])
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('全部') // '全部' 或分类路径 '一级/二级/三级'
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
@@ -402,8 +513,12 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     品牌: 84,
     名称: 168,
     型号: 132,
-    分类: 96,
-    参数: 300,
+    制造商: 96,
+    产地: 64,
+    分类: 132,
+    二级分类: 132,
+    参数: 240,
+    税率: 56,
     成本价: 80,
     建议售价: 80,
     操作: 150,
@@ -477,6 +592,9 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       )
     }
   }
+  async function refreshCategoryDict(): Promise<void> {
+    setCatDict(await window.api.sales.listCategoryDict())
+  }
   async function refreshTemplates(): Promise<void> {
     setTemplates(await window.api.sales.listTemplates())
   }
@@ -486,6 +604,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
 
   useEffect(() => {
     refreshProducts()
+    refreshCategoryDict()
     refreshTemplates()
     refreshCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -496,13 +615,29 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
-  /** 分类导航树（支持 1/2/3 级，分类字段用 / 分隔）：每级 名称→数量，按数量排序 */
+  /** 分类名 → 规范编码（一级 A-L / 二级 A1-L6），供搜索按编码检索、导航树标注 */
+  const catCodeByName = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const l1 of catDict) {
+      if (l1.名称) m.set(l1.名称, l1.编码)
+      for (const l2 of l1.二级) if (l2.名称) m.set(l2.名称, l2.编码)
+    }
+    return m
+  }, [catDict])
+
+  /** 一条产品的分类编码（取二级，无二级退一级）——搜 "E1"/"E" 都能命中 */
+  const catCodeOf = useMemo(
+    () => (p: ProductEntry): string => catCodeByName.get(p.二级分类) || catCodeByName.get(p.一级分类) || '',
+    [catCodeByName]
+  )
+
+  /** 分类导航树（仅一级/二级）：每级 名称→数量，按数量排序 */
   const categoryTree = useMemo(() => {
     const root: CatNode[] = []
     for (const p of products) {
       let list = root
       const acc: string[] = []
-      for (const part of catParts(p.产品分类)) {
+      for (const part of navCatParts(p)) {
         acc.push(part)
         let node = list.find((n) => n.name === part)
         if (!node) {
@@ -530,7 +665,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     for (const p of products) {
       if (selectedCatParts) {
         // 选中某级分类 = 该级及其所有子级都算命中（按路径前缀匹配）
-        const parts = catParts(p.产品分类)
+        const parts = catParts(p)
         if (!selectedCatParts.every((s, idx) => parts[idx] === s)) continue
       }
       if (min !== null || max !== null) {
@@ -542,14 +677,14 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       }
       let score = 0
       if (tokens.length > 0) {
-        score = searchScore(p, tokens)
+        score = searchScore(p, tokens, catCodeOf)
         if (score === 0) continue
       }
       scored.push({ p, score })
     }
     if (tokens.length > 0) scored.sort((a, b) => b.score - a.score || b.p.更新时间 - a.p.更新时间)
     return scored.map((x) => x.p)
-  }, [products, query, categoryFilter, priceMin, priceMax])
+  }, [products, query, categoryFilter, priceMin, priceMax, catCodeOf])
 
   /** 排序（在筛选结果之上；"默认"= 有搜索词按相关度、无搜索词按更新时间） */
   const sortedProducts = useMemo(() => {
@@ -863,9 +998,10 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="搜产品 / 品牌 / 型号 / 参数，空格隔开多个关键词…"
+                  placeholder="搜产品 / 品牌 / 型号 / 分类 / 制造商 / 参数，空格隔开多个关键词…"
+                  title="分类可直接搜：分类名（摄像机与云台）或规范编码（E / E1）都能命中"
                   autoFocus
-                  className="w-72 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-jushi-accent"
+                  className="w-80 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-jushi-accent"
                 />
                 <div className="flex items-center gap-1 text-xs text-slate-400">
                   <input
@@ -1110,6 +1246,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               {(showAddForm || editingId) && (
                 <ProductForm
                   initial={editingId ? (products.find((p) => p.id === editingId) ?? EMPTY_PRODUCT_FORM) : EMPTY_PRODUCT_FORM}
+                  catDict={catDict}
                   onSave={async (fields) => {
                     await window.api.sales.saveProduct(fields, editingId ?? undefined)
                     setShowAddForm(false)
@@ -1186,7 +1323,12 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                     {open ? '▾' : '▸'}
                                   </span>
                                 )}
-                                <span className="truncate">{n.name}</span>
+                                <span className="truncate" title={catCodeByName.get(n.name) ? `${catCodeByName.get(n.name)} ${n.name}` : n.name}>
+                                  {catCodeByName.has(n.name) && (
+                                    <span className="mr-1 text-[10px] text-slate-400">{catCodeByName.get(n.name)}</span>
+                                  )}
+                                  {n.name}
+                                </span>
                               </span>
                               <span className="ml-1 shrink-0 text-slate-400">{n.count}</span>
                             </div>
@@ -1262,8 +1404,20 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                           <td className="truncate px-2 py-0.5 text-slate-500" title={p.型号}>
                             {p.型号 || '—'}
                           </td>
-                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.产品分类}>
-                            {p.产品分类 || '—'}
+                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.生产制造商}>
+                            {p.生产制造商 || '—'}
+                          </td>
+                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.产地}>
+                            {p.产地 || '—'}
+                          </td>
+                          <td
+                            className="truncate px-2 py-0.5 text-slate-500"
+                            title={catCodeOf(p) ? `${catCodeOf(p)} ${catText(p)}` : catText(p)}
+                          >
+                            {catText(p) || '—'}
+                          </td>
+                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.二级分类}>
+                            {p.二级分类 || '—'}
                           </td>
                           <td className="px-1 py-0.5">
                             {editingParamId === p.id ? (
@@ -1291,6 +1445,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                               </div>
                             )}
                           </td>
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">{fmtTaxRate(p.税率)}</td>
                           <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">{p.成本价 || '—'}</td>
                           <td className="whitespace-nowrap px-2 py-0.5 text-slate-700">{p.建议销售价 || '—'}</td>
                           <td className="whitespace-nowrap px-2 py-0.5">
@@ -1325,15 +1480,13 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         </tr>
                         {expandedId === p.id && (
                           <tr className="border-t border-slate-100 bg-slate-50/60">
-                            <td colSpan={9} className="px-3 py-2">
+                            <td colSpan={PROD_COLS.length} className="px-3 py-2">
                               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600 md:grid-cols-3">
                                 {(
                                   [
+                                    ['分类', catCodeOf(p) ? `${catCodeOf(p)} ${catText(p)}` : catText(p)],
                                     ['瑾智型号', p.瑾智型号],
-                                    ['生产制造商', p.生产制造商],
-                                    ['产地', p.产地],
                                     ['单位', p.单位],
-                                    ['税率', p.税率],
                                     ['质保期', p.质保期 ? `${p.质保期} 个月` : ''],
                                     ['交货期', p.交货期],
                                     ['物料代码', p.物料代码],
@@ -1369,7 +1522,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     ))}
                     {filteredProducts.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="px-2 py-6 text-center text-slate-400">
+                        <td colSpan={PROD_COLS.length} className="px-2 py-6 text-center text-slate-400">
                           {products.length === 0 ? '产品库为空——上传供应商资料或手动添加' : '没有匹配的产品'}
                         </td>
                       </tr>

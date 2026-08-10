@@ -15,6 +15,7 @@ import type {
   ProductFields,
   ProviderConfig,
   ProviderId,
+  VideoModelConfigPatch,
   QuoteLineInput,
   SolutionFileKind,
 } from '@shared/agent-types'
@@ -26,6 +27,7 @@ const api: CompanyOsApi = {
     setActiveProvider: (id: ProviderId) => ipcRenderer.invoke(IPC.configSetActiveProvider, id),
     setProviderConfig: (id: ProviderId, patch: Partial<Omit<ProviderConfig, 'id'>>) =>
       ipcRenderer.invoke(IPC.configSetProviderConfig, id, patch),
+    setVideoModelConfig: (patch: VideoModelConfigPatch) => ipcRenderer.invoke(IPC.configSetVideoModelConfig, patch),
     addCompany: (name: string) => ipcRenderer.invoke(IPC.configAddCompany, name),
     removeCompany: (id: string) => ipcRenderer.invoke(IPC.configRemoveCompany, id),
     setCompanyDataDir: (id: string, dir: string) => ipcRenderer.invoke(IPC.configSetCompanyDataDir, id, dir),
@@ -65,6 +67,9 @@ const api: CompanyOsApi = {
     showItemInFolder: (path: string) => ipcRenderer.invoke(IPC.shellShowItemInFolder, path),
     saveAsCopy: (path: string) => ipcRenderer.invoke(IPC.shellSaveAsCopy, path),
     openPath: (path: string) => ipcRenderer.invoke(IPC.shellOpenPath, path)
+  },
+  help: {
+    memberGuide: () => ipcRenderer.invoke(IPC.helpMemberGuide)
   },
   upload: {
     generic: (agentName: AgentName, sourcePath: string): Promise<UploadResult> =>
@@ -159,6 +164,7 @@ const api: CompanyOsApi = {
     remove: (id: string) => ipcRenderer.invoke(IPC.identityRemove, id),
     verifyPin: (id: string, pin?: string) => ipcRenderer.invoke(IPC.identityVerifyPin, id, pin),
     resetAllMembers: () => ipcRenderer.invoke(IPC.identityResetAllMembers),
+    syncRoster: () => ipcRenderer.invoke(IPC.identitySyncRoster),
     setRole: (id: string, role: MemberRole) => ipcRenderer.invoke(IPC.identitySetRole, id, role),
     notifyLogin: (name: string) => ipcRenderer.invoke(IPC.identityNotifyLogin, name)
   },
@@ -169,6 +175,7 @@ const api: CompanyOsApi = {
   },
   sales: {
     listProducts: () => ipcRenderer.invoke(IPC.salesListProducts),
+    listCategoryDict: () => ipcRenderer.invoke(IPC.salesListCategoryDict),
     saveProduct: (fields: ProductFields, id?: string) => ipcRenderer.invoke(IPC.salesSaveProduct, fields, id),
     removeProduct: (id: string) => ipcRenderer.invoke(IPC.salesRemoveProduct, id),
     setProductImage: (id: string, sourcePath: string) => ipcRenderer.invoke(IPC.salesSetProductImage, id, sourcePath),

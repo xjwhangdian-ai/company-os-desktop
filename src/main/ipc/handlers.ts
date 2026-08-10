@@ -1,5 +1,5 @@
 import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
-import { addCompany, addTeamMember, resetAllTeamMembers, changePin, getActiveCompany, getConfig, getDataDir, getGithubToken, getLastSyncAt, listTeamMembers, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setGithubToken, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, verifyPin } from '../config/store'
+import { addCompany, addTeamMember, resetAllTeamMembers, changePin, getActiveCompany, getConfig, getDataDir, getGithubToken, getLastSyncAt, listTeamMembers, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setGithubToken, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, setVideoModelConfig, syncTeamRoster, verifyPin } from '../config/store'
 import { copyFileSync, cpSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc-channels'
@@ -77,6 +77,7 @@ import {
   generateSupplierQuoteList,
   importExcelByHeader,
   linkCustomerFile,
+  listCategoryDict,
   listCustomers,
   listProducts,
   listQuotationTemplates,
@@ -123,6 +124,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.configSetProviderConfig, (_e, id: ProviderId, patch: Partial<Omit<ProviderConfig, 'id'>>) =>
     setProviderConfig(id, patch)
   )
+  ipcMain.handle(IPC.configSetVideoModelConfig, (_e, patch) => setVideoModelConfig(patch))
 
   ipcMain.handle(IPC.configAddCompany, (_e, name: string) => addCompany(name))
   ipcMain.handle(IPC.configRemoveCompany, (_e, id: string) => removeCompany(id))
@@ -135,6 +137,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.configSetActiveCompany, (_e, id: string) => setActiveCompany(id))
   ipcMain.handle(IPC.configRepairDataDir, () => repairDataDir(getDataDir()))
   ipcMain.handle(IPC.identityResetAllMembers, () => resetAllTeamMembers())
+  ipcMain.handle(IPC.identitySyncRoster, () => syncTeamRoster())
   ipcMain.handle(IPC.financeProcessInvoices, (_e, files: string[]) => processInvoices(getDataDir(), files))
   ipcMain.handle(IPC.intelKeywordSuggestions, () => getKeywordSuggestions(getDataDir()))
   ipcMain.handle(IPC.brandListMatters, () => listBrandMatters(getDataDir()))
@@ -212,6 +215,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     if (result.canceled || !result.filePath) return false
     copyFileSync(sourcePath, result.filePath)
     return true
+  })
+  ipcMain.handle(IPC.helpMemberGuide, () => {
+    const path = join(getDataDir(), '使用说明', '成员首次使用手册.md')
+    return existsSync(path) ? path : null
   })
 
   ipcMain.handle(IPC.uploadGeneric, (_e, agentName: AgentName, sourcePath: string) =>
@@ -355,6 +362,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   // ============ 销售工作台 ============
   ipcMain.handle(IPC.salesListProducts, () => listProducts(getDataDir()))
+  ipcMain.handle(IPC.salesListCategoryDict, () => listCategoryDict(getDataDir()))
   ipcMain.handle(IPC.salesSaveProduct, (_e, fields: ProductFields, id?: string) => saveProduct(getDataDir(), fields, id))
   ipcMain.handle(IPC.salesRemoveProduct, (_e, id: string) => removeProduct(getDataDir(), id))
 

@@ -3,6 +3,7 @@ export const IPC = {
   configPickDataDir: 'config:pick-data-dir',
   configSetActiveProvider: 'config:set-active-provider',
   configSetProviderConfig: 'config:set-provider-config',
+  configSetVideoModelConfig: 'config:set-video-model-config',
 
   configAddCompany: 'config:add-company',
   configRemoveCompany: 'config:remove-company',
@@ -10,6 +11,7 @@ export const IPC = {
   configSetActiveCompany: 'config:set-active-company',
   configRepairDataDir: 'config:repair-data-dir',
   identityResetAllMembers: 'identity:reset-all-members',
+  identitySyncRoster: 'identity:sync-roster',
   financeProcessInvoices: 'finance:process-invoices',
   intelKeywordSuggestions: 'intel:keyword-suggestions',
   brandListMatters: 'brand:list-matters',
@@ -26,6 +28,7 @@ export const IPC = {
   dialogPickFiles: 'dialog:pick-files',
   shellShowItemInFolder: 'shell:show-item-in-folder',
   shellSaveAsCopy: 'shell:save-as-copy',
+  helpMemberGuide: 'help:member-guide',
 
   uploadGeneric: 'upload:generic',
   uploadBiddingProject: 'upload:bidding-project',
@@ -101,6 +104,7 @@ export const IPC = {
   syncLastAt: 'sync:last-at',
 
   salesListProducts: 'sales:list-products',
+  salesListCategoryDict: 'sales:list-category-dict',
   salesSaveProduct: 'sales:save-product',
   salesRemoveProduct: 'sales:remove-product',
   salesSetProductImage: 'sales:set-product-image',

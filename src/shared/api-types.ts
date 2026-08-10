@@ -5,6 +5,7 @@ import type {
   BidProjectCard,
   BiddingProject,
   BiddingUploadResult,
+  CategoryL1,
   Company,
   ContractCategory,
   ContractTemplate,
@@ -30,6 +31,7 @@ import type {
   ProductFields,
   ProviderConfig,
   ProviderId,
+  VideoModelConfigPatch,
   QuotationTemplate,
   QuoteLineInput,
   QuoteXlsxResult,
@@ -68,6 +70,7 @@ export interface CompanyOsApi {
     pickDataDir(): Promise<string | null>
     setActiveProvider(id: ProviderId): Promise<void>
     setProviderConfig(id: ProviderId, patch: Partial<Omit<ProviderConfig, 'id'>>): Promise<void>
+    setVideoModelConfig(patch: VideoModelConfigPatch): Promise<void>
     addCompany(name: string): Promise<Company>
     removeCompany(id: string): Promise<void>
     setCompanyDataDir(id: string, dir: string): Promise<void>
@@ -120,6 +123,9 @@ export interface CompanyOsApi {
     showItemInFolder(path: string): Promise<void>
     saveAsCopy(path: string): Promise<boolean>
     openPath(path: string): Promise<void>
+  }
+  help: {
+    memberGuide(): Promise<string | null>
   }
   upload: {
     /** 通用聊天上传：按分身落 inbox/{编号_分身}/，与 outputs/ 分身文件夹镜像 */
@@ -250,6 +256,8 @@ export interface CompanyOsApi {
     remove(id: string): Promise<void>
     verifyPin(id: string, pin?: string): Promise<boolean>
     resetAllMembers(): Promise<void>
+    /** 首次登录同步后，强制按管理员花名册重建本机账号。 */
+    syncRoster(): Promise<TeamMember[]>
     /** 成员自助改 PIN（先验旧 PIN；新 PIN 4-8 位数字） */
     changePin(id: string, oldPin: string, newPin: string): Promise<{ ok: boolean; message?: string }>
     /** 管理员重置成员 PIN 回 123456 */
@@ -272,6 +280,8 @@ export interface CompanyOsApi {
   sales: {
     /** 读取产品库（会先自动合并 _待入库/ 里 agent 暂存的解析结果）；skipped=同名多供应商无法定位的更新条目数 */
     listProducts(): Promise<{ products: ProductEntry[]; ingested: number; skipped: number }>
+    /** 读《产品分类规范》分类字典，供一级/二级分类下拉取值；字典文件缺失返回空数组 */
+    listCategoryDict(): Promise<CategoryL1[]>
     /** 新增（不传 id）或整体更新（传 id）一条产品记录 */
     saveProduct(fields: ProductFields, id?: string): Promise<ProductEntry>
     removeProduct(id: string): Promise<void>
