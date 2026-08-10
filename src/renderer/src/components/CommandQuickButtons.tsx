@@ -12,7 +12,8 @@ const QUICK_COMMANDS: Partial<Record<AgentName, QuickCommand[]>> = {
     { label: '起草新 SOP/制度', template: '起草一份新的 SOP/制度，主题：〔请填写主题，如"请假管理"〕' }
   ],
   operation: [
-    { label: '本周内容日历', template: '生成本周新媒体内容计划，平台范围：〔请填写平台，如不填则覆盖全部平台〕' }
+    { label: '本周内容日历', template: '生成本周新媒体内容计划，平台范围：〔请填写平台，如不填则覆盖全部平台〕' },
+    { label: '数字人短视频', template: '生成一套数字人短视频内容工厂材料包，主题：〔请填写产品/场景〕；目标受众：〔企业采购/现场负责人等〕；目标：〔私信线索/预约演示〕。' }
   ]
 }
 
