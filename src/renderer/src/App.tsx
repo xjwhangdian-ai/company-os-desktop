@@ -21,6 +21,32 @@ import { FinanceWorkspace } from './pages/FinanceWorkspace'
 
 type View = 'settings' | { agent: AgentName }
 
+function FirstUseGuide({ userName, onDone }: { userName: string; onDone: () => void }): React.JSX.Element {
+  const [message, setMessage] = useState<string | null>(null)
+  async function withGuide(action: (path: string) => Promise<unknown>): Promise<void> {
+    const path = await window.api.help.memberGuide()
+    if (!path) {
+      setMessage('未找到帮助手册：请让管理员在设置页对公司数据目录执行“一键修复数据目录”。')
+      return
+    }
+    await action(path)
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-5">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-jushi-blue">欢迎使用，{userName}</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">首次使用工作台，请先下载并查看《成员首次使用手册》。手册包含 Windows 登录、账号同步、PIN 修改和各分身使用边界。</p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button onClick={() => withGuide((p) => window.api.shell.saveAsCopy(p))} className="rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white">下载帮助手册</button>
+          <button onClick={() => withGuide((p) => window.api.shell.openPath(p))} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600">查看手册</button>
+          <button onClick={onDone} className="ml-auto rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100">我已查看</button>
+        </div>
+        {message && <p className="mt-3 text-xs leading-5 text-amber-700">{message}</p>}
+      </div>
+    </div>
+  )
+}
+
 export default function App(): React.JSX.Element {
   const { config, loading, load } = useConfigStore()
   const { list, loaded, load: loadAgents } = useAgentsStore()
@@ -29,6 +55,7 @@ export default function App(): React.JSX.Element {
   const [view, setView] = useState<View>('settings')
   const [gateKey, setGateKey] = useState(0)
   const [navCollapsed, setNavCollapsed] = useState(false)
+  const [guideAcknowledged, setGuideAcknowledged] = useState(false)
   /** "配置就绪后自动离开设置页"只在启动时做一次——否则配置好之后每次点「设置」都会被立刻弹回分身页 */
   const autoLeftSettings = useRef(false)
 
@@ -90,6 +117,9 @@ export default function App(): React.JSX.Element {
     return <IdentityGate key={gateKey} />
   }
 
+  const guideKey = `member-guide-read-v1:${currentUser.name}`
+  const shouldShowGuide = !guideAcknowledged && !localStorage.getItem(guideKey)
+
   const isAdmin = currentUser.role === 'admin'
   // 员工只看到管理员分配的分身（未配置=全部可见）；管理员恒为全部
   const visibleList = isAdmin
@@ -100,6 +130,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="flex h-screen flex-col bg-slate-100 text-slate-900">
+      {shouldShowGuide && <FirstUseGuide userName={currentUser.name} onDone={() => { localStorage.setItem(guideKey, '1'); setGuideAcknowledged(true) }} />}
       <UpdateBanner />
       <EnvBanner onGoSettings={() => setView('settings')} />
       <div className="flex min-h-0 flex-1">

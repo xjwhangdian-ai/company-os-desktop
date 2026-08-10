@@ -40,7 +40,7 @@ export interface InvoiceProcessResult {
 }
 
 function resolvePython(): string | null {
-  const candidates = ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
+  const candidates = isWin ? ['python', 'py'] : ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
   for (const c of candidates) {
     if (c.startsWith('/')) {
       if (existsSync(c)) return c
@@ -72,7 +72,7 @@ function runOcr(dataDir: string, files: string[]): Promise<{ records: InvoiceRec
       try {
         const j = JSON.parse(out.trim().split('\n').pop() ?? '{}')
         if (j.error === 'MISSING_OCR') {
-          return reject(new Error(isWin ? '发票识别目前仅支持 macOS（依赖系统离线 OCR）——请在 Mac 上操作' : j.说明))
+          return reject(new Error(isWin ? 'Windows 发票识别需要安装 Tesseract OCR 与 pytesseract；请在「设置 → 本地环境」按说明配置后重试' : j.说明))
         }
         resolve({ records: j.records ?? [], failures: j.failures ?? [] })
       } catch {

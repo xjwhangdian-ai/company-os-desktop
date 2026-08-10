@@ -1,21 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-发票 OCR 批量识别（finance 分身/App 财务工作台用，macOS 离线 Vision OCR）
+发票 OCR 批量识别（finance 分身/App 财务工作台用；macOS Vision / Windows Tesseract）
 输入：发票图片路径列表（png/jpg）或目录
 输出：JSON 到 stdout —— {"records": [...], "failures": [...]}
   record: 发票号码/开票日期(YYYY-MM-DD)/购买方/销售方/金额(价税合计,红字为负)/方向(销项|进项|待确认)/建议文件名/原文件
-识别不到的字段留待确认，绝不猜数。依赖：pip3 install ocrmac（仅 macOS）。
+识别不到的字段留待确认，绝不猜数。macOS 依赖 ocrmac；Windows 依赖 Tesseract（含中文语言包）+ pytesseract。
 """
 import json
 import os
 import re
 import sys
 
+OCR_BACKEND = None
 try:
-    from ocrmac import ocrmac
+    if sys.platform == "darwin":
+        from ocrmac import ocrmac
+        OCR_BACKEND = "ocrmac"
+    else:
+        import pytesseract
+        from PIL import Image
+        OCR_BACKEND = "tesseract"
 except ImportError:
-    print(json.dumps({"error": "MISSING_OCR", "说明": "缺少 ocrmac（仅 macOS 支持）：pip3 install ocrmac"}, ensure_ascii=False))
+    pass
+
+if not OCR_BACKEND:
+    hint = "缺少 ocrmac：pip3 install ocrmac" if sys.platform == "darwin" else "缺少 pytesseract 或 Tesseract：先安装 Tesseract 中文语言包，再执行 python -m pip install --user pytesseract"
+    print(json.dumps({"error": "MISSING_OCR", "说明": hint}, ensure_ascii=False))
     sys.exit(2)
 
 # 我方主体关键词：销售方含之=销项(开出)，购买方含之=进项(收到)
@@ -27,7 +38,12 @@ def clean_name(s):
 
 
 def parse_one(path):
-    lines = ocrmac.OCR(path, language_preference=["zh-Hans"]).recognize()
+    if OCR_BACKEND == "ocrmac":
+        lines = ocrmac.OCR(path, language_preference=["zh-Hans"]).recognize()
+    else:
+        text = pytesseract.image_to_string(Image.open(path), lang="chi_sim+eng")
+        # Tesseract 没有 Vision 的坐标信息；按文本顺序保留字段提取，购销方无法可靠左右区分时待确认。
+        lines = [(t, None, (0, 0, 0, 0)) for t in text.splitlines() if t.strip()]
     full = " ".join(t for t, _, _ in lines)
     num = re.search(r"发票号码[：:]\s*(\d{8,})", full)
     date = re.search(r"开票日期[：:]\s*(\d{4})年(\d{1,2})月(\d{1,2})日", full)
@@ -35,7 +51,9 @@ def parse_one(path):
     for t, _, bbox in lines:
         m = re.match(r"名称[：:]\s*(.+)", t.strip())
         if m:
-            if bbox[0] < 0.45 and not buyer:
+            if OCR_BACKEND == "tesseract" and not buyer:
+                buyer = m.group(1).strip()
+            elif bbox[0] < 0.45 and not buyer:
                 buyer = m.group(1).strip()
             elif bbox[0] >= 0.45 and not seller:
                 seller = m.group(1).strip()

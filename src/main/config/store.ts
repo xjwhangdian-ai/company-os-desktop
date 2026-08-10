@@ -516,15 +516,17 @@ function exportRoster(): void {
 
 let lastAppliedRosterMtime = 0
 
-/** 按仓库花名册对齐本机成员表（mtime 变化才执行；无花名册文件=兼容旧行为不动） */
-function applyRosterIfChanged(): void {
+/** 按仓库花名册对齐本机成员表（mtime 变化才执行；无花名册文件=兼容旧行为不动）。
+ * 手动「一键同步账号信息」属于换机/首次登录恢复：员工账号回到初始 PIN，避免同名旧
+ * 本地账号保留过期 PIN，造成管理员已下发账号但员工无法登录。 */
+function applyRosterIfChanged(resetMemberPins = false): void {
   const dir = activeDataDir()
   if (!dir) return
   const p = join(dir, ROSTER_REL)
   if (!existsSync(p)) return
   try {
     const mtime = require('node:fs').statSync(p).mtimeMs as number
-    if (mtime === lastAppliedRosterMtime) return
+    if (mtime === lastAppliedRosterMtime && !resetMemberPins) return
     lastAppliedRosterMtime = mtime
     const roster = JSON.parse(readFileSync(p, 'utf-8')) as { members?: RosterMember[] }
     const wanted = (roster.members ?? []).filter((m) => m?.name?.trim())
@@ -537,6 +539,8 @@ function applyRosterIfChanged(): void {
       if (local) {
         local.role = w.role
         local.可见分身 = w.role === 'member' ? w.可见分身 : undefined
+        // 不重置管理员的本机 PIN；员工明确执行首次同步时统一回到 123456。
+        if (resetMemberPins && w.role === 'member') local.pinHash = DEFAULT_PIN_HASH
         next.push(local)
       } else {
         next.push({
@@ -567,7 +571,7 @@ export function listTeamMembers(): TeamMember[] {
 /** 同步完成后强制按仓库花名册重建本机账号，换机/清理旧账号时初始 PIN 回到 123456。 */
 export function syncTeamRoster(): TeamMember[] {
   lastAppliedRosterMtime = 0
-  applyRosterIfChanged()
+  applyRosterIfChanged(true)
   return readAll().teamMembers.map(toPublicMember)
 }
 

@@ -65,8 +65,8 @@ export interface EnvCheckResult {
   missingRequired: string[]
 }
 
-const PY_DEPS = ['pypdf', 'PIL', 'numpy', 'openpyxl']
-const PY_PIP_PKGS = ['pypdf', 'pillow', 'numpy', 'openpyxl']
+const PY_DEPS = ['pypdf', 'PIL', 'numpy', 'openpyxl', 'pytesseract']
+const PY_PIP_PKGS = ['pypdf', 'pillow', 'numpy', 'openpyxl', 'pytesseract']
 
 export async function checkEnv(): Promise<EnvCheckResult> {
   const items: EnvItem[] = []
@@ -156,6 +156,15 @@ export async function checkEnv(): Promise<EnvCheckResult> {
       说明: ocrOk ? '已安装' : '可选——处理扫描版画册前点「一键安装」即可',
       安装命令: 'pip3 install --user ocrmac',
       canAutoInstall: pyOk
+    })
+  }
+  if (isWin) {
+    const tesseract = await run('tesseract', ['--version'])
+    items.push({
+      key: 'tesseract', name: 'Tesseract OCR（Windows 发票识别）', ok: tesseract.ok, required: false,
+      用途: '财务分身识别发票图片并生成台账',
+      说明: tesseract.ok ? '已安装' : '可选——使用发票识别前安装 Tesseract，并在安装器中勾选中文语言包、加入 PATH',
+      安装命令: 'https://github.com/UB-Mannheim/tesseract/wiki', canAutoInstall: false
     })
   }
 

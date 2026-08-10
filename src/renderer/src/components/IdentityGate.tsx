@@ -253,13 +253,14 @@ export function IdentityGate(): React.JSX.Element {
     setSyncing(true)
     setSyncMessage(null)
     try {
-      const result = await window.api.sync.now('首次登录同步')
-      if (!result.ok) {
-        setSyncMessage(result.message || '同步失败，请确认网络与公司数据目录后重试')
-        return
-      }
+      // 即便远程 Git 同步失败，也先尝试应用当前目录已有花名册：重装/换机时可恢复初始 PIN。
       const roster = await window.api.identity.syncRoster()
       await loadMembers()
+      const result = await window.api.sync.now('首次登录同步')
+      if (!result.ok) {
+        setSyncMessage(roster.length > 0 ? `已读取本机花名册并恢复员工初始 PIN（123456）；远程同步未完成：${result.message || '请确认所选目录已绑定公司 Git 仓库'}` : (result.message || '同步失败，请确认网络与公司数据目录后重试'))
+        return
+      }
       setSyncMessage(roster.length > 0 ? `已同步 ${roster.length} 个管理员分配的账号；初始 PIN 为 123456。` : '同步成功，但未找到账号花名册；请联系管理员在「设置 → 团队成员」分配账号。')
     } catch {
       setSyncMessage('同步失败，请确认网络、Git 连接和公司数据目录后重试。')
@@ -289,9 +290,8 @@ export function IdentityGate(): React.JSX.Element {
 
       <div className="w-72 rounded-xl border border-sky-200 bg-sky-50 p-4 text-center">
         <p className="text-sm font-medium text-slate-700">首次安装或换电脑？</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">请先同步管理员分配的账号信息，再选择自己的账号登录。同步不会覆盖公司资料；新账号初始 PIN 为 123456。</p>
-        {!selectedCompany?.dataDir && (
-          <button
+        <p className="mt-1 text-xs leading-5 text-slate-500">Windows 首次使用：先选择管理员提供的公司数据目录，再同步账号；员工账号会恢复为初始 PIN 123456。</p>
+        <button
             onClick={async () => {
               if (!selectedCompanyId) return
               await pickCompanyDataDir(selectedCompanyId)
@@ -301,9 +301,8 @@ export function IdentityGate(): React.JSX.Element {
             disabled={!selectedCompanyId}
             className="mt-3 rounded-lg border border-jushi-accent bg-white px-3 py-1.5 text-xs font-medium text-jushi-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
-            先选择公司数据目录
+            {selectedCompany?.dataDir ? '更换公司数据目录' : '先选择公司数据目录'}
           </button>
-        )}
         <button
           onClick={syncAccounts}
           disabled={syncing || !selectedCompanyId}

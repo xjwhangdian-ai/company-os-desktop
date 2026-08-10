@@ -68,6 +68,9 @@ const api: CompanyOsApi = {
     saveAsCopy: (path: string) => ipcRenderer.invoke(IPC.shellSaveAsCopy, path),
     openPath: (path: string) => ipcRenderer.invoke(IPC.shellOpenPath, path)
   },
+  help: {
+    memberGuide: () => ipcRenderer.invoke(IPC.helpMemberGuide)
+  },
   upload: {
     generic: (agentName: AgentName, sourcePath: string): Promise<UploadResult> =>
       ipcRenderer.invoke(IPC.uploadGeneric, agentName, sourcePath),

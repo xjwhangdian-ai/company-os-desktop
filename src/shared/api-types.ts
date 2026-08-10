@@ -124,6 +124,9 @@ export interface CompanyOsApi {
     saveAsCopy(path: string): Promise<boolean>
     openPath(path: string): Promise<void>
   }
+  help: {
+    memberGuide(): Promise<string | null>
+  }
   upload: {
     /** 通用聊天上传：按分身落 inbox/{编号_分身}/，与 outputs/ 分身文件夹镜像 */
     generic(agentName: AgentName, sourcePath: string): Promise<UploadResult>

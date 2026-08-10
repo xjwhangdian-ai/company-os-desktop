@@ -216,6 +216,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     copyFileSync(sourcePath, result.filePath)
     return true
   })
+  ipcMain.handle(IPC.helpMemberGuide, () => {
+    const path = join(getDataDir(), '使用说明', '成员首次使用手册.md')
+    return existsSync(path) ? path : null
+  })
 
   ipcMain.handle(IPC.uploadGeneric, (_e, agentName: AgentName, sourcePath: string) =>
     uploadToInbox(getDataDir(), agentName, sourcePath)

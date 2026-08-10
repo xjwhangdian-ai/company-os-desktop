@@ -28,6 +28,7 @@ export const IPC = {
   dialogPickFiles: 'dialog:pick-files',
   shellShowItemInFolder: 'shell:show-item-in-folder',
   shellSaveAsCopy: 'shell:save-as-copy',
+  helpMemberGuide: 'help:member-guide',
 
   uploadGeneric: 'upload:generic',
   uploadBiddingProject: 'upload:bidding-project',
