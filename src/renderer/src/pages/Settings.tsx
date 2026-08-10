@@ -27,6 +27,8 @@ const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
 
 export function Settings(): React.JSX.Element {
   const { config, pickCompanyDataDir, setActiveProvider, saveProviderConfig } = useConfigStore()
+  const currentUser = useIdentityStore((s) => s.currentUser)
+  const environmentOnly = currentUser?.role === 'member'
   const [viewingId, setViewingId] = useState<ProviderId>('anthropic')
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [baseUrlInput, setBaseUrlInput] = useState('')
@@ -120,6 +122,23 @@ export function Settings(): React.JSX.Element {
 
   if (!config || !viewingProvider) {
     return <div className="p-8 text-sm text-slate-400">加载中…</div>
+  }
+
+  // 普通成员可自行修复当前电脑（尤其 Windows）的 Python、PDF、OCR 等环境；
+  // 公司数据目录、模型密钥和成员权限仍由管理员统一管理。
+  if (environmentOnly) {
+    return (
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto max-w-2xl space-y-6 p-8 pb-24">
+          <div>
+            <h1 className="text-lg font-semibold text-slate-800">本机环境设置</h1>
+            <p className="mt-1 text-sm text-slate-400">可直接检查并修复这台电脑的运行依赖；公司目录、模型和成员权限仍由管理员统一管理。</p>
+          </div>
+          <EnvSection onFlash={flashSaved} />
+          {savedHint && <div className="fixed bottom-6 right-6 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">{savedHint}</div>}
+        </div>
+      </div>
+    )
   }
 
   const doc = PROVIDER_DOCS[viewingId]

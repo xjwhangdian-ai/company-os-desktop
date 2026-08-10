@@ -186,16 +186,14 @@ export default function App(): React.JSX.Element {
         </div>
 
         <SyncButton userName={currentUser.name} />
-        {isAdmin && (
-          <button
-            onClick={() => setView('settings')}
-            className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
-              view === 'settings' ? 'bg-white shadow-sm text-jushi-accent' : 'text-slate-500 hover:bg-white/60'
-            }`}
-          >
-            ⚙️ 设置
-          </button>
-        )}
+        <button
+          onClick={() => setView('settings')}
+          className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
+            view === 'settings' ? 'bg-white shadow-sm text-jushi-accent' : 'text-slate-500 hover:bg-white/60'
+          }`}
+        >
+          ⚙️ {isAdmin ? '设置' : '本机环境'}
+        </button>
       </aside>
       ) : (
       /* 收起态：留一条窄栏（顶部仍可拖动窗口/容纳 macOS 红绿灯），点 » 重新展开 */
@@ -239,11 +237,7 @@ export default function App(): React.JSX.Element {
             </div>
           </div>
         )}
-        {view === 'settings' && !isAdmin && (
-          <div className="flex h-full items-center justify-center px-8 text-center text-sm text-slate-400">
-            设置页仅管理员可用——数据目录、模型供应商、成员权限由管理员统一配置；有需要请联系管理员。
-          </div>
-        )}
+        {view === 'settings' && !isAdmin && <Settings />}
         {view !== 'settings' && !ready && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-400">
             <p>请先配置 {activeCompany?.name ?? '当前公司'} 的数据目录和 API Key</p>
