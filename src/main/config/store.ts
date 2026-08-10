@@ -32,6 +32,14 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
       haiku: 'claude-haiku-4-5-20251001'
     }
   },
+  openai: {
+    id: 'openai',
+    label: 'ChatGPT（OpenAI API）',
+    baseUrl: null,
+    authEnvVar: 'OPENAI_API_KEY',
+    apiKey: null,
+    modelMapping: { opus: 'gpt-5', sonnet: 'gpt-5', haiku: 'gpt-5-mini' }
+  },
   deepseek: {
     id: 'deepseek',
     label: 'DeepSeek',

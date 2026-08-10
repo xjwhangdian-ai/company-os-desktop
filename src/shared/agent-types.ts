@@ -472,7 +472,7 @@ export interface SupplierDocPreview {
  * 'custom' 是通用逃生舱：任何其它自建/自托管的 Anthropic 协议兼容端点（如
  * claude-code-router）都能通过这个槽位接入，不用为每个新供应商改代码。
  */
-export type ProviderId = 'anthropic' | 'deepseek' | 'kimi' | 'minimax-cn' | 'qwen' | 'zhipu' | 'custom'
+export type ProviderId = 'anthropic' | 'openai' | 'deepseek' | 'kimi' | 'minimax-cn' | 'qwen' | 'zhipu' | 'custom'
 
 export interface ModelMapping {
   opus: string
@@ -486,7 +486,7 @@ export interface ProviderConfig {
   /** null = 官方 Anthropic API，不设 ANTHROPIC_BASE_URL */
   baseUrl: string | null
   /** 认证信息通过哪个环境变量传给 SDK 底层 CLI——多数第三方兼容端点用 Bearer 语义的 AUTH_TOKEN，而非 Anthropic 原生的 API_KEY */
-  authEnvVar: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN'
+  authEnvVar: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN' | 'OPENAI_API_KEY'
   apiKey: string | null
   modelMapping: ModelMapping
 }

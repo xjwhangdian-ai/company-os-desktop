@@ -159,6 +159,36 @@ function MemberTile({
   )
 }
 
+/** 手工输入只能登录管理员花名册中已有的账号，未知账号绝不自动创建。 */
+function AccountLogin({ members, onBeforeLogin, onLogin }: { members: TeamMember[]; onBeforeLogin: () => Promise<void>; onLogin: () => void }): React.JSX.Element {
+  const login = useIdentityStore((s) => s.login)
+  const [name, setName] = useState('')
+  const [pin, setPin] = useState('')
+  const [message, setMessage] = useState<string | null>(null)
+  async function submit(): Promise<void> {
+    const member = members.find((m) => m.name.trim().toLowerCase() === name.trim().toLowerCase())
+    if (!member) { setMessage('该账号未由管理员分配。请先点击“一键同步账号信息”，不要自行创建账号。'); return }
+    await onBeforeLogin()
+    if (!(await window.api.identity.verifyPin(member.id, pin))) { setMessage('PIN 不正确。首次登录请使用默认 PIN 123456。'); return }
+    if (member.usingDefaultPin) {
+      const next = window.prompt('这是初始 PIN。可立即设置新的 4–8 位数字 PIN；留空则暂不修改。')?.trim()
+      if (next) {
+        const r = await window.api.identity.changePin(member.id, pin, next)
+        if (!r.ok) { setMessage(r.message ?? 'PIN 修改失败'); return }
+        await login(member.id, next)
+      } else await login(member.id, pin)
+    } else await login(member.id, pin)
+    onLogin()
+  }
+  return <div className="w-72 space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <p className="text-sm font-medium text-slate-700">账号登录</p>
+    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="管理员分配的账号" className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-jushi-accent" />
+    <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void submit()} placeholder="PIN" className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-jushi-accent" />
+    <button onClick={() => void submit()} className="w-full rounded bg-jushi-accent py-1.5 text-sm font-medium text-white">登录</button>
+    {message && <p className="text-xs leading-5 text-amber-700">{message}</p>}
+  </div>
+}
+
 /**
  * 每次启动 App 都要先选公司+选身份（可选 PIN）才能进主界面——纯本地校验，用于产出留痕，
  * 不是真账号安全。登录成功后 useIdentityStore.currentUser 变化会让 App.tsx 自动重渲染
@@ -279,7 +309,7 @@ export function IdentityGate(): React.JSX.Element {
                 // 场景：重装/换机后旧配置残留、改过的 PIN 想不起来，且没人能登录进去重置。
                 // PIN 是界面级留痕不是安全体系——允许本机自助清空，公司/数据/API Key 全不动。
                 const ok = window.confirm(
-                  '忘记 PIN？\n\n将清空本机全部登录账号，回到"创建管理员账号"页重新创建（初始 PIN 123456）。\n公司数据、数据目录、API Key 均不受影响。\n\n确定重置吗？'
+                  '忘记 PIN？\n\n将清空本机账号缓存，随后请使用上方“一键同步账号信息”重新获取管理员分配的账号（初始 PIN 123456）。\n公司数据、数据目录、API Key 均不受影响。\n\n确定重置吗？'
                 )
                 if (!ok) return
                 try {
@@ -296,6 +326,7 @@ export function IdentityGate(): React.JSX.Element {
           </div>
         </div>
       )}
+      <AccountLogin members={members} onBeforeLogin={commitCompany} onLogin={noop} />
       </div>
     </div>
   )

@@ -5,9 +5,10 @@ import type { ModelMapping, ProviderId, VideoModelConfig } from '@shared/agent-t
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
-const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'deepseek', 'kimi', 'minimax-cn', 'qwen', 'zhipu', 'custom']
+const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'openai', 'deepseek', 'kimi', 'minimax-cn', 'qwen', 'zhipu', 'custom']
 
 const PROVIDER_DOCS: Partial<Record<ProviderId, { label: string; url: string }>> = {
+  openai: { label: 'OpenAI API · 快速开始', url: 'https://platform.openai.com/docs/quickstart/make-your-first-api-request' },
   deepseek: { label: 'DeepSeek · Claude Code 接入文档', url: 'https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code' },
   kimi: { label: 'Moonshot 开放平台 · Claude Code 接入文档', url: 'https://platform.moonshot.cn/docs/guide/agent-support' },
   'minimax-cn': { label: 'MiniMax · Claude Code 接入文档', url: 'https://platform.minimax.io/docs/token-plan/claude-code' },
@@ -16,6 +17,7 @@ const PROVIDER_DOCS: Partial<Record<ProviderId, { label: string; url: string }>>
 }
 
 const PROVIDER_HINTS: Partial<Record<ProviderId, string>> = {
+  openai: '使用 OpenAI Platform 创建的 API Key；ChatGPT 网页订阅不能替代 API Key。当前工作台仍使用 Claude Agent SDK，ChatGPT 入口已预置但需完成 Codex/OpenAI 运行时迁移后才能实际调度分身。',
   deepseek: 'DeepSeek 目前只有两档：deepseek-v4-pro（旗舰）/ deepseek-v4-flash（性价比档，sonnet 和 haiku 都用它）。旧别名 deepseek-chat/deepseek-reasoner 将于 2026-07-24 停用，不要用。模型迭代快，用之前最好点右侧文档确认一下是否有新模型。',
   kimi: '月之暗面官方提供 Anthropic 协议兼容端点（Kimi 接 Claude Code 的官方方式），国内 Base URL 已预填 api.moonshot.cn/anthropic（国际版账号改 api.moonshot.ai）。模型已按最新旗舰预填：kimi-k3（2026-07 发布，opus/sonnet 档）/ kimi-k2-turbo-preview（haiku 高速便宜档）。Kimi 迭代快，用之前点右侧文档核对最新模型名。',
   'minimax-cn':

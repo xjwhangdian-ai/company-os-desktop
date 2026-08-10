@@ -102,6 +102,10 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentStr
   const resolvedModel = resolveModel(agentDef?.model)
 
   const provider = getActiveProvider()
+  if (provider.id === 'openai') {
+    yield { type: 'fatal-error', message: 'ChatGPT 已加入供应商配置，但当前分身运行时仍是 Claude Agent SDK，不能直接调用 OpenAI Responses API。需完成 Codex/OpenAI 运行时迁移后才能实际调度分身；请暂时选择其他已兼容的供应商。' }
+    return
+  }
   if (!provider.apiKey) {
     yield { type: 'fatal-error', message: `尚未配置 ${provider.label} 的 API Key，请到设置页填写` }
     return
