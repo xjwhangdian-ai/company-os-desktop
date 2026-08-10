@@ -23,7 +23,7 @@ import type {
 } from '@shared/agent-types'
 import { applyCatalogPairing, extractPdfCatalog, readCatalogProgress } from '../fs-io/pdf-catalog'
 import { exportZcyPackage } from '../fs-io/zcy-export'
-import { repairDataDir } from '../config/first-run'
+import { repairDataDir, templateSrcPath } from '../config/first-run'
 import { checkEnv, installEnvItem } from '../fs-io/env-check'
 import { listBrandMatters, setBrandMatter } from '../fs-io/brand-workflow'
 import { processInvoices } from '../fs-io/finance-invoice'
@@ -217,8 +217,12 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return true
   })
   ipcMain.handle(IPC.helpMemberGuide, () => {
-    const path = join(getDataDir(), '使用说明', '成员首次使用手册.md')
-    return existsSync(path) ? path : null
+    // 老安装目录可能在 v0.1.14 前就已初始化，里面没有新增手册；此时直接回退到
+    // 当前安装包内置模板，保证首次登录的“下载/查看”永远可用。
+    const dataGuide = join(getDataDir(), '使用说明', '成员首次使用手册.md')
+    if (existsSync(dataGuide)) return dataGuide
+    const bundledGuide = join(templateSrcPath(), '使用说明', '成员首次使用手册.md')
+    return existsSync(bundledGuide) ? bundledGuide : null
   })
 
   ipcMain.handle(IPC.uploadGeneric, (_e, agentName: AgentName, sourcePath: string) =>

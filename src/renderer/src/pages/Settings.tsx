@@ -633,7 +633,8 @@ const ALL_AGENTS: { name: import('@shared/agent-types').AgentName; label: string
   { name: 'operation', label: '运营' },
   { name: 'brand', label: '品牌' },
   { name: 'finance', label: '财务' },
-  { name: 'intel', label: '行业情报' }
+  { name: 'intel', label: '行业情报' },
+  { name: 'mba', label: 'MBA学习' }
 ]
 
 /** 员工的可见分身勾选行：全不勾/全勾 = 全部可见（存 null） */

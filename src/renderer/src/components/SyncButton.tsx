@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 
 /**
  * ☁️ 一键同步：提交本地改动 → 拉取远程 → 推送。仅管理员的开发机需要（数据目录是 git 仓库且配了远程）。
- * 团队成员机器数据不走 git（git 只管应用程序更新，数据由 App 内置抓取/本机生成），
- * 数据目录不是 git 仓库或没配远程时按钮整体隐藏，不再弹"同步失败"。
+ * 普通成员也需要看到同步入口，以便获取管理员下发的花名册；未绑定远程时明确说明原因，
+ * 不再把入口整个隐藏。
  */
 export function SyncButton({
   userName,
@@ -40,19 +40,23 @@ export function SyncButton({
     }
   }
 
-  if (!available) return null
-
   return (
     <div className={compact ? '' : 'w-full'}>
       <button
-        onClick={handleSync}
+        onClick={() => {
+          if (!available) {
+            setResult({ ok: false, message: '当前公司数据目录尚未绑定同步仓库；请在登录页选择管理员提供的 company-os 目录后重试。' })
+            return
+          }
+          void handleSync()
+        }}
         disabled={busy}
         className={
           compact
             ? 'rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50'
             : 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-white/60 disabled:opacity-50'
         }
-        title="提交本地改动并与远程仓库同步（大脑与库；inbox/outputs 不同步）"
+        title={available ? '提交本地改动并与远程仓库同步（大脑与库；inbox/outputs 不同步）' : '未绑定同步仓库：点击查看处理说明'}
       >
         {busy ? '⏳ 同步中…' : '☁️ 一键同步'}
       </button>

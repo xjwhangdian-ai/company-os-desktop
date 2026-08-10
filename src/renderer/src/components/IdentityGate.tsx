@@ -40,58 +40,6 @@ function CompanyPicker({ onSelect }: CompanyPickerProps): React.JSX.Element {
   )
 }
 
-function AddMemberForm({
-  onBeforeLogin,
-  onDone,
-  onCancel
-}: {
-  onBeforeLogin: () => Promise<void>
-  onDone: () => void
-  onCancel?: () => void
-}): React.JSX.Element {
-  const addMember = useIdentityStore((s) => s.addMember)
-  const login = useIdentityStore((s) => s.login)
-  const [name, setName] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleSubmit(): Promise<void> {
-    if (!name.trim()) {
-      setError('请输入名字')
-      return
-    }
-    await onBeforeLogin()
-    // 仅零成员时可见（创建首个管理员）；初始 PIN 固定 123456，登录后可改
-    const member = await addMember(name.trim())
-    await login(member.id, '123456')
-    onDone()
-  }
-
-  return (
-    <div className="w-72 space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-700">创建管理员账号（首次使用）</h3>
-      <input
-        autoFocus
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="管理员名字"
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-jushi-accent"
-      />
-      <p className="text-xs text-slate-400">初始 PIN 为 123456，登录后可修改；员工账号之后由管理员在「设置 → 团队成员」统一分配。</p>
-      {error && <p className="text-xs text-red-500">{error}</p>}
-      <div className="flex gap-2">
-        {onCancel && (
-          <button onClick={onCancel} className="flex-1 rounded-lg border border-slate-300 py-2 text-sm text-slate-500">
-            取消
-          </button>
-        )}
-        <button onClick={handleSubmit} className="flex-1 rounded-lg bg-jushi-accent py-2 text-sm font-medium text-white">
-          开始使用
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function MemberTile({
   member,
   onBeforeLogin,
@@ -254,13 +202,16 @@ export function IdentityGate(): React.JSX.Element {
     setSyncMessage(null)
     try {
       // 即便远程 Git 同步失败，也先尝试应用当前目录已有花名册：重装/换机时可恢复初始 PIN。
-      const roster = await window.api.identity.syncRoster()
+      const localRoster = await window.api.identity.syncRoster()
       await loadMembers()
       const result = await window.api.sync.now('首次登录同步')
       if (!result.ok) {
-        setSyncMessage(roster.length > 0 ? `已读取本机花名册并恢复员工初始 PIN（123456）；远程同步未完成：${result.message || '请确认所选目录已绑定公司 Git 仓库'}` : (result.message || '同步失败，请确认网络与公司数据目录后重试'))
+        setSyncMessage(localRoster.length > 0 ? `已读取本机花名册并恢复员工初始 PIN（123456）；远程同步未完成：${result.message || '请确认所选目录已绑定公司 Git 仓库'}` : (result.message || '同步失败，请确认网络与公司数据目录后重试'))
         return
       }
+      // 必须在 git pull 成功后再应用一次，才能读到刚下载的管理员花名册。
+      const roster = await window.api.identity.syncRoster()
+      await loadMembers()
       setSyncMessage(roster.length > 0 ? `已同步 ${roster.length} 个管理员分配的账号；初始 PIN 为 123456。` : '同步成功，但未找到账号花名册；请联系管理员在「设置 → 团队成员」分配账号。')
     } catch {
       setSyncMessage('同步失败，请确认网络、Git 连接和公司数据目录后重试。')
@@ -315,11 +266,7 @@ export function IdentityGate(): React.JSX.Element {
       </div>
 
       {members.length === 0 ? (
-        selectedCompany?.dataDir ? (
-          <p className="max-w-sm text-center text-xs leading-5 text-slate-400">尚未同步到可用账号。请点击上方“一键同步账号信息”；若仍没有账号，请联系管理员在“设置 → 团队成员”分配。</p>
-        ) : (
-          <AddMemberForm onBeforeLogin={commitCompany} onDone={noop} />
-        )
+        <p className="max-w-sm text-center text-xs leading-5 text-slate-400">尚未同步到可用账号。请先选择管理员提供的公司数据目录并点击上方“一键同步账号信息”；账号只能由管理员预先分配。</p>
       ) : (
         <div className="flex flex-wrap justify-center gap-3">
           {members.map((m) => (

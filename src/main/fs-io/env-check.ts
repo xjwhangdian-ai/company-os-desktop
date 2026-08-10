@@ -1,6 +1,7 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { app } from 'electron'
 import { existsSync } from 'node:fs'
-import { delimiter } from 'node:path'
+import { delimiter, join } from 'node:path'
 
 // ============ 本地环境检测与一键安装 ============
 // App 的机械管线与分身工具链依赖若干本机组件：
@@ -18,6 +19,12 @@ export const EXTRA_BIN_DIRS = isWin
 
 export function augmentedPath(): string {
   return [...EXTRA_BIN_DIRS, process.env.PATH ?? ''].join(delimiter)
+}
+
+/** 安装包内置 Windows 环境一键安装脚本：Python、PDF 渲染、发票 OCR 与 Python 依赖。 */
+function windowsBootstrapPath(): string {
+  const root = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
+  return join(root, 'company-os-template', 'tools', 'windows-env-setup.bat')
 }
 
 function run(cmd: string, args: string[], timeoutMs = 20000): Promise<{ ok: boolean; out: string }> {
@@ -89,7 +96,7 @@ export async function checkEnv(): Promise<EnvCheckResult> {
         ? '未检测到——去 python.org 下载安装 Python 3，安装时勾选 "Add python.exe to PATH"，装完重启本 App'
         : '未检测到——终端执行 xcode-select --install（或 brew install python3），装完重启本 App',
     安装命令: isWin ? 'https://www.python.org/downloads/' : 'xcode-select --install',
-    canAutoInstall: false
+    canAutoInstall: isWin
   })
 
   // ② python 依赖库
@@ -118,7 +125,7 @@ export async function checkEnv(): Promise<EnvCheckResult> {
         ? '已齐全'
         : `缺少：${missingPy.join('、')}——点「一键安装」自动补齐`,
     安装命令: pipCmd,
-    canAutoInstall: pyOk
+    canAutoInstall: isWin || pyOk
   })
 
   // ③ poppler（pdftoppm）：分身读 PDF 的关键组件
@@ -138,7 +145,7 @@ export async function checkEnv(): Promise<EnvCheckResult> {
           ? '未检测到——点「一键安装」（brew install poppler，约 1-2 分钟）'
           : '未检测到，且本机没有 Homebrew——先装 Homebrew（brew.sh），或终端执行：/bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)"，再回来一键安装',
     安装命令: isWin ? 'https://github.com/oschwartz10612/poppler-windows/releases' : 'brew install poppler',
-    canAutoInstall: !isWin && brewOk
+    canAutoInstall: isWin || (!isWin && brewOk)
   })
 
   // ④ ocrmac（仅 mac，可选）：扫描版画册离线 OCR
@@ -164,7 +171,7 @@ export async function checkEnv(): Promise<EnvCheckResult> {
       key: 'tesseract', name: 'Tesseract OCR（Windows 发票识别）', ok: tesseract.ok, required: false,
       用途: '财务分身识别发票图片并生成台账',
       说明: tesseract.ok ? '已安装' : '可选——使用发票识别前安装 Tesseract，并在安装器中勾选中文语言包、加入 PATH',
-      安装命令: 'https://github.com/UB-Mannheim/tesseract/wiki', canAutoInstall: false
+      安装命令: '安装包内置 Windows 环境一键安装脚本', canAutoInstall: true
     })
   }
 
@@ -176,6 +183,17 @@ export async function checkEnv(): Promise<EnvCheckResult> {
 
 /** 一键安装：只支持 canAutoInstall 的项，串行执行对应命令，返回结果摘要 */
 export async function installEnvItem(key: string): Promise<{ ok: boolean; 说明: string }> {
+  if (isWin && ['python', 'pydeps', 'poppler', 'tesseract'].includes(key)) {
+    const script = windowsBootstrapPath()
+    if (!existsSync(script)) return { ok: false, 说明: '安装包内未找到 Windows 环境安装脚本，请重新下载安装包' }
+    try {
+      const child = spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: false })
+      child.unref()
+      return { ok: true, 说明: '已打开 Windows 环境安装窗口：将自动安装 Python、PDF 渲染、Tesseract 与依赖库；完成后关闭并重新打开工作台，再点“重新检测”。' }
+    } catch (err) {
+      return { ok: false, 说明: `无法启动环境安装脚本：${err instanceof Error ? err.message : String(err)}` }
+    }
+  }
   const python = resolvePython()
   if (key === 'pydeps' || key === 'ocrmac') {
     if (!python) return { ok: false, 说明: '需先安装 Python 3' }
