@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { app } from 'electron'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 
 // ============ 本地环境检测与一键安装 ============
@@ -13,8 +13,32 @@ import { delimiter, join } from 'node:path'
 const isWin = process.platform === 'win32'
 
 /** GUI 启动的 Electron PATH 不含 Homebrew 等目录，检测与安装统一用补齐后的 PATH */
+function windowsRuntimeBinDirs(): string[] {
+  const local = process.env.LOCALAPPDATA ?? ''
+  const roaming = process.env.APPDATA ?? ''
+  const base = [
+    join(local, 'Programs', 'Python', 'Python312'),
+    join(local, 'Programs', 'Python', 'Python312', 'Scripts'),
+    join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Tesseract-OCR')
+  ]
+  const popplerRoot = join(roaming, 'Agent工作台', 'runtime', 'poppler')
+  if (existsSync(popplerRoot)) {
+    const walk = (dir: string): void => {
+      try {
+        for (const name of readdirSync(dir)) {
+          const child = join(dir, name)
+          if (statSync(child).isDirectory()) walk(child)
+          else if (name.toLowerCase() === 'pdftoppm.exe') base.push(dir)
+        }
+      } catch { /* 单个运行时目录不可读时忽略 */ }
+    }
+    walk(popplerRoot)
+  }
+  return [...new Set(base.filter((p) => p && existsSync(p)))]
+}
+
 export const EXTRA_BIN_DIRS = isWin
-  ? [] // Windows 安装器一般会写 PATH
+  ? windowsRuntimeBinDirs() // 安装器自动写 PATH；这里再补一次，确保首次启动立即可用。
   : ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin']
 
 export function augmentedPath(): string {
@@ -93,7 +117,7 @@ export async function checkEnv(): Promise<EnvCheckResult> {
     说明: pyOk
       ? '已安装'
       : isWin
-        ? '未检测到——去 python.org 下载安装 Python 3，安装时勾选 "Add python.exe to PATH"，装完重启本 App'
+        ? '未检测到——安装包会自动部署并配置 Python；请完全退出后重新打开工作台，再点“重新检测”'
         : '未检测到——终端执行 xcode-select --install（或 brew install python3），装完重启本 App',
     安装命令: isWin ? 'https://www.python.org/downloads/' : 'xcode-select --install',
     canAutoInstall: isWin
@@ -140,7 +164,7 @@ export async function checkEnv(): Promise<EnvCheckResult> {
     说明: popplerOk
       ? '已安装'
       : isWin
-        ? '未检测到——下载 poppler for Windows（github.com/oschwartz10612/poppler-windows Releases），解压后把其中 Library\\bin 目录加入系统 PATH，装完重启本 App'
+        ? '未检测到——安装包会自动部署 PDF 渲染组件并加入 PATH；请完全退出后重新打开工作台，再点“重新检测”'
         : brewOk
           ? '未检测到——点「一键安装」（brew install poppler，约 1-2 分钟）'
           : '未检测到，且本机没有 Homebrew——先装 Homebrew（brew.sh），或终端执行：/bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)"，再回来一键安装',
@@ -170,7 +194,7 @@ export async function checkEnv(): Promise<EnvCheckResult> {
     items.push({
       key: 'tesseract', name: 'Tesseract OCR（Windows 发票识别）', ok: tesseract.ok, required: false,
       用途: '财务分身识别发票图片并生成台账',
-      说明: tesseract.ok ? '已安装' : '可选——使用发票识别前安装 Tesseract，并在安装器中勾选中文语言包、加入 PATH',
+      说明: tesseract.ok ? '已安装' : '可选——安装包会自动部署发票识别 OCR 并加入 PATH，重启工作台后重新检测',
       安装命令: '安装包内置 Windows 环境一键安装脚本', canAutoInstall: true
     })
   }

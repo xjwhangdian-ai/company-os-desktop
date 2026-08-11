@@ -118,8 +118,9 @@ export function IdentityGate(): React.JSX.Element {
 
       <div className="w-72 rounded-xl border border-sky-200 bg-sky-50 p-4 text-center">
         <p className="text-sm font-medium text-slate-700">首次安装或换电脑？</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">安装时已自动创建默认公司数据目录，无需在这里选择。只有管理员需要调整目录时，才到“设置 → 数据目录”操作。</p>
-        {selectedCompany?.dataDir && <p className="mt-2 truncate rounded bg-white/70 px-2 py-1 text-[10px] text-slate-400" title={selectedCompany.dataDir}>默认数据目录：{selectedCompany.dataDir}</p>}
+        <p className="mt-1 rounded-md bg-white/80 px-2 py-1.5 text-xs font-semibold leading-5 text-jushi-accent">第一步：请先点击下方“一键同步账号信息”。</p>
+        <p className="mt-2 text-xs leading-5 text-slate-500">安装时会按当前系统自动创建默认公司数据目录：Windows 位于当前用户的“文档”目录，macOS 位于当前用户的“文稿”目录。无需在这里选择；需要调整时到“设置 → 数据目录”。</p>
+        {selectedCompany?.dataDir && <p className="mt-2 truncate rounded bg-white/70 px-2 py-1 text-[10px] text-slate-400" title={selectedCompany.dataDir}>当前电脑的数据目录：{selectedCompany.dataDir}</p>}
         <button
           onClick={syncAccounts}
           disabled={syncing || !selectedCompanyId}
@@ -133,7 +134,7 @@ export function IdentityGate(): React.JSX.Element {
       </div>
 
       {members.length === 0 ? (
-        <p className="max-w-sm text-center text-xs leading-5 text-slate-400">尚未同步到可用账号。请点击上方“一键同步账号信息”；账号只能由管理员预先分配。</p>
+        <p className="max-w-sm rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs leading-5 text-amber-700">尚未同步到可用账号。请先完成上方“一键同步账号信息”，账号登录区域将在同步到管理员分配的账号后显示。</p>
       ) : (
         <div className="flex flex-col items-center gap-1">
           <p className="mt-1 text-xs text-slate-400">账号由管理员在「设置 → 团队成员」统一分配 · 初始 PIN 123456</p>
@@ -149,7 +150,7 @@ export function IdentityGate(): React.JSX.Element {
           </button>
         </div>
       )}
-      <AccountLogin members={members} onBeforeLogin={commitCompany} onLogin={noop} />
+      {members.length > 0 && <AccountLogin members={members} onBeforeLogin={commitCompany} onLogin={noop} />}
       </div>
     </div>
   )

@@ -27,8 +27,14 @@
     nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath ''$INSTDIR\resources\windows-deps\poppler.zip'' -DestinationPath ''$APPDATA\Agent工作台\runtime\poppler'' -Force"'
   ${EndIf}
 
+  ; 统一写入当前用户 PATH：Python、OCR 与解压后的 Poppler 都可被桌面程序直接找到。
+  ; PowerShell 变量以 $$ 转义，避免被 NSIS 当成安装器变量展开。
+  DetailPrint "正在自动配置本机环境变量…"
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$$paths=@(''$LOCALAPPDATA\Programs\Python\Python312'',''$LOCALAPPDATA\Programs\Python\Python312\Scripts'',''$PROGRAMFILES\Tesseract-OCR''); $$root=''$APPDATA\Agent工作台\runtime\poppler''; if(Test-Path -LiteralPath $$root){$$pdf=Get-ChildItem -LiteralPath $$root -Filter pdftoppm.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1; if($$pdf){$$paths += $$pdf.DirectoryName}}; $$current=[Environment]::GetEnvironmentVariable(''Path'',''User''); foreach($$p in $$paths){if((Test-Path -LiteralPath $$p) -and (($$current -split '';'' | Where-Object { $$_ -eq $$p }).Count -eq 0)){$$current=if([string]::IsNullOrWhiteSpace($$current)){$$p}else{$$current+'';''+$$p}}}; [Environment]::SetEnvironmentVariable(''Path'',$$current,''User')"'
+  SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
+
   ; Python wheels：即使 Python 已有也可离线补齐，失败不阻止主程序安装。
   DetailPrint "正在安装离线 Python 依赖库…"
   nsExec::ExecToLog '"$SYSDIR\cmd.exe" /C "py -3 -m pip install --user --no-index --find-links=\"$INSTDIR\resources\windows-deps\wheels\" pypdf pillow numpy openpyxl pytesseract"'
-  DetailPrint "环境检查完成。首次启动后可在“本机环境”重新检测。"
+  DetailPrint "环境检查完成，所需路径已自动加入当前用户 PATH。"
 !macroend

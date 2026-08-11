@@ -45,7 +45,7 @@ export function SyncButton({
       <button
         onClick={() => {
           if (!available) {
-            setResult({ ok: false, message: '当前公司数据目录尚未绑定同步仓库；请在登录页选择管理员提供的 company-os 目录后重试。' })
+            setResult({ ok: false, message: '当前公司数据目录尚未绑定同步仓库；请在「设置 → 数据目录」确认目录后重试。' })
             return
           }
           void handleSync()

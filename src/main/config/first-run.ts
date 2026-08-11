@@ -47,7 +47,8 @@ export function repairDataDir(dataDir: string): { ok: boolean; copied: number; �
 
 /**
  * 首启自动初始化数据目录（修复"新用户装完卡在设置页"）：
- * 没有公司或公司还没绑数据目录时，自动在 文稿/company-os 建目录、拷贝安装包内置模板并绑定——
+ * 没有公司或公司还没绑数据目录时，自动在当前系统用户的“文档/company-os”建目录、拷贝安装包内置模板并绑定——
+ * Windows 会使用 %USERPROFILE%\\Documents\\company-os，macOS 使用 ~/Documents/company-os，绝不复用其他电脑的路径。
  * 用户装完即用，不需要在设置页手动"选择目录/初始化目录"。
  * 已绑定过目录的老用户完全不受影响（原样跳过，也不做失联目录的自动改绑）。
  */
