@@ -25,6 +25,21 @@ const BID_CATEGORIES = ['采购意向', '意见征询', '采购公告', '其他'
 type BidCategory = (typeof BID_CATEGORIES)[number]
 const CATEGORY_EMOJI: Record<BidCategory, string> = { 采购意向: '📌', 意见征询: '📋', 采购公告: '📢', 其他: '📁' }
 
+/** 重点项目按采购阶段归档展示；意见征询属于采购意向的前期工作。 */
+const PRIORITY_CATEGORIES = ['采购意向', '采购公告', '采购结果公告'] as const
+type PriorityCategory = (typeof PRIORITY_CATEGORIES)[number]
+const PRIORITY_CATEGORY_ICON: Record<PriorityCategory, string> = {
+  采购意向: '📌',
+  采购公告: '📢',
+  采购结果公告: '🏆'
+}
+
+function priorityCategoryOf(p: PriorityIntelProject): PriorityCategory {
+  if (p.项目.类型 === '采购结果公告') return '采购结果公告'
+  if (p.项目.类型 === '采购公告') return '采购公告'
+  return '采购意向'
+}
+
 function categoryOf(p: BiddingProject): BidCategory {
   const t = p.tenderSource?.公告类型
   return t === '采购意向' || t === '意见征询' || t === '采购公告' ? t : '其他'
@@ -270,6 +285,12 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [intelReloadKey, setIntelReloadKey] = useState(0)
   const [candidateCount, setCandidateCount] = useState(0)
   const [priorityProjects, setPriorityProjects] = useState<PriorityIntelProject[]>([])
+  const priorityGroups = useMemo(() => {
+    const groups = new Map<PriorityCategory, PriorityIntelProject[]>()
+    for (const category of PRIORITY_CATEGORIES) groups.set(category, [])
+    for (const project of priorityProjects) groups.get(priorityCategoryOf(project))?.push(project)
+    return groups
+  }, [priorityProjects])
 
   useEffect(() => {
     if (pendingPrompt) setShowChat(true)
@@ -496,23 +517,39 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
             <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] leading-snug text-amber-800">
               重点项目保存于 <code>outputs/03_招投标_bidding/重点项目/</code>，不会被每日情报清理。需要移除时，请人工删除对应项目文件夹。
             </div>
-            <div className="space-y-2">
-              {priorityProjects.map((p) => (
-                <div key={p.文件夹} className="rounded-lg border border-amber-200 bg-white p-2.5 text-xs">
-                  <a href={p.项目.链接 || undefined} target="_blank" rel="noreferrer" className="font-medium leading-snug text-jushi-accent hover:underline">
-                    {p.项目.项目名称}{p.项目.链接 && <span className="ml-0.5 text-[10px]">↗</span>}
-                  </a>
-                  <div className="mt-1 text-[11px] text-slate-500">{p.项目.采购单位 || '采购单位待确认'}{p.项目.预算 ? ` · ${p.项目.预算}` : ''}</div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {p.项目.命中单位关键词?.map((k) => <span key={k} className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-700">🏢 {k}</span>)}
-                    {p.项目.命中内容关键词?.map((k) => <span key={k} className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] text-rose-600">🔎 {k}</span>)}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-1.5">
-                    <span className="text-[10px] text-slate-400">关注于 {new Date(p.重点时间).toLocaleDateString('zh-CN')}</span>
-                    <button onClick={() => window.api.shell.showItemInFolder(`${p.路径}/重点项目.json`)} title="打开重点项目所在目录；如不再关注，请人工删除该目录" className="ml-auto rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-500 hover:border-jushi-accent hover:text-jushi-accent">打开目录</button>
-                  </div>
-                </div>
-              ))}
+            <div className="space-y-4">
+              {PRIORITY_CATEGORIES.map((category) => {
+                const items = priorityGroups.get(category) ?? []
+                return (
+                  <section key={category}>
+                    <div className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-slate-600">
+                      <span>{PRIORITY_CATEGORY_ICON[category]} {category}</span>
+                      <span className="text-[11px] font-normal text-slate-400">({items.length})</span>
+                      {category === '采购意向' && <span className="text-[10px] font-normal text-slate-400">含意见征询</span>}
+                    </div>
+                    <div className="space-y-2">
+                      {items.map((p) => (
+                        <div key={p.文件夹} className="rounded-lg border border-amber-200 bg-white p-2.5 text-xs">
+                          <a href={p.项目.链接 || undefined} target="_blank" rel="noreferrer" className="font-medium leading-snug text-jushi-accent hover:underline">
+                            {p.项目.项目名称}{p.项目.链接 && <span className="ml-0.5 text-[10px]">↗</span>}
+                          </a>
+                          <div className="mt-1 text-[11px] text-slate-500">{p.项目.采购单位 || '采购单位待确认'}{p.项目.预算 ? ` · ${p.项目.预算}` : ''}</div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {p.项目.类型 === '意见征询' && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">意见征询</span>}
+                            {p.项目.命中单位关键词?.map((k) => <span key={k} className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-700">🏢 {k}</span>)}
+                            {p.项目.命中内容关键词?.map((k) => <span key={k} className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] text-rose-600">🔎 {k}</span>)}
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-400">关注于 {new Date(p.重点时间).toLocaleDateString('zh-CN')}</span>
+                            <button onClick={() => window.api.shell.showItemInFolder(`${p.路径}/重点项目.json`)} title="打开重点项目所在目录；如不再关注，请人工删除该目录" className="ml-auto rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-500 hover:border-jushi-accent hover:text-jushi-accent">打开目录</button>
+                          </div>
+                        </div>
+                      ))}
+                      {items.length === 0 && <p className="rounded border border-dashed border-slate-200 py-2 text-center text-[11px] text-slate-400">暂无{category}</p>}
+                    </div>
+                  </section>
+                )
+              })}
               {priorityProjects.length === 0 && <p className="py-8 text-center text-xs text-slate-400">暂无重点项目——在「每日情报」中点击“☆ 重点”即可永久保留</p>}
             </div>
           </div>
