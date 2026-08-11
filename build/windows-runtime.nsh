@@ -11,7 +11,7 @@
     ExecWait '"$INSTDIR\resources\windows-deps\python-installer.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0' $0
   ${EndIf}
 
-  ; Tesseract：已有则跳过。
+  ; Tesseract（发票识别必选环境）：已有则跳过，缺失时由安装包自动部署。
   nsExec::ExecToStack '"$SYSDIR\cmd.exe" /C "where tesseract >nul 2>nul"'
   Pop $0
   ${If} $0 != 0

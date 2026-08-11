@@ -192,9 +192,9 @@ export async function checkEnv(): Promise<EnvCheckResult> {
   if (isWin) {
     const tesseract = await run('tesseract', ['--version'])
     items.push({
-      key: 'tesseract', name: 'Tesseract OCR（Windows 发票识别）', ok: tesseract.ok, required: false,
+      key: 'tesseract', name: 'Tesseract OCR（Windows 发票识别）', ok: tesseract.ok, required: true,
       用途: '财务分身识别发票图片并生成台账',
-      说明: tesseract.ok ? '已安装' : '可选——安装包会自动部署发票识别 OCR 并加入 PATH，重启工作台后重新检测',
+      说明: tesseract.ok ? '已安装' : '必选环境缺失——安装包会自动部署发票识别 OCR 并加入 PATH；请完全退出后重新打开工作台，再点“重新检测”',
       安装命令: '安装包内置 Windows 环境一键安装脚本', canAutoInstall: true
     })
   }
