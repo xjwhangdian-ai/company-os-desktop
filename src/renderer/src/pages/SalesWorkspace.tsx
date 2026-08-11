@@ -1376,14 +1376,22 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   <tbody>
                     {sortedProducts.map((p) => (
                       <Fragment key={p.id}>
-                        <tr className="h-[20px] border-t border-slate-100 align-middle hover:bg-slate-50">
+                        <tr
+                          onDoubleClick={() => setExpandedId((cur) => (cur === p.id ? null : p.id))}
+                          title="双击查看产品详细信息"
+                          className="h-[20px] cursor-default border-t border-slate-100 align-middle hover:bg-slate-50"
+                        >
                           <td className="px-2 py-0.5">
                             {p.图片 && dataDir ? (
                               <img
                                 src={appfileUrl(`${dataDir}/${p.图片}`)}
                                 className="h-7 w-7 cursor-pointer rounded object-cover"
-                                title="点击更换图片"
-                                onClick={() => handleSetImage(p.id)}
+                                title="点击打开产品图片所在文件夹"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void window.api.shell.showItemInFolder(`${dataDir}/${p.图片}`)
+                                }}
+                                onDoubleClick={(e) => e.stopPropagation()}
                               />
                             ) : (
                               <button
