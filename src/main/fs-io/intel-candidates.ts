@@ -304,6 +304,57 @@ export function markIntelCandidatePriority(
   return { ok: true, 文件夹: folder, 说明: `已加入重点项目；数据已永久保留在「重点项目/${folder}」` }
 }
 
+/** 将已跟进项目迁入重点项目目录：从“跟进中”移除，但所有原件与产出均保留，不进废纸篓。 */
+export function moveBiddingProjectToPriority(
+  dataDir: string,
+  folderName: string
+): { ok: boolean; 文件夹: string; 说明: string } {
+  if (!/^\d{4}-\d{2}-\d{2}_.+/.test(folderName)) return { ok: false, 文件夹: '', 说明: '项目文件夹格式不正确' }
+  const outputsPath = join(dataDir, OUTPUTS_BIDDING_REL, folderName)
+  const inboxPath = join(dataDir, 'inbox', '03_招投标_bidding', folderName)
+  if (!existsSync(outputsPath) && !existsSync(inboxPath)) return { ok: false, 文件夹: '', 说明: '跟进项目不存在，可能已被移动或删除' }
+
+  const name = folderName.slice(11)
+  const date = folderName.slice(0, 10)
+  const sourcePath = join(outputsPath, '_情报来源.json')
+  let source: Record<string, unknown> = {}
+  try { if (existsSync(sourcePath)) source = JSON.parse(readFileSync(sourcePath, 'utf-8')) } catch { /* 使用项目卡兜底 */ }
+  const card = readProjectCard(dataDir, folderName)
+  const rawType = String(source.公告类型 ?? '采购公告')
+  const type: IntelCandidate['类型'] = TYPE_ALIAS[rawType] ?? '采购公告'
+  const candidate: IntelCandidate = {
+    key: `${date}|${name}`,
+    日期: date,
+    类型: type,
+    项目名称: name,
+    采购单位: card?.业主单位 ?? '',
+    预算: card?.预算金额 ?? '',
+    中标单位: '',
+    区县: '',
+    标签: '重点项目',
+    链接: String(source.公告链接 ?? ''),
+    平台: String(source.来源平台 ?? ''),
+    台州公安: false,
+    相关度: null,
+    理由: '由“跟进中”项目迁入重点项目'
+  }
+  const existing = readPriorityProjects(dataDir).find((p) => p.原跟进项目文件夹 === folderName || p.项目.key === candidate.key)
+  const folder = existing?.文件夹 ?? folderName
+  const target = join(priorityRoot(dataDir), folder)
+  mkdirSync(target, { recursive: true })
+  if (!existing) {
+    const payload: PriorityIntelProject = { 文件夹: folder, 路径: target, 重点时间: Date.now(), 项目: candidate, 原跟进项目文件夹: folderName }
+    writeFileSync(priorityJsonPath(dataDir, folder), JSON.stringify(payload, null, 2), 'utf-8')
+  } else if (!existing.原跟进项目文件夹) {
+    writeFileSync(priorityJsonPath(dataDir, folder), JSON.stringify({ ...existing, 路径: target, 原跟进项目文件夹: folderName }, null, 2), 'utf-8')
+  }
+  const targetOutputs = join(target, '跟进项目资料')
+  const targetInbox = join(target, '招标原件')
+  if (existsSync(outputsPath) && !existsSync(targetOutputs)) renameSync(outputsPath, targetOutputs)
+  if (existsSync(inboxPath) && !existsSync(targetInbox)) renameSync(inboxPath, targetInbox)
+  return { ok: true, 文件夹: folder, 说明: `已将「${name}」从跟进中迁入重点项目；全部资料已保留，不会进入废纸篓` }
+}
+
 export function findIntelCandidateByKey(dataDir: string, key: string): IntelCandidate | null {
   return scanAllCandidates(dataDir).find((c) => c.key === key) ?? null
 }

@@ -54,7 +54,7 @@ import {
   resolveBiddingProjectPaths,
   saveProjectCard
 } from '../fs-io/bidding-workflow'
-import { confirmIntelCandidate, ignoreIntelCandidate, listIntelCandidates, listPriorityIntelProjects, markIntelCandidatePriority } from '../fs-io/intel-candidates'
+import { confirmIntelCandidate, ignoreIntelCandidate, listIntelCandidates, listPriorityIntelProjects, markIntelCandidatePriority, moveBiddingProjectToPriority } from '../fs-io/intel-candidates'
 import { followWinnerAnnouncement } from '../fs-io/intel-winner-follow'
 import { listMbaCourses, uploadToMbaCourse } from '../fs-io/upload-router'
 import {
@@ -272,6 +272,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.biddingIgnoreCandidate, (_e, key: string) => ignoreIntelCandidate(getDataDir(), key))
   ipcMain.handle(IPC.biddingListPriorityProjects, () => listPriorityIntelProjects(getDataDir()))
   ipcMain.handle(IPC.biddingMarkPriority, (_e, key: string) => markIntelCandidatePriority(getDataDir(), key))
+  ipcMain.handle(IPC.biddingMoveProjectToPriority, (_e, folderName: string) => moveBiddingProjectToPriority(getDataDir(), folderName))
   ipcMain.handle(IPC.biddingDownloadTender, (_e, folderName: string) => downloadTenderFile(getDataDir(), folderName))
   ipcMain.handle(IPC.biddingProbeTender, (_e, folderName: string) => probeTenderFile(getDataDir(), folderName))
   ipcMain.handle(IPC.biddingDeleteProject, async (_e, folderName: string) => {

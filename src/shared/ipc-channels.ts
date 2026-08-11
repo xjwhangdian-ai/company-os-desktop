@@ -58,6 +58,7 @@ export const IPC = {
   biddingIgnoreCandidate: 'bidding:ignore-candidate',
   biddingListPriorityProjects: 'bidding:list-priority-projects',
   biddingMarkPriority: 'bidding:mark-priority',
+  biddingMoveProjectToPriority: 'bidding:move-project-to-priority',
   biddingDownloadTender: 'bidding:download-tender',
   biddingProbeTender: 'bidding:probe-tender',
   biddingDeleteProject: 'bidding:delete-project',

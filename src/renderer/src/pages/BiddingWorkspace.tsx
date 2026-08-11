@@ -265,8 +265,8 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     const saved = Number(localStorage.getItem('biddingLeftWidth'))
     return saved >= 260 && saved <= 900 ? saved : 384
   })
-  /** 左栏视图：每日情报 → 台账 → 重点项目 */
-  const [leftView, setLeftView] = useState<'台账' | '情报' | '重点项目'>('情报')
+  /** 左栏视图：每日情报 → 跟进中 → 重点项目 */
+  const [leftView, setLeftView] = useState<'跟进中' | '情报' | '重点项目'>('情报')
   const [intelReloadKey, setIntelReloadKey] = useState(0)
   const [candidateCount, setCandidateCount] = useState(0)
   const [priorityProjects, setPriorityProjects] = useState<PriorityIntelProject[]>([])
@@ -361,6 +361,21 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     }
   }
 
+  /** 标为重点的跟进项目迁入重点目录；资料保留但从跟进列表移除。 */
+  async function handleMoveToPriority(p: BiddingProject): Promise<void> {
+    try {
+      const r = await window.api.bidding.moveProjectToPriority(p.folderName)
+      flash(r.说明)
+      if (r.ok) {
+        if (selected === p.folderName) setSelected(null)
+        await refresh()
+        setIntelReloadKey((k) => k + 1)
+      }
+    } catch (err) {
+      flash(`迁入重点项目失败：${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   async function refresh(): Promise<void> {
     setProjects(await window.api.bidding.listProjects())
   }
@@ -435,9 +450,9 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         style={showRightPane ? { width: leftWidth } : undefined}
         className={`flex flex-col border-r border-slate-200 bg-slate-50 ${showRightPane ? 'shrink-0' : 'flex-1'}`}
       >
-        {/* 每日情报 / 台账 / 重点项目：重点项目独立目录保存，不参与每日清理 */}
+        {/* 每日情报 / 跟进中 / 重点项目：重点项目独立目录保存，不参与每日清理 */}
         <div className="app-drag flex gap-1 px-3 pb-1 pt-3">
-          {(['情报', '台账', '重点项目'] as const).map((v) => (
+          {(['情报', '跟进中', '重点项目'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setLeftView(v)}
@@ -445,7 +460,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                 leftView === v ? 'bg-jushi-accent text-white' : 'border border-slate-300 text-slate-500 hover:border-jushi-accent'
               }`}
             >
-              {v === '台账' ? '📋 台账' : v === '重点项目' ? `★ 重点项目${priorityProjects.length > 0 ? ` ${priorityProjects.length}` : ''}` : `📡 每日情报${candidateCount > 0 ? ` ${candidateCount}` : ''}`}
+              {v === '跟进中' ? `📋 跟进中 ${projects.length}` : v === '重点项目' ? `★ 重点项目${priorityProjects.length > 0 ? ` ${priorityProjects.length}` : ''}` : `📡 每日情报${candidateCount > 0 ? ` ${candidateCount}` : ''}`}
             </button>
           ))}
         </div>
@@ -486,11 +501,11 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
             </div>
           </div>
         )}
-        {leftView === '台账' && (
+        {leftView === '跟进中' && (
         <>
         <div className="p-3 pb-0">
           <div className="mb-2 flex items-center justify-between pt-1">
-            <h2 className="text-xs font-semibold text-slate-500">招投标台账</h2>
+            <h2 className="text-xs font-semibold text-slate-500">跟进中项目（共 {projects.length} 个）</h2>
             <div className="app-no-drag flex items-center gap-1.5">
               <button
                 onClick={handleExportLedger}
@@ -620,10 +635,20 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
+                                handleMoveToPriority(p)
+                              }}
+                              title="迁入重点项目：资料会完整保留，但不再显示在“跟进中”"
+                              className="ml-auto shrink-0 rounded border border-amber-300 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-50"
+                            >
+                              ★ 重点
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 handleDeleteProject(p)
                               }}
                               title="忽略此项目：两侧文件夹移入系统废纸篓（可恢复）"
-                              className="ml-auto shrink-0 rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-500 hover:border-rose-300 hover:text-rose-500"
+                              className="shrink-0 rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-500 hover:border-rose-300 hover:text-rose-500"
                             >
                               忽略
                             </button>
@@ -643,7 +668,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
           })}
           {filtered.length === 0 && (
             <p className="px-2 py-4 text-center text-xs text-slate-400">
-              {projects.length === 0 ? '还没有招标项目——去「📡 每日情报」页签看看今天的公告' : '该状态下没有项目'}
+              {projects.length === 0 ? '还没有跟进项目——去「📡 每日情报」页签看看今天的公告' : '该状态下没有项目'}
             </p>
           )}
         </div>
@@ -765,6 +790,13 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                         导出三册 Word
                       </button>
                     )}
+                    <button
+                      onClick={() => handleMoveToPriority(project)}
+                      title="迁入重点项目：完整保留原件与产出，但不再显示在“跟进中”"
+                      className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                    >
+                      ★ 重点
+                    </button>
                     <button
                       onClick={() => handleDeleteProject(project)}
                       title="忽略此项目：移入系统废纸篓（可恢复）"

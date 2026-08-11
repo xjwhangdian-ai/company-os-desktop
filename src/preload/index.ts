@@ -107,6 +107,7 @@ const api: CompanyOsApi = {
     ignoreCandidate: (key: string) => ipcRenderer.invoke(IPC.biddingIgnoreCandidate, key),
     listPriorityProjects: () => ipcRenderer.invoke(IPC.biddingListPriorityProjects),
     markPriority: (key: string) => ipcRenderer.invoke(IPC.biddingMarkPriority, key),
+    moveProjectToPriority: (folderName: string) => ipcRenderer.invoke(IPC.biddingMoveProjectToPriority, folderName),
     followWinner: (key: string) => ipcRenderer.invoke(IPC.biddingFollowWinner, key),
     downloadTender: (folderName: string) => ipcRenderer.invoke(IPC.biddingDownloadTender, folderName),
     probeTender: (folderName: string) => ipcRenderer.invoke(IPC.biddingProbeTender, folderName),

@@ -185,6 +185,8 @@ export interface PriorityIntelProject {
   路径: string
   重点时间: number
   项目: IntelCandidate
+  /** 原先在“跟进中”列表的项目文件夹；迁入重点目录后不再出现在跟进中。 */
+  原跟进项目文件夹?: string
 }
 
 export interface IntelConfirmResult {

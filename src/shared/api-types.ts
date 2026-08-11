@@ -170,6 +170,8 @@ export interface CompanyOsApi {
     /** 重点项目单独保存在 outputs/03_招投标_bidding/重点项目/，不参与每日清理 */
     listPriorityProjects(): Promise<PriorityIntelProject[]>
     markPriority(key: string): Promise<{ ok: boolean; 文件夹: string; 说明: string }>
+    /** 将“跟进中”项目迁入重点项目目录，保留文件但不再显示在跟进列表。 */
+    moveProjectToPriority(folderName: string): Promise<{ ok: boolean; 文件夹: string; 说明: string }>
     /** 采购结果公告「跟进」——中标信息+评审专家（标注采购人代表）入中标公告台账.xlsx，附件下载归档 */
     followWinner(key: string): Promise<{ ok: boolean; 说明: string; 归档目录?: string }>
     /** 下载某项目的招标文件（浙江政采源，登录感知）→ inbox 01_招标文件/，并回填招标编号 */
