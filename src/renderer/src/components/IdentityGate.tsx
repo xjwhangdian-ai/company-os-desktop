@@ -40,125 +40,6 @@ function CompanyPicker({ onSelect }: CompanyPickerProps): React.JSX.Element {
   )
 }
 
-function MemberTile({
-  member,
-  onBeforeLogin,
-  onLogin
-}: {
-  member: TeamMember
-  onBeforeLogin: () => Promise<void>
-  onLogin: () => void
-}): React.JSX.Element {
-  const login = useIdentityStore((s) => s.login)
-  const [askingPin, setAskingPin] = useState(false)
-  const [changingPin, setChangingPin] = useState(false)
-  const [pin, setPin] = useState('')
-  const [newPin, setNewPin] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleClick(): Promise<void> {
-    if (!member.hasPin) {
-      await onBeforeLogin()
-      await login(member.id)
-      onLogin()
-      return
-    }
-    setAskingPin(true)
-  }
-
-  async function handlePinSubmit(): Promise<void> {
-    await onBeforeLogin()
-    const ok = await window.api.identity.verifyPin(member.id, pin)
-    if (!ok) {
-      setError('PIN 不对')
-      setPin('')
-      return
-    }
-    // 还在用初始 PIN（123456）→ 先给一次改 PIN 的机会（可跳过）
-    if (member.usingDefaultPin) {
-      setError(null)
-      setChangingPin(true)
-      return
-    }
-    await login(member.id, pin)
-    onLogin()
-  }
-
-  async function handleChangePin(skip: boolean): Promise<void> {
-    if (!skip) {
-      const r = await window.api.identity.changePin(member.id, pin, newPin.trim())
-      if (!r.ok) {
-        setError(r.message ?? '修改失败')
-        return
-      }
-    }
-    await login(member.id, skip ? pin : newPin.trim())
-    onLogin()
-  }
-
-  if (changingPin) {
-    return (
-      <div className="flex w-44 flex-col items-center gap-2 rounded-xl border border-amber-300 bg-white p-3">
-        <span className="text-xs font-medium text-amber-600">你还在用初始 PIN</span>
-        <input
-          autoFocus
-          type="password"
-          value={newPin}
-          onChange={(e) => setNewPin(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleChangePin(false)}
-          placeholder="设置新 PIN（4-8位数字）"
-          className="w-full rounded border border-slate-300 px-2 py-1 text-center text-xs outline-none"
-        />
-        {error && <span className="text-xs text-red-500">{error}</span>}
-        <div className="flex w-full gap-1.5">
-          <button onClick={() => handleChangePin(true)} className="flex-1 rounded border border-slate-300 py-1 text-xs text-slate-500">
-            暂不改
-          </button>
-          <button onClick={() => handleChangePin(false)} className="flex-1 rounded bg-jushi-accent py-1 text-xs font-medium text-white">
-            保存并登录
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (askingPin) {
-    return (
-      <div className="flex w-32 flex-col items-center gap-2 rounded-xl border border-jushi-accent bg-white p-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-jushi-accent text-sm font-semibold text-white">
-          {member.name.slice(0, 1)}
-        </span>
-        <input
-          autoFocus
-          type="password"
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
-          placeholder="PIN"
-          className={`w-full rounded border px-2 py-1 text-center text-xs outline-none ${error ? 'border-red-400' : 'border-slate-300'}`}
-        />
-        {error && <span className="text-xs text-red-500">{error}</span>}
-        {member.usingDefaultPin && <span className="text-[10px] text-slate-400">初始 PIN：123456</span>}
-      </div>
-    )
-  }
-
-  return (
-    <div className="group relative w-32">
-      <button
-        onClick={handleClick}
-        className="flex w-32 flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 hover:border-jushi-accent"
-      >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-400 text-sm font-semibold text-white">
-          {member.name.slice(0, 1)}
-        </span>
-        <span className="truncate text-sm text-slate-700">{member.name}</span>
-        {member.hasPin && <span className="text-xs text-slate-400">🔒 需要 PIN</span>}
-      </button>
-    </div>
-  )
-}
-
 /** 手工输入只能登录管理员花名册中已有的账号，未知账号绝不自动创建。 */
 function AccountLogin({ members, onBeforeLogin, onLogin }: { members: TeamMember[]; onBeforeLogin: () => Promise<void>; onLogin: () => void }): React.JSX.Element {
   const login = useIdentityStore((s) => s.login)
@@ -298,32 +179,18 @@ export function IdentityGate(): React.JSX.Element {
       {members.length === 0 ? (
         <p className="max-w-sm text-center text-xs leading-5 text-slate-400">尚未同步到可用账号。请先选择管理员提供的公司数据目录并点击上方“一键同步账号信息”；账号只能由管理员预先分配。</p>
       ) : (
-        <div className="flex flex-wrap justify-center gap-3">
-          {members.map((m) => (
-            <MemberTile key={m.id} member={m} onBeforeLogin={commitCompany} onLogin={noop} />
-          ))}
-          <div className="flex w-full basis-full flex-col items-center gap-1">
-            <p className="mt-1 text-xs text-slate-400">账号由管理员在「设置 → 团队成员」统一分配 · 初始 PIN 123456</p>
-            <button
-              onClick={async () => {
-                // 场景：重装/换机后旧配置残留、改过的 PIN 想不起来，且没人能登录进去重置。
-                // PIN 是界面级留痕不是安全体系——允许本机自助清空，公司/数据/API Key 全不动。
-                const ok = window.confirm(
-                  '忘记 PIN？\n\n将清空本机账号缓存，随后请使用上方“一键同步账号信息”重新获取管理员分配的账号（初始 PIN 123456）。\n公司数据、数据目录、API Key 均不受影响。\n\n确定重置吗？'
-                )
-                if (!ok) return
-                try {
-                  await window.api.identity.resetAllMembers()
-                  await loadMembers()
-                } catch {
-                  window.alert('重置失败——如果刚更新过程序，请完全退出后重新打开再试')
-                }
-              }}
-              className="text-xs text-slate-400 underline-offset-2 hover:text-jushi-accent hover:underline"
-            >
-              PIN 一直不对？清除本机旧账号后重新同步
-            </button>
-          </div>
+        <div className="flex flex-col items-center gap-1">
+          <p className="mt-1 text-xs text-slate-400">账号由管理员在「设置 → 团队成员」统一分配 · 初始 PIN 123456</p>
+          <button
+            onClick={async () => {
+              const ok = window.confirm('忘记 PIN？\n\n将清空本机账号缓存，随后请使用上方“一键同步账号信息”重新获取管理员分配的账号（初始 PIN 123456）。\n公司数据、数据目录、API Key 均不受影响。\n\n确定重置吗？')
+              if (!ok) return
+              try { await window.api.identity.resetAllMembers(); await loadMembers() } catch { window.alert('重置失败——请完全退出后重新打开再试') }
+            }}
+            className="text-xs text-slate-400 underline-offset-2 hover:text-jushi-accent hover:underline"
+          >
+            PIN 一直不对？清除本机旧账号后重新同步
+          </button>
         </div>
       )}
       <AccountLogin members={members} onBeforeLogin={commitCompany} onLogin={noop} />
