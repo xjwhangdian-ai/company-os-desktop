@@ -175,7 +175,7 @@ export function Settings(): React.JSX.Element {
               onClick={() => pickCompanyDataDir(company.id)}
               className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
             >
-              选择目录
+              更改数据目录
             </button>
             {!company.dataDir && (
               <button

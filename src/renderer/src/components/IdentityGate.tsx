@@ -3,43 +3,6 @@ import { useIdentityStore } from '../stores/useIdentityStore'
 import { useConfigStore } from '../stores/useConfigStore'
 import type { TeamMember } from '@shared/agent-types'
 
-interface CompanyPickerProps {
-  onSelect: (id: string) => void
-}
-
-function CompanyPicker({ onSelect }: CompanyPickerProps): React.JSX.Element {
-  const { config, addCompany } = useConfigStore()
-  const [newName, setNewName] = useState('')
-
-  if (!config) return <></>
-
-  // 工作台只服务一家公司：已存在公司时不再显示公司选择器（自动使用唯一那家）；
-  // 仅在全新安装（0 家公司）时让用户创建第一家。
-  if (config.companies.length > 0) return <></>
-
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        value={newName}
-        onChange={(e) => setNewName(e.target.value)}
-        placeholder="第一次用，先输入公司名称"
-        className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-jushi-accent"
-      />
-      <button
-        onClick={async () => {
-          if (!newName.trim()) return
-          const company = await addCompany(newName.trim())
-          onSelect(company.id)
-          setNewName('')
-        }}
-        className="rounded-lg bg-jushi-accent px-3 py-1.5 text-sm font-medium text-white"
-      >
-        创建
-      </button>
-    </div>
-  )
-}
-
 /** 手工输入只能登录管理员花名册中已有的账号，未知账号绝不自动创建。 */
 function AccountLogin({ members, onBeforeLogin, onLogin }: { members: TeamMember[]; onBeforeLogin: () => Promise<void>; onLogin: () => void }): React.JSX.Element {
   const login = useIdentityStore((s) => s.login)
@@ -63,9 +26,14 @@ function AccountLogin({ members, onBeforeLogin, onLogin }: { members: TeamMember
   }
   return <div className="w-72 space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
     <p className="text-sm font-medium text-slate-700">账号登录</p>
-    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="管理员分配的账号" className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-jushi-accent" />
-    <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void submit()} placeholder="PIN" className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-jushi-accent" />
-    <button onClick={() => void submit()} className="w-full rounded bg-jushi-accent py-1.5 text-sm font-medium text-white">登录</button>
+    <label className="block text-xs text-slate-500">账号：填写管理员在“团队成员”中分配的账号。
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="管理员分配的账号" className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-jushi-accent" />
+    </label>
+    <label className="block text-xs text-slate-500">PIN：首次登录输入默认 PIN <b>123456</b>；登录后可自行修改。
+      <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void submit()} placeholder="首次登录默认 123456" className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-jushi-accent" />
+    </label>
+    <button onClick={() => void submit()} title="校验账号和 PIN，正确后进入工作台" className="w-full rounded bg-jushi-accent py-1.5 text-sm font-medium text-white">登录</button>
+    <p className="text-[11px] leading-4 text-slate-400">“登录”只验证管理员已分配的账号，不会创建新账号。</p>
     {message && <p className="text-xs leading-5 text-amber-700">{message}</p>}
   </div>
 }
@@ -83,7 +51,7 @@ function AccountLogin({ members, onBeforeLogin, onLogin }: { members: TeamMember
  */
 export function IdentityGate(): React.JSX.Element {
   const { members, loaded, loadMembers } = useIdentityStore()
-  const { config, loading: configLoading, setActiveCompany, pickCompanyDataDir } = useConfigStore()
+  const { config, loading: configLoading, setActiveCompany } = useConfigStore()
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
@@ -106,7 +74,7 @@ export function IdentityGate(): React.JSX.Element {
     await commitCompany()
     const company = config?.companies.find((c) => c.id === selectedCompanyId)
     if (!company?.dataDir) {
-      setSyncMessage('请先选择管理员提供的 company-os 公司数据目录，再同步账号信息。')
+      setSyncMessage('默认公司数据目录尚未就绪。请完全退出并重新打开工作台；如仍未恢复，请在设置页更改数据目录。')
       return
     }
     setSyncing(true)
@@ -148,36 +116,24 @@ export function IdentityGate(): React.JSX.Element {
         <p className="mt-1 text-sm text-slate-400">选择身份继续</p>
       </div>
 
-      <CompanyPicker onSelect={setSelectedCompanyId} />
-
       <div className="w-72 rounded-xl border border-sky-200 bg-sky-50 p-4 text-center">
         <p className="text-sm font-medium text-slate-700">首次安装或换电脑？</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">Windows 首次使用：先选择管理员提供的公司数据目录，再同步账号；员工账号会恢复为初始 PIN 123456。</p>
-        <button
-            onClick={async () => {
-              if (!selectedCompanyId) return
-              await pickCompanyDataDir(selectedCompanyId)
-              await commitCompany()
-              setSyncMessage('已选择公司数据目录，请点击“一键同步账号信息”。')
-            }}
-            disabled={!selectedCompanyId}
-            className="mt-3 rounded-lg border border-jushi-accent bg-white px-3 py-1.5 text-xs font-medium text-jushi-accent disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {selectedCompany?.dataDir ? '更换公司数据目录' : '先选择公司数据目录'}
-          </button>
+        <p className="mt-1 text-xs leading-5 text-slate-500">安装时已自动创建默认公司数据目录，无需在这里选择。只有管理员需要调整目录时，才到“设置 → 数据目录”操作。</p>
+        {selectedCompany?.dataDir && <p className="mt-2 truncate rounded bg-white/70 px-2 py-1 text-[10px] text-slate-400" title={selectedCompany.dataDir}>默认数据目录：{selectedCompany.dataDir}</p>}
         <button
           onClick={syncAccounts}
           disabled={syncing || !selectedCompanyId}
-          title={!selectedCompanyId ? '请先选择或创建公司' : '从公司数据仓库同步账号信息'}
+          title={!selectedCompanyId ? '正在准备默认公司数据目录，请稍候' : '从公司数据仓库同步管理员已分配的账号'}
           className="mt-3 rounded-lg bg-jushi-accent px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           {syncing ? '正在同步…' : '☁️ 一键同步账号信息'}
         </button>
+        <p className="mt-1.5 text-[11px] leading-4 text-slate-500">“一键同步”会下载管理员分配的账号；同步完成后，使用自己的账号和初始 PIN 123456 登录。</p>
         {syncMessage && <p className="mt-2 text-xs text-slate-600">{syncMessage}</p>}
       </div>
 
       {members.length === 0 ? (
-        <p className="max-w-sm text-center text-xs leading-5 text-slate-400">尚未同步到可用账号。请先选择管理员提供的公司数据目录并点击上方“一键同步账号信息”；账号只能由管理员预先分配。</p>
+        <p className="max-w-sm text-center text-xs leading-5 text-slate-400">尚未同步到可用账号。请点击上方“一键同步账号信息”；账号只能由管理员预先分配。</p>
       ) : (
         <div className="flex flex-col items-center gap-1">
           <p className="mt-1 text-xs text-slate-400">账号由管理员在「设置 → 团队成员」统一分配 · 初始 PIN 123456</p>
@@ -189,7 +145,7 @@ export function IdentityGate(): React.JSX.Element {
             }}
             className="text-xs text-slate-400 underline-offset-2 hover:text-jushi-accent hover:underline"
           >
-            PIN 一直不对？清除本机旧账号后重新同步
+            PIN 一直不对？清除本机旧账号后重新同步（不会删除公司资料）
           </button>
         </div>
       )}
