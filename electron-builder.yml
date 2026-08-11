@@ -10,6 +10,9 @@ asarUnpack:
 extraResources:
   - from: resources/company-os-template
     to: company-os-template
+  # Windows CI 在打包前下载并缓存的离线运行环境；macOS 构建时目录为空，不增加 dmg 体积。
+  - from: resources/windows-deps
+    to: windows-deps
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -26,3 +29,4 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  include: build/windows-runtime.nsh

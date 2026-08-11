@@ -29,6 +29,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prepare bundled offline runtime
+        shell: powershell
+        run: .\scripts\prepare-windows-deps.ps1
+
       - name: Build Windows installer (NSIS)
         # --publish never：CI 下 electron-builder 会自动尝试发布（需 GH_TOKEN），这里关掉，
         # 分发交给下面的 upload-artifact / Release 步骤
