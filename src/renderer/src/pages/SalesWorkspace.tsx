@@ -202,11 +202,16 @@ function searchScore(p: ProductEntry, tokens: string[], catCode: (p: ProductEntr
  * 三个都空 → 未分类；一级空但三级有值（老数据/外部导入）→ 直接把三级当一级展示，不丢条目。
  */
 function catParts(p: { 一级分类?: string; 二级分类?: string; 产品分类?: string }): string[] {
+  const split = (value: string | undefined): string[] =>
+    (value || '').split(/[/＞>]/).map((t) => t.trim()).filter(Boolean)
+  const l1Parts = split(p.一级分类)
+  const l2Parts = split(p.二级分类)
   const tail = (p.产品分类 || '')
     .split(/[/＞>]/)
     .map((t) => t.trim())
     .filter(Boolean)
-  const parts = [(p.一级分类 || '').trim(), (p.二级分类 || '').trim(), ...tail].filter(Boolean).slice(0, 3)
+  // 兼容旧导入数据把“一级 / 二级”一并写进一级分类：表格和目录均按规范拆开显示。
+  const parts = [l1Parts[0], l2Parts[0] || l1Parts[1], ...tail].filter(Boolean).slice(0, 3)
   return parts.length > 0 ? parts : ['未分类']
 }
 
@@ -533,10 +538,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     q小计: 84,
     q操作: 48
   })
-  // 技术参数内联编辑
-  const [editingParamId, setEditingParamId] = useState<string | null>(null)
-  const [paramDraft, setParamDraft] = useState('')
-
   const [customers, setCustomers] = useState<CustomerEntry[]>([])
   const [customerFilter, setCustomerFilter] = useState<'全部' | '待跟进' | CustomerStatus>('全部')
   const [customerQuery, setCustomerQuery] = useState('')
@@ -737,16 +738,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     const paths = await window.api.dialog.pickFiles(IMAGE_FILTERS)
     if (paths.length === 0) return
     await window.api.sales.setProductImage(productId, paths[0])
-    await refreshProducts()
-  }
-
-  /** 内联保存技术参数（只改这一个字段，其余原样回写） */
-  async function commitParamEdit(p: ProductEntry): Promise<void> {
-    const next = paramDraft
-    setEditingParamId(null)
-    if (next === p.技术参数) return
-    const { id: _id, 更新时间: _t, ...fields } = p
-    await window.api.sales.saveProduct({ ...fields, 技术参数: next }, p.id)
     await refreshProducts()
   }
 
@@ -1376,11 +1367,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   <tbody>
                     {sortedProducts.map((p) => (
                       <Fragment key={p.id}>
-                        <tr
-                          onDoubleClick={() => setExpandedId((cur) => (cur === p.id ? null : p.id))}
-                          title="双击查看产品详细信息"
-                          className="h-[20px] cursor-default border-t border-slate-100 align-middle hover:bg-slate-50"
-                        >
+                        <tr className="h-[20px] border-t border-slate-100 align-middle hover:bg-slate-50">
                           <td className="px-2 py-0.5">
                             {p.图片 && dataDir ? (
                               <img
@@ -1420,38 +1407,21 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                           </td>
                           <td
                             className="truncate px-2 py-0.5 text-slate-500"
-                            title={catCodeOf(p) ? `${catCodeOf(p)} ${catText(p)}` : catText(p)}
+                            title={catCodeOf(p) ? `${catCodeOf(p)} ${catParts(p)[0] ?? ''}` : (catParts(p)[0] ?? '')}
                           >
-                            {catText(p) || '—'}
+                            {catParts(p)[0] === '未分类' ? '—' : (catParts(p)[0] || '—')}
                           </td>
-                          <td className="truncate px-2 py-0.5 text-slate-500" title={p.二级分类}>
-                            {p.二级分类 || '—'}
+                          <td className="truncate px-2 py-0.5 text-slate-500" title={catParts(p)[1]}>
+                            {catParts(p)[1] || '—'}
                           </td>
                           <td className="px-1 py-0.5">
-                            {editingParamId === p.id ? (
-                              <input
-                                autoFocus
-                                value={paramDraft}
-                                onChange={(e) => setParamDraft(e.target.value)}
-                                onBlur={() => commitParamEdit(p)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                                  else if (e.key === 'Escape') setEditingParamId(null)
-                                }}
-                                className="w-full rounded border border-jushi-accent px-1 py-0.5 text-xs outline-none"
-                              />
-                            ) : (
-                              <div
-                                onClick={() => {
-                                  setEditingParamId(p.id)
-                                  setParamDraft(p.技术参数)
-                                }}
-                                title="点击编辑技术参数"
-                                className="cursor-text truncate text-slate-500 hover:text-slate-700"
-                              >
-                                {p.技术参数 || <span className="text-slate-300">点击填写</span>}
-                              </div>
-                            )}
+                            <div
+                              onDoubleClick={() => setExpandedId((cur) => (cur === p.id ? null : p.id))}
+                              title="双击显示完整技术参数；修改请点右侧“编辑”"
+                              className="cursor-pointer truncate text-slate-500 hover:text-slate-700"
+                            >
+                              {p.技术参数 || <span className="text-slate-300">双击查看/编辑</span>}
+                            </div>
                           </td>
                           <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">{fmtTaxRate(p.税率)}</td>
                           <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">{p.成本价 || '—'}</td>
