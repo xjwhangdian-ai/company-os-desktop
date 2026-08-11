@@ -206,7 +206,7 @@ export async function followWinnerAnnouncement(dataDir: string, key: string): Pr
   const dir = join(dataDir, WINNER_DIR_REL, dirName)
   mkdirSync(dir, { recursive: true })
 
-  let parsed: WinnerParse = { 中标单位: c.中标单位 ?? '', 中标金额: c.中标金额 ?? '', 标项: [], 专家: [] }
+  let parsed: WinnerParse = { 采购单位: c.采购单位 ?? '', 中标单位: c.中标单位 ?? '', 中标金额: c.中标金额 ?? '', 标项: [], 专家: [] }
   let 附件数 = 0
   let note = ''
 
@@ -223,7 +223,7 @@ export async function followWinnerAnnouncement(dataDir: string, key: string): Pr
         )
         writeFileSync(
           join(dir, '中标信息.json'),
-          JSON.stringify({ 项目名称: c.项目名称, 采购单位: c.采购单位, 公告日期: c.日期, 链接: c.链接, ...parsed }, null, 2),
+          JSON.stringify({ 项目名称: c.项目名称, 公告日期: c.日期, 链接: c.链接, ...parsed, 采购单位: parsed.采购单位 || c.采购单位 || '' }, null, 2),
           'utf-8'
         )
         if (detail.attachments.length > 0) {

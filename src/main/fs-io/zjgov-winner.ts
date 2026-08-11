@@ -19,6 +19,8 @@ export interface ExpertInfo {
 }
 
 export interface WinnerParse {
+  /** 公告正文的“采购人名称”，用于覆盖列表页缺失或错误的采购单位。 */
+  采购单位: string
   中标单位: string
   中标金额: string
   标项: WinnerLot[]
@@ -48,6 +50,9 @@ function fmtYuan(n: number): string {
 
 /** 从公告纯文本解析中标结果（多标项全收）与评审专家名单 */
 export function parseWinnerAnnouncement(text: string): WinnerParse {
+  // 采购人名称在成交结果表之前，取到下一字段标题为止；代理机构名称不能作为采购单位。
+  const purchaserMatch = /(?:采购人名称|采购人)[：:\s]+(.{2,100}?)(?=(?:[一二三四五六七八九十]+[、.]|项目名称|项目编号|采购组织类型|采购方式|采购公告|开标日期|成交结果|$))/.exec(text)
+  const 采购单位 = purchaserMatch?.[1].trim().replace(/[：:]\s*$/, '') ?? ''
   // ── 中标结果段：从「中标（成交）信息」截到下一大节，绝不跨入「代理服务收费」──
   let seg = text
   const start = text.search(/中标[（(]成交[）)]信息|成交信息|中标结果/)
@@ -66,9 +71,10 @@ export function parseWinnerAnnouncement(text: string): WinnerParse {
     if (!isFinite(n) || n <= 0) continue
     标项.push({ 金额元: m[2] === '万' ? n * 10000 : n, 供应商: m[3] })
   }
-  // 兜底：结果段里先出现的 数字（元）+ 段内第一个公司名（老格式公告没有"总价："前缀）
+  // 兜底：结果段里先出现的 数字（元）+ 段内第一个公司名。
+  // 覆盖阳光采购等表格格式：「供应商名称 | 成交价格 | 备注 | 某公司 | 211460.00元」。
   if (标项.length === 0) {
-    const am = /([0-9][0-9,，]*(?:\.[0-9]+)?)\s*[（(]\s*(万?)元\s*[）)]/.exec(seg)
+    const am = /([0-9][0-9,，]*(?:\.[0-9]+)?)\s*[（(]?\s*(万?)元\s*[）)]?/.exec(seg)
     const sm = SUPPLIER_RE.exec(seg.replace(/中标供应商名称|供应商名称/g, ' '))
     if (am || sm) {
       const n = am ? parseFloat(am[1].replace(/[,，]/g, '')) : 0
@@ -99,5 +105,5 @@ export function parseWinnerAnnouncement(text: string): WinnerParse {
         ? 标项[0].供应商
         : `${标项[0].供应商} 等${标项.length}个标项`
   const total = 标项.reduce((s, l) => s + l.金额元, 0)
-  return { 中标单位, 中标金额: total > 0 ? fmtYuan(total) : '', 标项, 专家 }
+  return { 采购单位, 中标单位, 中标金额: total > 0 ? fmtYuan(total) : '', 标项, 专家 }
 }

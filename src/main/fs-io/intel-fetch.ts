@@ -231,22 +231,58 @@ function extractDeadline(text: string): string {
   return ''
 }
 
-/** 结果公告补抓详情页，提取 中标（成交）供应商 与 中标（成交）金额（列表接口不给这两项） */
-async function enrichZjgovWinners(entries: FeedEntry[]): Promise<void> {
+/** 结果公告补抓详情页：采购人名称→采购单位，成交结果表的供应商名称/成交价格→中标信息。 */
+async function enrichWinnerDetails(entries: FeedEntry[]): Promise<void> {
   const targets = entries
-    .filter((e) => e.类型 === '采购结果公告' && e.平台 === '浙江政采' && !e.中标单位)
+    .filter((e) => e.类型 === '采购结果公告' && (!e.采购单位 || !e.中标单位 || !e.中标金额))
     .slice(0, 15) as (FeedEntry & { _articleId?: string })[]
   for (const e of targets) {
-    if (!e._articleId) continue
     try {
-      const resp = await doFetch(`${ZJGOV_BASE}/portal/detail?articleId=${encodeURIComponent(e._articleId)}`, {
-        headers: { 'User-Agent': UA, Referer: `${ZJGOV_BASE}/site/detail` },
-        signal: AbortSignal.timeout(12000)
-      })
-      if (!resp.ok) continue
-      const data = (await resp.json()) as { result?: { data?: { content?: string } } }
+      let content = ''
+      if (e.平台 === '浙江政采') {
+        if (!e._articleId) continue
+        const resp = await doFetch(`${ZJGOV_BASE}/portal/detail?articleId=${encodeURIComponent(e._articleId)}`, {
+          headers: { 'User-Agent': UA, Referer: `${ZJGOV_BASE}/site/detail` },
+          signal: AbortSignal.timeout(12000)
+        })
+        if (!resp.ok) continue
+        const data = (await resp.json()) as { result?: { data?: { content?: string } } }
+        content = String(data?.result?.data?.content ?? '')
+      } else if (e.平台 === '台州阳光采购') {
+        const bulletinId = new URL(e.链接).searchParams.get('bulletinId')
+        if (!bulletinId) continue
+        // NoticeDetail 是前端壳页面；正文由其同源接口按 autoID 异步返回。
+        const resp = await doFetch(
+          `${TZYGCG_BASE}/siteapi/api/Portal/GetBulletin?autoID=${encodeURIComponent(bulletinId)}`,
+          {
+            method: 'POST',
+            headers: {
+              'User-Agent': UA,
+              'Content-Type': 'application/json',
+              Referer: e.链接
+            },
+            body: '{}',
+            signal: AbortSignal.timeout(12000)
+          }
+        )
+        if (!resp.ok) continue
+        const data = (await resp.json()) as {
+          body?: { data?: { article?: { bulletinContent?: string; content?: string } } }
+        }
+        const article = data?.body?.data?.article
+        content = String(article?.bulletinContent ?? article?.content ?? '')
+      } else {
+        if (!e.链接) continue
+        const resp = await doFetch(e.链接, {
+          headers: { 'User-Agent': UA },
+          signal: AbortSignal.timeout(12000)
+        })
+        if (!resp.ok) continue
+        content = await resp.text()
+      }
       // 结构化解析中标结果表+专家名单（旧正则会误抓"代理服务收费金额"当中标价）
-      const parsed = parseWinnerAnnouncement(htmlToText(String(data?.result?.data?.content ?? '')))
+      const parsed = parseWinnerAnnouncement(htmlToText(content))
+      if (parsed.采购单位) e.采购单位 = parsed.采购单位
       if (parsed.中标单位) e.中标单位 = parsed.中标单位
       if (parsed.中标金额) e.中标金额 = parsed.中标金额
       await politeDelay()
@@ -482,6 +518,8 @@ function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): { added: number;
 
   // 近三天所有信息流里已有的 名称+类型（跨天去重基准）
   const seenAll = new Set<string>()
+  const existingByKey = new Map<string, Record<string, unknown>>()
+  const existingDateByKey = new Map<string, string>()
   const feeds = new Map<string, { path: string; data: Record<string, unknown>; items: Record<string, unknown>[] }>()
   for (const d of recentDates(WINDOW_DAYS)) {
     const p = join(dir, `${d}_信息流.json`)
@@ -495,7 +533,12 @@ function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): { added: number;
         // 损坏就整个重写
       }
     }
-    for (const x of items) seenAll.add(ntKey((x as { 类型?: unknown }).类型, (x as { 项目名称?: unknown }).项目名称))
+    for (const x of items) {
+      const key = ntKey((x as { 类型?: unknown }).类型, (x as { 项目名称?: unknown }).项目名称)
+      seenAll.add(key)
+      existingByKey.set(key, x)
+      existingDateByKey.set(key, d)
+    }
     feeds.set(d, { path: p, data, items })
   }
 
@@ -506,7 +549,25 @@ function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): { added: number;
     const name = e.项目名称.trim()
     if (!name) continue
     const key = ntKey(e.类型, name)
-    if (seenAll.has(key)) continue
+    if (seenAll.has(key)) {
+      // 已存在的结果公告也要回填详情页新解析到的采购人/供应商/成交价格，不能因去重永久停在“待确认”。
+      const existing = existingByKey.get(key)
+      if (existing) {
+        let changed = false
+        for (const field of ['采购单位', '中标单位', '中标金额'] as const) {
+          const value = e[field]
+          if (value && String(existing[field] ?? '') !== value) {
+            existing[field] = value
+            changed = true
+          }
+        }
+        if (changed) {
+          const date = existingDateByKey.get(key) ?? e.日期
+          if (feeds.has(date)) touched.add(date)
+        }
+      }
+      continue
+    }
     const feed = feeds.get(e.日期)
     if (!feed) continue // 窗口外日期不写
     seenAll.add(key)
@@ -598,8 +659,8 @@ export async function fetchIntelNow(dataDir: string, force = false): Promise<Int
 
   // 意见征询条目补抓详情页提取「征询截止日」（重点关注日期）
   await enrichZjgovConsultDeadlines(kept)
-  // 结果公告补抓 中标单位/中标金额
-  await enrichZjgovWinners(kept)
+  // 结果公告补抓：采购人名称、中标单位、中标金额
+  await enrichWinnerDetails(kept)
 
   const { added, addedEntries } = mergeIntoFeeds(dataDir, kept)
   writeFetchState(dataDir)
