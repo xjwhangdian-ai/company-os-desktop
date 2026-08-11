@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import type { IntelKeywordGroups } from '@shared/agent-types'
 
 // ============ 招投标信息的"关键词"（抓取筛选 + 标红）============
 // 双重作用：①抓取筛选——抓取时只保留 项目名称/采购单位/区县 命中任一关键词的公告；
@@ -11,7 +12,16 @@ const KEYWORDS_FILE_REL = join('outputs', '09_情报_intel', '兴趣关键词.js
 
 /** 整合自 ~/.openclaw/.../zjgov-fetcher/scripts/keywords_config.json（2026-07-26）：
  * 安防/智能化/弱电 42 词 + 警用装备 42 词 + 警用采购部门 19 词，去重合并 */
-export const DEFAULT_INTEL_KEYWORDS = [
+export const DEFAULT_ORG_KEYWORDS = [
+  '公安局', '公安分局', '公安', '交通警察', '交警', '特警', '巡特警', '海警',
+  '应急管理局', '应急管理', '应急',
+  '消防救援', '消防支队', '消防大队', '消防',
+  '交通运输局', '交通局',
+  '城市管理局', '城管局', '综合行政执法',
+  '司法局', '监狱', '戒毒'
+]
+
+export const DEFAULT_CONTENT_KEYWORDS = [
   // 安防/智能化/弱电
   '智能化', '监控', '安防', '音视频', 'LED', 'LCD', '网络', '弱电',
   '门禁', '道闸', '停车场', '报警', '视频', '对讲', '一卡通',
@@ -26,27 +36,37 @@ export const DEFAULT_INTEL_KEYWORDS = [
   '执勤服', '作训服', '战训服', '特警服', '骑行服',
   '执法记录仪', '对讲机', '强光手电', '催泪', '喷射器',
   '救援', '抢险', '救灾', '应急照明', '破拆', '生命探测', '搜救',
-  '警戒带', '路锥', '反光', '警示',
-  // 警用采购部门/单位
-  '公安局', '公安分局', '公安', '交通警察', '交警', '特警', '巡特警', '海警',
-  '应急管理局', '应急管理', '应急',
-  '消防救援', '消防支队', '消防大队', '消防',
-  '交通运输局', '交通局',
-  '城市管理局', '城管局', '综合行政执法',
-  '司法局', '监狱', '戒毒'
+  '警戒带', '路锥', '反光', '警示'
 ]
 
-export function getIntelKeywords(dataDir: string): string[] {
-  const p = join(dataDir, KEYWORDS_FILE_REL)
-  if (!existsSync(p)) return [...DEFAULT_INTEL_KEYWORDS]
-  try {
-    const raw = JSON.parse(readFileSync(p, 'utf-8'))
-    const arr = Array.isArray(raw?.关键词) ? raw.关键词 : []
-    const cleaned = arr.map((k: unknown) => String(k).trim()).filter((k: string) => k.length > 0)
-    return cleaned.length > 0 ? cleaned : [...DEFAULT_INTEL_KEYWORDS]
-  } catch {
-    return [...DEFAULT_INTEL_KEYWORDS]
+export const DEFAULT_INTEL_KEYWORDS = [...DEFAULT_ORG_KEYWORDS, ...DEFAULT_CONTENT_KEYWORDS]
+
+function cleanKeywords(input: unknown): string[] {
+  const items = Array.isArray(input) ? input : []
+  return [...new Set(items.map((k) => String(k).trim()).filter((k) => k.length > 0 && k.length <= 20))]
+}
+
+/** 兼容旧版扁平关键词文件：已知单位词归入「招投标单位」，其余归入「招标内容」。 */
+export function getIntelKeywordGroups(dataDir: string): IntelKeywordGroups {
+  const raw = readRaw(dataDir)
+  const org = cleanKeywords(raw.招投标单位关键词)
+  const content = cleanKeywords(raw.招标内容关键词)
+  if (org.length > 0 || content.length > 0) {
+    return {
+      招投标单位: org.length > 0 ? org : [...DEFAULT_ORG_KEYWORDS],
+      招标内容: content.length > 0 ? content : [...DEFAULT_CONTENT_KEYWORDS]
+    }
   }
+  const legacy = cleanKeywords(raw.关键词)
+  if (legacy.length === 0) return { 招投标单位: [...DEFAULT_ORG_KEYWORDS], 招标内容: [...DEFAULT_CONTENT_KEYWORDS] }
+  const orgSet = new Set(DEFAULT_ORG_KEYWORDS)
+  const inferredOrg = legacy.filter((k) => orgSet.has(k))
+  return { 招投标单位: inferredOrg, 招标内容: legacy.filter((k) => !orgSet.has(k)) }
+}
+
+export function getIntelKeywords(dataDir: string): string[] {
+  const groups = getIntelKeywordGroups(dataDir)
+  return [...new Set([...groups.招投标单位, ...groups.招标内容])]
 }
 
 function readRaw(dataDir: string): Record<string, unknown> {
@@ -68,10 +88,32 @@ function writeRaw(dataDir: string, data: Record<string, unknown>): void {
 }
 
 export function setIntelKeywords(dataDir: string, keywords: string[]): string[] {
-  const cleaned = [...new Set(keywords.map((k) => k.trim()).filter((k) => k.length > 0 && k.length <= 20))]
-  // 保留学习数据等其他字段，只更新词表
-  writeRaw(dataDir, { ...readRaw(dataDir), 关键词: cleaned, 更新时间: Date.now() })
-  return cleaned
+  const orgSet = new Set(DEFAULT_ORG_KEYWORDS)
+  const cleaned = cleanKeywords(keywords)
+  return flattenGroups(setIntelKeywordGroups(dataDir, {
+    招投标单位: cleaned.filter((k) => orgSet.has(k)),
+    招标内容: cleaned.filter((k) => !orgSet.has(k))
+  }))
+}
+
+function flattenGroups(groups: IntelKeywordGroups): string[] {
+  return [...new Set([...groups.招投标单位, ...groups.招标内容])]
+}
+
+export function setIntelKeywordGroups(dataDir: string, groups: IntelKeywordGroups): IntelKeywordGroups {
+  const next: IntelKeywordGroups = {
+    招投标单位: cleanKeywords(groups.招投标单位),
+    招标内容: cleanKeywords(groups.招标内容)
+  }
+  // 同步保留扁平字段，确保旧版本客户端仍能读取。
+  writeRaw(dataDir, {
+    ...readRaw(dataDir),
+    招投标单位关键词: next.招投标单位,
+    招标内容关键词: next.招标内容,
+    关键词: flattenGroups(next),
+    更新时间: Date.now()
+  })
+  return next
 }
 
 // ── 关键词学习：跟进/忽略反馈驱动词库优化 ────────────────────────────────

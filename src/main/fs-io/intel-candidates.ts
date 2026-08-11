@@ -1,11 +1,11 @@
-import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { IntelCandidate, IntelConfirmResult } from '@shared/agent-types'
+import type { IntelCandidate, IntelConfirmResult, PriorityIntelProject } from '@shared/agent-types'
 import { ensureBiddingProjectSkeleton } from './upload-router'
 import { migrateTrackDir } from './intel-fetch'
 import { readProjectCard, saveProjectCard } from './bidding-workflow'
 import { extractZjgovParams } from './intel-source'
-import { getIntelKeywords, matchIntelKeyword, recordKeywordFeedback } from './intel-keywords'
+import { getIntelKeywordGroups, matchIntelKeyword, recordKeywordFeedback } from './intel-keywords'
 
 // ============ intel 分身推送的招投标信息流：人工确认后才建招投标项目卡 ============
 // 数据源（都在 outputs/03_招投标_bidding/招投标每日追踪/，由每日管线与 intel 分身产出）：
@@ -15,6 +15,7 @@ import { getIntelKeywords, matchIntelKeyword, recordKeywordFeedback } from './in
 
 const TRACK_DIR_REL = join('outputs', '03_招投标_bidding', '招投标每日追踪')
 const OUTPUTS_BIDDING_REL = join('outputs', '03_招投标_bidding')
+const PRIORITY_DIR_REL = join(OUTPUTS_BIDDING_REL, '重点项目')
 const STATE_FILE = '候选项目处理状态.json'
 const FEED_FILES = 3
 const CURATED_FILES = 14
@@ -44,6 +45,32 @@ function writeState(dataDir: string, state: CandidateState): void {
 
 function candidateKey(date: string, name: string): string {
   return `${date}|${name}`
+}
+
+function priorityRoot(dataDir: string): string {
+  return join(dataDir, PRIORITY_DIR_REL)
+}
+
+function priorityJsonPath(dataDir: string, folder: string): string {
+  return join(priorityRoot(dataDir), folder, '重点项目.json')
+}
+
+function readPriorityProjects(dataDir: string): PriorityIntelProject[] {
+  const root = priorityRoot(dataDir)
+  if (!existsSync(root)) return []
+  const projects: PriorityIntelProject[] = []
+  for (const folder of readdirSync(root)) {
+    const path = priorityJsonPath(dataDir, folder)
+    try {
+      if (!statSync(join(root, folder)).isDirectory() || !existsSync(path)) continue
+      const raw = JSON.parse(readFileSync(path, 'utf-8')) as Partial<PriorityIntelProject>
+      if (!raw.项目 || typeof raw.项目.项目名称 !== 'string') continue
+      projects.push({ 文件夹: folder, 路径: join(root, folder), 重点时间: Number(raw.重点时间) || 0, 项目: raw.项目 })
+    } catch {
+      // 人工正在整理或单个重点项目文件损坏时，不影响其他项目。
+    }
+  }
+  return projects.sort((a, b) => b.重点时间 - a.重点时间)
 }
 
 /** intel 分身旧清单用的短类型 → 信息流的四类正名 */
@@ -162,7 +189,8 @@ const REL_RANK = { 高: 0, 中: 1 } as const
  */
 export function listIntelCandidates(dataDir: string): IntelCandidate[] {
   const state = readState(dataDir)
-  const keywords = getIntelKeywords(dataDir)
+  const keywordGroups = getIntelKeywordGroups(dataDir)
+  const priorityKeys = new Set(readPriorityProjects(dataDir).map((p) => p.项目.key))
 
   // 状态按名索引：忽略名单 + 每个名字已确认过的类型集合
   const ignoredNames = new Set<string>()
@@ -199,8 +227,14 @@ export function listIntelCandidates(dataDir: string): IntelCandidate[] {
   const out: IntelCandidate[] = []
   for (const c of byNameType.values()) {
     const name = c.项目名称.trim()
-    // 兴趣关键词按用户当前配置在读取时动态匹配（改词立即生效，无需重抓）
-    c.命中关键词 = matchIntelKeyword(`${c.项目名称}${c.采购单位}`, keywords)
+    // 两类关键词独立匹配：单位只匹配采购单位，内容匹配项目名称+需求概况。
+    const contentText = `${c.项目名称}${c.需求概况 ?? ''}`
+    c.命中单位关键词 = keywordGroups.招投标单位.filter((k) => c.采购单位.includes(k))
+    c.命中内容关键词 = keywordGroups.招标内容.filter((k) => contentText.includes(k))
+    c.命中关键词 =
+      matchIntelKeyword(c.采购单位, keywordGroups.招投标单位) ??
+      matchIntelKeyword(contentText, keywordGroups.招标内容)
+    c.已重点 = priorityKeys.has(c.key)
     if (state[c.key]) continue // 本条已处理过
     if (ignoredNames.has(name)) continue // 忽略过的项目名不再打扰
     const confirmedTypes = confirmedTypesByName.get(name)
@@ -222,6 +256,52 @@ export function listIntelCandidates(dataDir: string): IntelCandidate[] {
     const rb = b.相关度 ? REL_RANK[b.相关度] : 2
     return ra - rb
   })
+}
+
+/** 重点项目只从专用目录读取，日常情报清理不会触及；不提供应用内删除入口。 */
+export function listPriorityIntelProjects(dataDir: string): PriorityIntelProject[] {
+  return readPriorityProjects(dataDir)
+}
+
+/** 标记重点：将当时的完整项目快照写入专用目录，重复点击不覆盖人工补充内容。 */
+export function markIntelCandidatePriority(
+  dataDir: string,
+  key: string
+): { ok: boolean; 文件夹: string; 说明: string } {
+  const candidate = scanAllCandidates(dataDir).find((c) => c.key === key)
+  if (!candidate) return { ok: false, 文件夹: '', 说明: '项目信息不存在（每日清单可能已更新），请刷新后重试' }
+
+  const groups = getIntelKeywordGroups(dataDir)
+  candidate.命中单位关键词 = groups.招投标单位.filter((k) => candidate.采购单位.includes(k))
+  candidate.命中内容关键词 = groups.招标内容.filter((k) => `${candidate.项目名称}${candidate.需求概况 ?? ''}`.includes(k))
+  const existing = readPriorityProjects(dataDir).find((p) => p.项目.key === key)
+  if (existing) return { ok: true, 文件夹: existing.文件夹, 说明: `「${candidate.项目名称}」已在重点项目中保留` }
+
+  const folder = `${candidate.日期}_${sanitizeName(candidate.项目名称)}`
+  const dir = join(priorityRoot(dataDir), folder)
+  mkdirSync(dir, { recursive: true })
+  const payload: PriorityIntelProject = { 文件夹: folder, 路径: dir, 重点时间: Date.now(), 项目: candidate }
+  writeFileSync(priorityJsonPath(dataDir, folder), JSON.stringify(payload, null, 2), 'utf-8')
+  writeFileSync(
+    join(dir, '00_情报来源.md'),
+    [
+      `# 重点项目 · ${candidate.项目名称}`,
+      '',
+      `- 重点关注时间：${new Date(payload.重点时间).toLocaleString('zh-CN', { hour12: false })}`,
+      `- 招投标单位：${candidate.采购单位 || '待确认'}`,
+      `- 公告类型：${candidate.类型}（${candidate.日期}）`,
+      `- 招标内容关键词：${candidate.命中内容关键词?.join('、') || '待确认'}`,
+      `- 单位关键词：${candidate.命中单位关键词?.join('、') || '待确认'}`,
+      `- 公告链接：${candidate.链接 || '待确认'}`,
+      `- 预算：${candidate.预算 || '待确认'}`,
+      ...(candidate.需求概况 ? [`- 需求概况：${candidate.需求概况}`] : []),
+      '',
+      '> 本目录不参与每日情报清理。若不再关注，请由人工直接删除本项目文件夹。',
+      ''
+    ].join('\n'),
+    'utf-8'
+  )
+  return { ok: true, 文件夹: folder, 说明: `已加入重点项目；数据已永久保留在「重点项目/${folder}」` }
 }
 
 export function findIntelCandidateByKey(dataDir: string, key: string): IntelCandidate | null {

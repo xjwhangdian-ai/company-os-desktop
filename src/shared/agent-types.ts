@@ -135,6 +135,12 @@ export interface BiddingProject {
 export const INTEL_FEED_TYPES = ['采购意向', '意见征询', '采购公告', '采购结果公告'] as const
 export type IntelFeedType = (typeof INTEL_FEED_TYPES)[number]
 
+/** 招投标情报词库：采购单位与招标内容分开维护、分开匹配。 */
+export interface IntelKeywordGroups {
+  招投标单位: string[]
+  招标内容: string[]
+}
+
 /** intel 每日追踪的招投标信息条目：全量信息流（{日期}_信息流.json）合并分身相关度标注（{日期}_候选项目.json） */
 export interface IntelCandidate {
   /** `${日期}|${项目名称}`——处理状态文件用它去重 */
@@ -155,6 +161,12 @@ export interface IntelCandidate {
   台州公安: boolean
   /** 命中的兴趣关键词（读列表时按用户配置动态匹配；未命中为 null） */
   命中关键词?: string | null
+  /** 命中的招投标单位关键词（如公安局、交通局、司法局） */
+  命中单位关键词?: string[]
+  /** 命中的招标内容关键词（如无人机、警用装备、执勤服） */
+  命中内容关键词?: string[]
+  /** 已保存到重点项目目录；重点项目仅可由人工删除目录移除 */
+  已重点?: boolean
   /** 意见征询条目的征询截止日（YYYY-MM-DD，从公告详情页提取；提不到为空） */
   征询截止?: string
   /** 采购意向详情页「采购需求概况」摘要（关键词复筛与列表展示用；没抓到为空） */
@@ -164,6 +176,15 @@ export interface IntelCandidate {
   理由: string
   /** 已跟进项目（此前确认过征询/意向等阶段）发布了正式采购公告——置顶高亮，确认后归档进原项目 */
   跟进升级?: boolean
+}
+
+/** 重点项目：保存到 outputs/03_招投标_bidding/重点项目/，不参与每日情报清理。 */
+export interface PriorityIntelProject {
+  文件夹: string
+  /** 本地重点项目目录绝对路径，仅用于工作台打开目录。 */
+  路径: string
+  重点时间: number
+  项目: IntelCandidate
 }
 
 export interface IntelConfirmResult {

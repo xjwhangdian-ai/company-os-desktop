@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useMemo, useState } from 'react'
-import type { IntelCandidate, IntelFeedType } from '@shared/agent-types'
+import type { IntelCandidate, IntelFeedType, IntelKeywordGroups } from '@shared/agent-types'
 import { INTEL_FEED_TYPES } from '@shared/agent-types'
 
 // ============ 招投标每日情报面板（四平台抓取 → 四类分组 → 确认跟进建档）============
@@ -50,6 +50,7 @@ function CandidateRow({
   disabled,
   onConfirm,
   onIgnore,
+  onPriority,
   onFollowWinner
 }: {
   c: IntelCandidate
@@ -57,6 +58,7 @@ function CandidateRow({
   disabled: boolean
   onConfirm: () => void
   onIgnore: () => void
+  onPriority: () => void
   onFollowWinner: () => void
 }): React.JSX.Element {
   return (
@@ -115,22 +117,27 @@ function CandidateRow({
             相关度{c.相关度}
           </span>
         )}
-        {(c.命中关键词 || c.台州公安) && (
-          <span className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-600">
-            🚨{c.命中关键词 || '公安系统'}
-          </span>
-        )}
+        {(c.命中单位关键词?.length ?? 0) > 0 && <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">🏢 {c.命中单位关键词?.join('、')}</span>}
+        {(c.命中内容关键词?.length ?? 0) > 0 && <span className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-600">🔎 {c.命中内容关键词?.join('、')}</span>}
+        {c.台州公安 && (c.命中单位关键词?.length ?? 0) === 0 && <span className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-600">🚨公安系统</span>}
         {c.标签 && <span className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-600">{c.标签}</span>}
         {c.平台 && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{c.平台}</span>}
       </div>
       {c.理由 && <div className="mt-1 text-[11px] leading-snug text-slate-400">{c.理由}</div>}
       <div className="mt-1.5 flex items-center gap-1.5">
         <span className="text-[10px] text-slate-400">{c.日期}</span>
+        <button
+          disabled={disabled || c.已重点}
+          onClick={onPriority}
+          title={c.已重点 ? '已保存到重点项目目录；如不再关注，请人工删除该目录' : '保存为重点项目；不会被每日情报清理删除'}
+          className="ml-auto rounded border border-amber-300 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+        >
+          {c.已重点 ? '★ 已重点' : '☆ 重点'}
+        </button>
         {c.类型 === '采购结果公告' ? (
           <button
             disabled={disabled}
             onClick={onFollowWinner}
-            style={{ marginLeft: 'auto' }}
             title="中标信息+评审专家（标注采购人代表）入中标公告台账.xlsx，公告附件自动下载归档"
             className="rounded bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white disabled:opacity-50"
           >
@@ -140,7 +147,6 @@ function CandidateRow({
           <button
             disabled={disabled}
             onClick={onConfirm}
-            style={{ marginLeft: 'auto' }}
             title="建项目档并进入左侧台账（意见征询项目自动带上征询截止日）"
             className={`rounded px-3 py-1 text-[11px] font-medium text-white disabled:opacity-50 ${
               c.跟进升级 ? 'bg-amber-500' : 'bg-jushi-accent'
@@ -163,21 +169,23 @@ function CandidateRow({
 
 // ── 兴趣关键词管理（命中标红 + 计入「只看相关」）──────────────
 function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose: () => void }): React.JSX.Element {
-  const [keywords, setKeywords] = useState<string[]>([])
+  const [groups, setGroups] = useState<IntelKeywordGroups>({ 招投标单位: [], 招标内容: [] })
+  const [group, setGroup] = useState<keyof IntelKeywordGroups>('招标内容')
   const [input, setInput] = useState('')
   /** 非空=正在修改这个词：保存时原位替换而不是新增 */
   const [editing, setEditing] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    window.api.intel.getKeywords().then(setKeywords)
+    window.api.intel.getKeywordGroups().then(setGroups)
   }, [])
 
-  async function save(next: string[]): Promise<void> {
+  const keywords = [...groups.招投标单位, ...groups.招标内容]
+  async function save(next: IntelKeywordGroups): Promise<void> {
     setSaving(true)
     try {
-      const saved = await window.api.intel.setKeywords(next)
-      setKeywords(saved)
+      const saved = await window.api.intel.setKeywordGroups(next)
+      setGroups(saved)
       onChanged()
     } finally {
       setSaving(false)
@@ -188,10 +196,11 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
     const val = input.trim()
     if (!val) return
     if (editing) {
-      save(keywords.map((k) => (k === editing ? val : k)))
+      const owner = groups.招投标单位.includes(editing) ? '招投标单位' : '招标内容'
+      save({ ...groups, [owner]: groups[owner].map((k) => (k === editing ? val : k)) })
       setEditing(null)
     } else {
-      save([...keywords, val])
+      save({ ...groups, [group]: [...groups[group], val] })
     }
     setInput('')
   }
@@ -199,52 +208,31 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
   const [suggestions, setSuggestions] = useState<{ 建议添加: { 词: string; 次数: number }[]; 建议移除: { 词: string; 忽略次数: number }[] } | null>(null)
   useEffect(() => {
     window.api.intel.keywordSuggestions?.().then(setSuggestions).catch(() => {})
-  }, [keywords])
+  }, [keywords.join('|')])
 
   return (
     <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-white p-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold text-slate-600">关键词（抓取按它筛选入库 + 命中标红）</span>
+        <span className="text-[11px] font-semibold text-slate-600">关键词分类（单位 + 招标内容）</span>
         <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-600">收起 ✕</button>
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {keywords.map((k) => (
-          <span
-            key={k}
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              editing === k ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-400' : 'bg-rose-50 text-rose-600'
-            }`}
-          >
-            <button
-              disabled={saving}
-              onClick={() => {
-                setEditing(k)
-                setInput(k)
-              }}
-              className="hover:underline disabled:opacity-50"
-              title={`修改关键词「${k}」——点击后在下方输入框改好按保存`}
-            >
-              {k}
-            </button>
-            <button
-              disabled={saving}
-              onClick={() => {
-                if (editing === k) {
-                  setEditing(null)
-                  setInput('')
-                }
-                save(keywords.filter((x) => x !== k))
-              }}
-              className="text-rose-400 hover:text-rose-700 disabled:opacity-50"
-              title={`删除关键词「${k}」`}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        {keywords.length === 0 && <span className="text-[11px] text-slate-400">暂无关键词——全部公告都不会标红</span>}
-      </div>
+      {(['招投标单位', '招标内容'] as const).map((kind) => (
+        <div key={kind} className="mt-1.5">
+          <div className="text-[10px] font-medium text-slate-500">{kind === '招投标单位' ? '🏢 招投标单位（公安局、交通局、司法局等）' : '🔎 招标内容（无人机、警用装备、执勤服等）'}</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {groups[kind].map((k) => (
+              <span key={k} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${editing === k ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-400' : kind === '招投标单位' ? 'bg-violet-50 text-violet-700' : 'bg-rose-50 text-rose-600'}`}>
+                <button disabled={saving} onClick={() => { setEditing(k); setGroup(kind); setInput(k) }} className="hover:underline disabled:opacity-50">{k}</button>
+                <button disabled={saving} onClick={() => { if (editing === k) { setEditing(null); setInput('') }; save({ ...groups, [kind]: groups[kind].filter((x) => x !== k) }) }} className="text-rose-400 hover:text-rose-700 disabled:opacity-50">×</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
       <div className="mt-2 flex gap-1.5">
+        <select value={group} onChange={(e) => setGroup(e.target.value as keyof IntelKeywordGroups)} className="rounded border border-slate-300 px-1 text-[11px] text-slate-600">
+          <option value="招投标单位">单位</option><option value="招标内容">内容</option>
+        </select>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -282,7 +270,7 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
               <button
                 key={'add' + s.词}
                 disabled={saving}
-                onClick={() => save([...keywords, s.词])}
+                onClick={() => save({ ...groups, 招标内容: [...groups.招标内容, s.词] })}
                 title={`跟进过的项目里出现 ${s.次数} 次但词库没有——点击添加`}
                 className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
               >
@@ -293,7 +281,7 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
               <button
                 key={'rm' + s.词}
                 disabled={saving}
-                onClick={() => save(keywords.filter((k) => k !== s.词))}
+                onClick={() => save({ ...groups, 招投标单位: groups.招投标单位.filter((k) => k !== s.词), 招标内容: groups.招标内容.filter((k) => k !== s.词) })}
                 title={`命中它的项目被忽略 ${s.忽略次数} 次、从未跟进——点击移除减少噪音`}
                 className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[11px] text-rose-600 hover:bg-rose-100 disabled:opacity-50"
               >
@@ -304,7 +292,7 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
         </div>
       )}
       <p className="mt-1.5 text-[10px] leading-snug text-slate-400">
-        增删改：点词本身=修改，点 × =删除，输入新词回车=添加。每次点「跟进/忽略」都会记录学习样本，积累后在上方给出词库优化建议。词库整合自黄药师管线（安防智能化+警用装备+采购部门，共百余词）。抓取时只保留 项目名称/采购单位/区县 命中任一关键词的公告——标红立即生效，抓取筛选下次「刷新」生效。
+        单位关键词只匹配采购单位；内容关键词匹配项目名称和需求概况。增删改后立即重新标注；下次「刷新」抓取时按两类词共同筛选。
       </p>
     </div>
   )
@@ -317,11 +305,13 @@ function KeywordManager({ onChanged, onClose }: { onChanged: () => void; onClose
 export function IntelBiddingFeed({
   onNotice,
   reloadKey,
-  onConfirmed
+  onConfirmed,
+  onPriorityChanged
 }: {
   onNotice: (t: string) => void
   reloadKey: number
   onConfirmed?: () => void
+  onPriorityChanged?: () => void
 }): React.JSX.Element {
   const [candidates, setCandidates] = useState<IntelCandidate[]>([])
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
@@ -365,6 +355,19 @@ export function IntelBiddingFeed({
   async function handleIgnore(c: IntelCandidate): Promise<void> {
     await window.api.bidding.ignoreCandidate(c.key)
     setCandidates((prev) => prev.filter((x) => x.key !== c.key))
+  }
+  async function handlePriority(c: IntelCandidate): Promise<void> {
+    setConfirmingKey(c.key)
+    try {
+      const r = await window.api.bidding.markPriority(c.key)
+      onNotice(r.说明)
+      if (r.ok) {
+        setCandidates((prev) => prev.map((x) => (x.key === c.key ? { ...x, 已重点: true } : x)))
+        onPriorityChanged?.()
+      }
+    } finally {
+      setConfirmingKey(null)
+    }
   }
   /** 结果公告的跟进：不建投标项目档，走中标归档（台账+附件+专家索引） */
   async function handleFollowWinner(c: IntelCandidate): Promise<void> {
@@ -551,6 +554,7 @@ export function IntelBiddingFeed({
                       disabled={confirmingKey !== null}
                       onConfirm={() => handleConfirm(c)}
                       onIgnore={() => handleIgnore(c)}
+                      onPriority={() => handlePriority(c)}
                       onFollowWinner={() => handleFollowWinner(c)}
                     />
                   ))}

@@ -54,7 +54,7 @@ import {
   resolveBiddingProjectPaths,
   saveProjectCard
 } from '../fs-io/bidding-workflow'
-import { confirmIntelCandidate, ignoreIntelCandidate, listIntelCandidates } from '../fs-io/intel-candidates'
+import { confirmIntelCandidate, ignoreIntelCandidate, listIntelCandidates, listPriorityIntelProjects, markIntelCandidatePriority } from '../fs-io/intel-candidates'
 import { followWinnerAnnouncement } from '../fs-io/intel-winner-follow'
 import { listMbaCourses, uploadToMbaCourse } from '../fs-io/upload-router'
 import {
@@ -68,7 +68,7 @@ import {
 import { downloadTenderFile, probeTenderFile } from '../fs-io/tender-download'
 import { purgeStaleIntelData } from '../fs-io/intel-purge'
 import { fetchIntelNow } from '../fs-io/intel-fetch'
-import { getIntelKeywords, setIntelKeywords, getKeywordSuggestions } from '../fs-io/intel-keywords'
+import { getIntelKeywords, setIntelKeywords, getKeywordSuggestions, getIntelKeywordGroups, setIntelKeywordGroups } from '../fs-io/intel-keywords'
 import { listLegalDocs, listLegalTemplates, markReviewed, generateLegalRedline } from '../fs-io/legal-workflow'
 import {
   addFollowUp,
@@ -270,6 +270,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.biddingListCandidates, () => listIntelCandidates(getDataDir()))
   ipcMain.handle(IPC.biddingConfirmCandidate, (_e, key: string) => confirmIntelCandidate(getDataDir(), key))
   ipcMain.handle(IPC.biddingIgnoreCandidate, (_e, key: string) => ignoreIntelCandidate(getDataDir(), key))
+  ipcMain.handle(IPC.biddingListPriorityProjects, () => listPriorityIntelProjects(getDataDir()))
+  ipcMain.handle(IPC.biddingMarkPriority, (_e, key: string) => markIntelCandidatePriority(getDataDir(), key))
   ipcMain.handle(IPC.biddingDownloadTender, (_e, folderName: string) => downloadTenderFile(getDataDir(), folderName))
   ipcMain.handle(IPC.biddingProbeTender, (_e, folderName: string) => probeTenderFile(getDataDir(), folderName))
   ipcMain.handle(IPC.biddingDeleteProject, async (_e, folderName: string) => {
@@ -289,6 +291,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.intelFetchReports, () => fetchReportsNow(getDataDir()))
   ipcMain.handle(IPC.intelGetKeywords, () => getIntelKeywords(getDataDir()))
   ipcMain.handle(IPC.intelSetKeywords, (_e, keywords: string[]) => setIntelKeywords(getDataDir(), keywords))
+  ipcMain.handle(IPC.intelGetKeywordGroups, () => getIntelKeywordGroups(getDataDir()))
+  ipcMain.handle(IPC.intelSetKeywordGroups, (_e, groups) => setIntelKeywordGroups(getDataDir(), groups))
   ipcMain.handle(IPC.intelIgnoreReport, (_e, 链接: string) => ignoreIntelReport(getDataDir(), 链接))
   ipcMain.handle(IPC.intelDownloadReport, (_e, report: IntelReport) => downloadIntelReport(getDataDir(), report))
   ipcMain.handle(IPC.intelReportKeywordsGet, () => getReportKeywords(getDataDir()))

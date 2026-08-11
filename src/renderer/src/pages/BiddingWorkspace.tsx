@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AgentDisplayMeta, BidProjectCard, BidProjectStatus, BiddingProject } from '@shared/agent-types'
+import type { AgentDisplayMeta, BidProjectCard, BidProjectStatus, BiddingProject, PriorityIntelProject } from '@shared/agent-types'
 import { BID_PROJECT_STATUSES } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
@@ -265,10 +265,11 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     const saved = Number(localStorage.getItem('biddingLeftWidth'))
     return saved >= 260 && saved <= 900 ? saved : 384
   })
-  /** 左栏视图：情报（四平台每日抓取，默认视图）| 台账（项目列表） */
-  const [leftView, setLeftView] = useState<'台账' | '情报'>('情报')
+  /** 左栏视图：每日情报 → 台账 → 重点项目 */
+  const [leftView, setLeftView] = useState<'台账' | '情报' | '重点项目'>('情报')
   const [intelReloadKey, setIntelReloadKey] = useState(0)
   const [candidateCount, setCandidateCount] = useState(0)
+  const [priorityProjects, setPriorityProjects] = useState<PriorityIntelProject[]>([])
 
   useEffect(() => {
     if (pendingPrompt) setShowChat(true)
@@ -302,6 +303,9 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
       .listCandidates()
       .then((l) => setCandidateCount(l.length))
       .catch(() => {})
+  }, [intelReloadKey])
+  useEffect(() => {
+    window.api.bidding.listPriorityProjects().then(setPriorityProjects).catch(() => {})
   }, [intelReloadKey])
   const [openCat, setOpenCat] = useState<Record<BidCategory, boolean>>({
     采购意向: true,
@@ -431,9 +435,9 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         style={showRightPane ? { width: leftWidth } : undefined}
         className={`flex flex-col border-r border-slate-200 bg-slate-50 ${showRightPane ? 'shrink-0' : 'flex-1'}`}
       >
-        {/* 台账 / 每日情报 视图切换（招投标信息从行业情报页整合过来，情报→确认→台账一条线） */}
+        {/* 每日情报 / 台账 / 重点项目：重点项目独立目录保存，不参与每日清理 */}
         <div className="app-drag flex gap-1 px-3 pb-1 pt-3">
-          {(['情报', '台账'] as const).map((v) => (
+          {(['情报', '台账', '重点项目'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setLeftView(v)}
@@ -441,7 +445,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                 leftView === v ? 'bg-jushi-accent text-white' : 'border border-slate-300 text-slate-500 hover:border-jushi-accent'
               }`}
             >
-              {v === '台账' ? '📋 台账' : `📡 每日情报${candidateCount > 0 ? ` ${candidateCount}` : ''}`}
+              {v === '台账' ? '📋 台账' : v === '重点项目' ? `★ 重点项目${priorityProjects.length > 0 ? ` ${priorityProjects.length}` : ''}` : `📡 每日情报${candidateCount > 0 ? ` ${candidateCount}` : ''}`}
             </button>
           ))}
         </div>
@@ -453,7 +457,34 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
               refresh()
               setIntelReloadKey((k) => k + 1)
             }}
+            onPriorityChanged={() => setIntelReloadKey((k) => k + 1)}
           />
+        )}
+        {leftView === '重点项目' && (
+          <div className="flex-1 overflow-y-auto p-3">
+            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] leading-snug text-amber-800">
+              重点项目保存于 <code>outputs/03_招投标_bidding/重点项目/</code>，不会被每日情报清理。需要移除时，请人工删除对应项目文件夹。
+            </div>
+            <div className="space-y-2">
+              {priorityProjects.map((p) => (
+                <div key={p.文件夹} className="rounded-lg border border-amber-200 bg-white p-2.5 text-xs">
+                  <a href={p.项目.链接 || undefined} target="_blank" rel="noreferrer" className="font-medium leading-snug text-jushi-accent hover:underline">
+                    {p.项目.项目名称}{p.项目.链接 && <span className="ml-0.5 text-[10px]">↗</span>}
+                  </a>
+                  <div className="mt-1 text-[11px] text-slate-500">{p.项目.采购单位 || '采购单位待确认'}{p.项目.预算 ? ` · ${p.项目.预算}` : ''}</div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {p.项目.命中单位关键词?.map((k) => <span key={k} className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-700">🏢 {k}</span>)}
+                    {p.项目.命中内容关键词?.map((k) => <span key={k} className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] text-rose-600">🔎 {k}</span>)}
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400">关注于 {new Date(p.重点时间).toLocaleDateString('zh-CN')}</span>
+                    <button onClick={() => window.api.shell.showItemInFolder(`${p.路径}/重点项目.json`)} title="打开重点项目所在目录；如不再关注，请人工删除该目录" className="ml-auto rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-500 hover:border-jushi-accent hover:text-jushi-accent">打开目录</button>
+                  </div>
+                </div>
+              ))}
+              {priorityProjects.length === 0 && <p className="py-8 text-center text-xs text-slate-400">暂无重点项目——在「每日情报」中点击“☆ 重点”即可永久保留</p>}
+            </div>
+          </div>
         )}
         {leftView === '台账' && (
         <>
