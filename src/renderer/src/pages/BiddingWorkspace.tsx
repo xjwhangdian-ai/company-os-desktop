@@ -431,7 +431,23 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     if (statusFilter === '跟进中') return !isPending(p) && (p.card?.状态 ?? '跟进中') === '跟进中'
     return (p.card?.状态 ?? '跟进中') === statusFilter
   })
-  const pendingCount = useMemo(() => projects.filter(isPending).length, [projects])
+  /** 状态筛选数量不受当前搜索词影响，始终反映全部跟进项目。 */
+  const statusCounts = useMemo(() => {
+    const counts: Record<'全部' | '待处理' | BidProjectStatus, number> = {
+      全部: projects.length,
+      待处理: 0,
+      跟进中: 0,
+      已投标: 0,
+      已中标: 0,
+      未中标: 0,
+      已放弃: 0
+    }
+    for (const p of projects) {
+      if (isPending(p)) counts.待处理++
+      else counts[p.card?.状态 ?? '跟进中']++
+    }
+    return counts
+  }, [projects])
   const grouped = useMemo(() => {
     const g = new Map<BidCategory, BiddingProject[]>()
     for (const c of BID_CATEGORIES) g.set(c, [])
@@ -561,12 +577,12 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                 className={`rounded-full border px-2 py-0.5 text-xs ${
                   statusFilter === s
                     ? 'border-jushi-accent bg-jushi-accent text-white'
-                    : s === '待处理' && pendingCount > 0
+                    : s === '待处理' && statusCounts.待处理 > 0
                       ? 'border-amber-400 bg-amber-50 text-amber-600'
                       : 'border-slate-300 text-slate-500'
                 }`}
               >
-                {s === '待处理' && pendingCount > 0 ? `待处理 ${pendingCount}` : s}
+                {s} {statusCounts[s]}
               </button>
             ))}
           </div>
