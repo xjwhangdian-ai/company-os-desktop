@@ -108,6 +108,12 @@ export function getCurrentUserName(): string {
   return currentUserName
 }
 
+/** 产品库是全员共用的规范库；删除会影响报价与选型，因此仅管理员可执行。 */
+function requireCurrentAdmin(): void {
+  const member = listTeamMembers().find((item) => item.name === currentUserName)
+  if (member?.role !== 'admin') throw new Error('仅管理员可以删除产品库中的产品')
+}
+
 /** 只有一个入口注册全部 IPC handler，避免重启热重载时重复 registerHandler 报错 */
 export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC.configGet, (): AppConfig => getConfig())
@@ -373,7 +379,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.salesListProducts, () => listProducts(getDataDir()))
   ipcMain.handle(IPC.salesListCategoryDict, () => listCategoryDict(getDataDir()))
   ipcMain.handle(IPC.salesSaveProduct, (_e, fields: ProductFields, id?: string) => saveProduct(getDataDir(), fields, id))
-  ipcMain.handle(IPC.salesRemoveProduct, (_e, id: string) => removeProduct(getDataDir(), id))
+  ipcMain.handle(IPC.salesRemoveProduct, (_e, id: string) => {
+    requireCurrentAdmin()
+    removeProduct(getDataDir(), id)
+  })
 
   ipcMain.handle(IPC.salesUploadSupplierDoc, async (_e, sourcePath: string): Promise<SupplierDocPreview> => {
     const dataDir = getDataDir()

@@ -21,6 +21,7 @@ import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 import { useConfigStore } from '../stores/useConfigStore'
+import { useIdentityStore } from '../stores/useIdentityStore'
 
 type SalesTab = '产品库' | '选型' | '报价单' | '客户'
 type UploadMode = 'supplier' | 'bid'
@@ -480,6 +481,7 @@ function matchExistingSuppliers(
 }
 
 export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
+  const isAdmin = useIdentityStore((state) => state.currentUser?.role === 'admin')
   const config = useConfigStore((s) => s.config)
   const dataDir = config?.companies.find((c) => c.id === config.activeCompanyId)?.dataDir ?? null
 
@@ -1453,15 +1455,23 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                             >
                               编辑
                             </button>
-                            <button
-                              onClick={async () => {
-                                await window.api.sales.removeProduct(p.id)
-                                await refreshProducts()
-                              }}
-                              className="text-slate-300 hover:text-red-500"
-                            >
-                              删除
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm(`确认删除产品「${p.产品名称}」吗？此操作会同时移除该产品关联的图片。`)) return
+                                  try {
+                                    await window.api.sales.removeProduct(p.id)
+                                    await refreshProducts()
+                                    flash(`已删除「${p.产品名称}」`)
+                                  } catch (err) {
+                                    flash(err instanceof Error ? err.message : String(err))
+                                  }
+                                }}
+                                className="text-slate-300 hover:text-red-500"
+                              >
+                                删除
+                              </button>
+                            )}
                           </td>
                         </tr>
                         {expandedId === p.id && (
