@@ -401,6 +401,11 @@ export function IntelBiddingFeed({
     return m
   }, [candidates])
 
+  // 日期页签切换后立即重新读取近三天本地情报；不要求用户再点一次“刷新”。
+  useEffect(() => {
+    void refresh()
+  }, [dayFilter])
+
   const visible = useMemo(() => {
     const targetDate = DAY_TABS.find((d) => d.label === dayFilter)?.date
     // 搜索时跨全部三天找（命中的不能被日期页签藏住）；平时只看选中那天
@@ -417,7 +422,8 @@ export function IntelBiddingFeed({
       })
     }
     return list
-  }, [candidates, onlyRelevant, query])
+  // dayFilter 必须参与计算依赖，否则按钮高亮虽已切换，列表仍会沿用首次渲染的“今天”。
+  }, [DAY_TABS, candidates, dayFilter, onlyRelevant, query])
   const grouped = useMemo(() => {
     const g = new Map<IntelFeedType, IntelCandidate[]>()
     for (const t of INTEL_FEED_TYPES) g.set(t, [])
