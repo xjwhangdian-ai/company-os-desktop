@@ -27,7 +27,7 @@ import { repairDataDir, templateSrcPath } from '../config/first-run'
 import { checkEnv, installEnvItem } from '../fs-io/env-check'
 import { listBrandMatters, setBrandMatter } from '../fs-io/brand-workflow'
 import { processInvoices } from '../fs-io/finance-invoice'
-import { getSyncStatus, syncNow } from '../fs-io/git-sync'
+import { getSyncStatus, syncNow, syncReadOnlyProductLibrary } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
 import {
@@ -111,7 +111,11 @@ export function getCurrentUserName(): string {
 /** 产品库是全员共用的规范库；删除会影响报价与选型，因此仅管理员可执行。 */
 function requireCurrentAdmin(): void {
   const member = listTeamMembers().find((item) => item.name === currentUserName)
-  if (member?.role !== 'admin') throw new Error('仅管理员可以删除产品库中的产品')
+  if (member?.role !== 'admin') throw new Error('产品库仅允许管理员维护；普通成员请点击“同步产品库”获取最新版本')
+}
+
+function isCurrentAdmin(): boolean {
+  return listTeamMembers().some((item) => item.name === currentUserName && item.role === 'admin')
 }
 
 /** 只有一个入口注册全部 IPC handler，避免重启热重载时重复 registerHandler 报错 */
@@ -363,7 +367,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   // ============ 一键同步 ============
   ipcMain.handle(IPC.syncStatus, () => getSyncStatus(getDataDir()))
   ipcMain.handle(IPC.syncNow, async (_e, userName: string) => {
-    const result = await syncNow(getDataDir(), userName)
+    const member = listTeamMembers().find((item) => item.name === userName)
+    const result = member?.role === 'member' ? await syncReadOnlyProductLibrary(getDataDir()) : await syncNow(getDataDir(), userName)
     if (result.ok) {
       const company = getActiveCompany()
       if (company) setLastSyncAt(company.id)
@@ -376,15 +381,19 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
 
   // ============ 销售工作台 ============
-  ipcMain.handle(IPC.salesListProducts, () => listProducts(getDataDir()))
+  ipcMain.handle(IPC.salesListProducts, () => listProducts(getDataDir(), isCurrentAdmin()))
   ipcMain.handle(IPC.salesListCategoryDict, () => listCategoryDict(getDataDir()))
-  ipcMain.handle(IPC.salesSaveProduct, (_e, fields: ProductFields, id?: string) => saveProduct(getDataDir(), fields, id))
+  ipcMain.handle(IPC.salesSaveProduct, (_e, fields: ProductFields, id?: string) => {
+    requireCurrentAdmin()
+    return saveProduct(getDataDir(), fields, id)
+  })
   ipcMain.handle(IPC.salesRemoveProduct, (_e, id: string) => {
     requireCurrentAdmin()
     removeProduct(getDataDir(), id)
   })
 
   ipcMain.handle(IPC.salesUploadSupplierDoc, async (_e, sourcePath: string): Promise<SupplierDocPreview> => {
+    requireCurrentAdmin()
     const dataDir = getDataDir()
     const { absPath, relativePath } = uploadToSalesRawDoc(dataDir, sourcePath)
     const preview: SupplierDocPreview = { relativePath, fileName: basename(absPath) }
@@ -408,7 +417,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return preview
   })
 
-  ipcMain.handle(IPC.salesImportExcel, (_e, relativePath: string) => importExcelByHeader(getDataDir(), relativePath))
+  ipcMain.handle(IPC.salesImportExcel, (_e, relativePath: string) => {
+    requireCurrentAdmin()
+    return importExcelByHeader(getDataDir(), relativePath)
+  })
 
   ipcMain.handle(IPC.salesListTemplates, () => listQuotationTemplates(getDataDir()))
   ipcMain.handle(IPC.salesUploadTemplate, async (_e, sourcePath: string) => {
@@ -420,9 +432,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return listQuotationTemplates(dataDir).find((t) => t.fileName === fileName)
   })
 
-  ipcMain.handle(IPC.salesSetProductImage, (_e, id: string, sourcePath: string) =>
-    setProductImage(getDataDir(), id, sourcePath)
-  )
+  ipcMain.handle(IPC.salesSetProductImage, (_e, id: string, sourcePath: string) => {
+    requireCurrentAdmin()
+    return setProductImage(getDataDir(), id, sourcePath)
+  })
   ipcMain.handle(IPC.salesExportQuoteImages, (_e, productIds: string[], customerName: string) =>
     exportQuoteImages(getDataDir(), productIds, customerName)
   )

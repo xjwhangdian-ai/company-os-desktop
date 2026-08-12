@@ -393,10 +393,13 @@ function ingestStaging(dataDir: string, db: ProductDb): { ingested: number; skip
   return { ingested, skipped }
 }
 
-export function listProducts(dataDir: string): { products: ProductEntry[]; ingested: number; skipped: number } {
+/**
+ * 普通成员只读产品库：不合并其本机暂存文件，确保产品库只以管理员同步下发的版本为准。
+ */
+export function listProducts(dataDir: string, ingest = true): { products: ProductEntry[]; ingested: number; skipped: number } {
   ensureSalesDirs(dataDir)
   const db = readProductDb(dataDir)
-  const { ingested, skipped } = ingestStaging(dataDir, db)
+  const { ingested, skipped } = ingest ? ingestStaging(dataDir, db) : { ingested: 0, skipped: 0 }
   if (ingested > 0) writeProductDb(dataDir, db)
   const products = [...db.products].sort((a, b) => b.更新时间 - a.更新时间)
   return { products, ingested, skipped }

@@ -619,6 +619,16 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 员工点击侧栏“同步产品库”后，当前页面立即切换到管理员刚下发的版本。
+  useEffect(() => {
+    const onSynced = (): void => {
+      void refreshProducts()
+      void refreshCategoryDict()
+    }
+    window.addEventListener('company-os-product-library-synced', onSynced)
+    return () => window.removeEventListener('company-os-product-library-synced', onSynced)
+  }, [])
+
   useEffect(() => {
     if (tab === '产品库') refreshProducts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1028,22 +1038,26 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     </option>
                   ))}
                 </select>
-                <button
-                  onClick={() => handleUploadDocs('supplier')}
-                  disabled={busy}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  📎 供应商资料
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddForm((v) => !v)
-                    setEditingId(null)
-                  }}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-                >
-                  ＋ 手动添加
-                </button>
+                {isAdmin && (
+                  <>
+                    <button
+                      onClick={() => handleUploadDocs('supplier')}
+                      disabled={busy}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      📎 供应商资料
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAddForm((v) => !v)
+                        setEditingId(null)
+                      }}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                    >
+                      ＋ 手动添加
+                    </button>
+                  </>
+                )}
                 <button
                   disabled={busy || sortedProducts.length === 0}
                   onClick={async () => {
@@ -1244,7 +1258,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 </div>
               ))}
 
-              {(showAddForm || editingId) && (
+              {isAdmin && (showAddForm || editingId) && (
                 <ProductForm
                   initial={editingId ? (products.find((p) => p.id === editingId) ?? EMPTY_PRODUCT_FORM) : EMPTY_PRODUCT_FORM}
                   catDict={catDict}
@@ -1390,7 +1404,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                 }}
                                 onDoubleClick={(e) => e.stopPropagation()}
                               />
-                            ) : (
+                            ) : isAdmin ? (
                               <button
                                 onClick={() => handleSetImage(p.id)}
                                 title="上传产品图片"
@@ -1398,6 +1412,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                               >
                                 +图
                               </button>
+                            ) : (
+                              <span className="text-slate-300">—</span>
                             )}
                           </td>
                           <td className="truncate px-2 py-0.5 text-slate-500" title={p.品牌}>
@@ -1446,15 +1462,17 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                             >
                               更多{expandedId === p.id ? '▴' : '▾'}
                             </button>
-                            <button
-                              onClick={() => {
-                                setEditingId(p.id)
-                                setShowAddForm(false)
-                              }}
-                              className="mr-1.5 text-slate-400 hover:text-slate-600"
-                            >
-                              编辑
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => {
+                                  setEditingId(p.id)
+                                  setShowAddForm(false)
+                                }}
+                                className="mr-1.5 text-slate-400 hover:text-slate-600"
+                              >
+                                编辑
+                              </button>
+                            )}
                             {isAdmin && (
                               <button
                                 onClick={async () => {

@@ -185,7 +185,13 @@ export default function App(): React.JSX.Element {
           </button>
         </div>
 
-        <SyncButton userName={currentUser.name} />
+        <SyncButton
+          userName={currentUser.name}
+          readOnlyProductLibrary={!isAdmin}
+          onDone={(ok) => {
+            if (ok) window.dispatchEvent(new Event('company-os-product-library-synced'))
+          }}
+        />
         <button
           onClick={() => setView('settings')}
           className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
