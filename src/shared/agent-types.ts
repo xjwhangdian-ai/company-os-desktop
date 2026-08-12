@@ -483,6 +483,8 @@ export interface SupplierDocPreview {
   fieldMapping?: Partial<Record<keyof ProductFields, number>>
   /** 仅 xlsx/csv：可导入的数据行数（表头行之后、产品名称非空的行） */
   importableRows?: number
+  /** 仅 xlsx：识别到的可导入工作表名称；为空时说明仅一个表或未识别。 */
+  importableSheets?: string[]
   /** 仅 xlsx/csv：前几行数据预览 */
   sampleRows?: string[][]
 }

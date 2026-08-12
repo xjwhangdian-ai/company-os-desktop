@@ -24,7 +24,7 @@ import type {
 } from '@shared/agent-types'
 import { generateQuoteXlsx, type QuoteRow } from '../docgen/quote-xlsx'
 import type { CellValue } from 'exceljs'
-import { detectHeader, readWorkbookRows, readWorkbookRowImages } from './doc-extract'
+import { detectHeaders, readWorkbookRows, readWorkbookRowImages } from './doc-extract'
 
 // ============ 销售工作台的数据层 ============
 // 统一 inbox/outputs 约定后，供应商资料原件在输入侧 inbox/01_销售_sales/供应商资料/（见 upload-router），
@@ -491,23 +491,26 @@ export function setProductImage(dataDir: string, id: string, sourcePath: string)
 export async function importExcelByHeader(dataDir: string, relativePath: string): Promise<MergeResult> {
   const full = join(dataDir, relativePath)
   const sheets = await readWorkbookRows(full)
-  const detection = detectHeader(sheets)
-  if (!detection) throw new Error('没有识别到可用表头（至少要有"产品名称"列），请改用 AI 解析')
+  const detections = detectHeaders(sheets)
+  if (detections.length === 0) throw new Error('没有识别到可用表头（至少要有"产品名称"列），请改用 AI 解析')
   const sourceFile = basename(relativePath)
   // 表格内嵌产品图：按锚点行号归属到对应产品行（供应商清单常见做法）
   const rowImages = await readWorkbookRowImages(full)
   const entries: ProductFields[] = []
   const entryImages: ({ ext: string; buffer: Buffer } | null)[] = []
-  for (let idx = 0; idx < detection.dataRows.length; idx++) {
-    const row = detection.dataRows[idx]
-    const raw: Record<string, unknown> = { 来源文件: sourceFile }
-    for (const [field, col] of Object.entries(detection.fieldMapping)) {
-      raw[field] = row[col] ?? ''
-    }
-    const clean = sanitizeFields(raw)
-    if (clean) {
-      entries.push(clean)
-      entryImages.push(rowImages.get(`${detection.sheetName}|${detection.dataRowNumbers[idx]}`) ?? null)
+  // 一个供应商工作簿经常按产品线拆多个 Sheet。逐页导入所有已识别表头的工作表，封面/汇总/说明页不入库。
+  for (const detection of detections) {
+    for (let idx = 0; idx < detection.dataRows.length; idx++) {
+      const row = detection.dataRows[idx]
+      const raw: Record<string, unknown> = { 来源文件: sourceFile }
+      for (const [field, col] of Object.entries(detection.fieldMapping)) {
+        raw[field] = row[col] ?? ''
+      }
+      const clean = sanitizeFields(raw)
+      if (clean) {
+        entries.push(clean)
+        entryImages.push(rowImages.get(`${detection.sheetName}|${detection.dataRowNumbers[idx]}`) ?? null)
+      }
     }
   }
   const db = readProductDb(dataDir)

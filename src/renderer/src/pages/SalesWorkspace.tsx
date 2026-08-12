@@ -1089,7 +1089,9 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                           {Object.entries(preview.fieldMapping)
                             .map(([field, col]) => `${field}←“${preview.headers?.[col as number] ?? ''}”`)
                             .join('、')}
-                          ），可导入 {preview.importableRows} 行——直接导入不消耗 AI 额度。
+                          ），可导入 {preview.importableRows} 行
+                          {preview.importableSheets && preview.importableSheets.length > 1 ? `（${preview.importableSheets.length} 个工作表：${preview.importableSheets.join('、')}）` : ''}
+                          ——直接导入不消耗 AI 额度。
                         </p>
                       ) : (
                         <p className="mt-1">该文件无法机械识别表头，需要 AI 解析（sales 分身提取后由 App 校验入库）。</p>
@@ -1116,7 +1118,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         disabled={busy}
                         className="rounded-md bg-jushi-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
                       >
-                        直接导入 {preview.importableRows} 行
+                        直接导入 {preview.importableRows} 行{preview.importableSheets && preview.importableSheets.length > 1 ? `（${preview.importableSheets.length} 个 Sheet）` : ''}
                       </button>
                     )}
                     <button

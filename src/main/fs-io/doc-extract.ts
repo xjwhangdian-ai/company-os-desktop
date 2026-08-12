@@ -187,7 +187,9 @@ function mapHeaderRow(row: string[]): Record<string, number> {
  * 不能用"第一个命中 ≥2 的行"：合并的大标题行（如"产品报价单"横跨全表）会把
  * 同一段文字铺到每一列，恰好凑出 产品名称+成本价 两个假命中。
  */
-export function detectHeader(sheets: SheetData[]): HeaderDetection | null {
+/** 找出每个工作表中可用于产品导入的表头；封面、说明、汇总页会自然跳过。 */
+export function detectHeaders(sheets: SheetData[]): HeaderDetection[] {
+  const detections: HeaderDetection[] = []
   for (const sheet of sheets) {
     const scanLimit = Math.min(sheet.rows.length, 30)
     let best: { i: number; mapping: Record<string, number> } | null = null
@@ -212,10 +214,15 @@ export function detectHeader(sheets: SheetData[]): HeaderDetection | null {
         dataRows.push(r)
         dataRowNumbers.push(sheet.rowNumbers[j])
       }
-      return { sheetName: sheet.name, headerRowIndex: i, headers: sheet.rows[i], fieldMapping: mapping, dataRows, dataRowNumbers }
+      detections.push({ sheetName: sheet.name, headerRowIndex: i, headers: sheet.rows[i], fieldMapping: mapping, dataRows, dataRowNumbers })
     }
   }
-  return null
+  return detections
+}
+
+/** 兼容旧调用：只需要预览首个可识别工作表时使用。产品导入应使用 detectHeaders。 */
+export function detectHeader(sheets: SheetData[]): HeaderDetection | null {
+  return detectHeaders(sheets)[0] ?? null
 }
 
 /**

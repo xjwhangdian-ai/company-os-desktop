@@ -89,7 +89,7 @@ import {
   setProductImage,
   unlinkCustomerFile
 } from '../fs-io/sales-workflow'
-import { detectHeader, extractCompanion, readWorkbookRows } from '../fs-io/doc-extract'
+import { detectHeaders, extractCompanion, readWorkbookRows } from '../fs-io/doc-extract'
 import { listSolutionFiles, removeSolutionFile, saveReportToSolutionLib, uploadSolutionFile } from '../fs-io/solution-workflow'
 import { getOverview, listReceipts, saveEmployees, toggleTask, uploadReceipt } from '../fs-io/finance-workflow'
 import { listGovernanceDocs, listPolicyDocs, setGovernanceDocState, setPolicyDocState } from '../fs-io/ops-workflow'
@@ -385,11 +385,14 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
     // xlsx/csv 顺带做表头机械识别，识别成功 UI 会提供"直接导入"（免 AI）
     if (/\.(xlsx|csv)$/i.test(absPath)) {
-      const detection = detectHeader(await readWorkbookRows(absPath))
+      const sheets = await readWorkbookRows(absPath)
+      const detections = detectHeaders(sheets)
+      const detection = detections[0]
       if (detection) {
         preview.headers = detection.headers
         preview.fieldMapping = detection.fieldMapping as SupplierDocPreview['fieldMapping']
-        preview.importableRows = detection.dataRows.length
+        preview.importableRows = detections.reduce((total, item) => total + item.dataRows.length, 0)
+        preview.importableSheets = detections.map((item) => item.sheetName)
         preview.sampleRows = detection.dataRows.slice(0, 5)
       }
     }
