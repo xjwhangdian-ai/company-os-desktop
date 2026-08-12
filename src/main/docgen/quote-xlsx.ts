@@ -27,7 +27,7 @@ export interface QuoteRow {
   数量原文: string
   单价: number | null
   单价原文: string
-  /** 产品图片绝对路径（jpg/png 才能内嵌进内置版式；空=无图/格式不支持） */
+  /** 产品图片绝对路径（生成的 Excel 直接嵌入此图片；空=产品尚未配置图片） */
   图片路径?: string
 }
 
@@ -39,6 +39,7 @@ export interface QuoteXlsxOutput {
 // 模板列识别同义词（顺序即优先级；与进货侧表头识别是两套——这里"单价"指我方对外报价）
 const QUOTE_COL_SYNONYMS: Record<string, string[]> = {
   序号: ['序号'],
+  图片: ['产品图片', '图片', '图'],
   产品名称: ['产品名称', '品名', '货名', '设备名称', '名称', '产品'],
   型号: ['型号', '规格型号', '开票型号'],
   瑾智型号: ['瑾智型号', '我方型号', '自编型号', '本司型号'],
@@ -183,6 +184,16 @@ async function fillTemplate(
   const header = detectQuoteHeader(ws)
   if (!header) throw new Error('模板里没识别到报价表头（至少要有 产品名称/名称、数量、单价 三列）——请改用「AI 生成报价文件」')
   const { rowIndex: headerRow, colMap } = header
+  // 模板没有图片列时，在最右侧补一列，保证每一份报价单的 Excel 表内都能直接显示产品图。
+  if (!colMap['图片']) {
+    const imageCol = ws.columnCount + 1
+    colMap['图片'] = imageCol
+    ws.getColumn(imageCol).width = 10
+    const imageHeader = ws.getRow(headerRow).getCell(imageCol)
+    imageHeader.value = '产品图片'
+    imageHeader.font = { name: '微软雅黑', size: 10, bold: true }
+    imageHeader.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  }
 
   // 找合计行：表头之后第一行任一单元格含"合计"
   let totalRow = -1
@@ -206,7 +217,12 @@ async function fillTemplate(
     if (lines.length > 1) ws.duplicateRow(headerRow + 1, lines.length - 1, true)
   }
 
-  lines.forEach((line, i) => fillRow(ws, headerRow + 1 + i, colMap, line, i + 1))
+  let embeddedImages = 0
+  lines.forEach((line, i) => {
+    const rowIndex = headerRow + 1 + i
+    fillRow(ws, rowIndex, colMap, line, i + 1)
+    if (embedProductImage(wb, ws, colMap['图片'], rowIndex, line)) embeddedImages += 1
+  })
 
   // 重新定位合计行并写 SUM 公式
   const total = sumTotal(lines)
@@ -247,19 +263,41 @@ async function fillTemplate(
   if (missingBrand.length > 0) {
     warnings.push(`${missingBrand.length} 个产品没填"品牌"字段，报价单品牌列留空（供应商名称属采购侧信息，不会代填）`)
   }
+  if (embeddedImages < lines.length) {
+    warnings.push(`${lines.length - embeddedImages} 个产品未嵌入图片（产品库未配置图片或图片格式不受 Excel 支持）`)
+  }
   warnings.push('模板里的报价说明/有效期/联系人为模板原文，发出前请人工核对日期与落款')
 
   await wb.xlsx.writeFile(outPath)
   return { 合计: total, warnings }
 }
 
-/** 图片扩展名 → exceljs 可内嵌的格式（heic/webp 等不支持则返回 null，跳过内嵌但仍导出到 图片/） */
+/** 图片扩展名 → Excel 可内嵌的格式（HEIC/WebP 仍会随报价导出到“图片”文件夹）。 */
 function embeddableExt(absPath: string): 'jpeg' | 'png' | 'gif' | null {
   const e = absPath.split('.').pop()?.toLowerCase()
   if (e === 'jpg' || e === 'jpeg') return 'jpeg'
   if (e === 'png') return 'png'
   if (e === 'gif') return 'gif'
   return null
+}
+
+/** 将产品缩略图作为工作表对象锚定在对应产品行，Excel/Windows/macOS 均可直接显示。 */
+function embedProductImage(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet, col: number | undefined, rowIndex: number, line: QuoteRow): boolean {
+  const ext = line.图片路径 ? embeddableExt(line.图片路径) : null
+  if (!col || !line.图片路径 || !ext) return false
+  try {
+    const imageId = wb.addImage({ filename: line.图片路径, extension: ext })
+    ws.addImage(imageId, {
+      tl: { col: col - 1 + 0.12, row: rowIndex - 1 + 0.08 },
+      ext: { width: 44, height: 44 },
+      editAs: 'oneCell'
+    })
+    const row = ws.getRow(rowIndex)
+    row.height = Math.max(Number(row.height ?? 0), 38)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** 路径二：内置标准版式（无模板时） */
@@ -364,21 +402,7 @@ async function buildStandard(
     }
     row.getCell(colMap['单价']).numFmt = '#,##0.00'
     row.getCell(colMap['合价']).numFmt = '#,##0.00'
-    // 内嵌产品缩略图（jpg/png/gif 才能内嵌；行高调大以容纳）
-    const ext = line.图片路径 ? embeddableExt(line.图片路径) : null
-    if (line.图片路径 && ext) {
-      try {
-        const imgId = wb.addImage({ filename: line.图片路径, extension: ext })
-        ws.addImage(imgId, {
-          tl: { col: colMap['图'] - 1 + 0.12, row: r - 1 + 0.08 },
-          ext: { width: 40, height: 40 },
-          editAs: 'oneCell'
-        })
-        row.height = 34
-      } catch {
-        /* 图片读取失败不影响报价单生成 */
-      }
-    }
+    embedProductImage(wb, ws, colMap['图'], r, line)
   })
 
   // 合计行
