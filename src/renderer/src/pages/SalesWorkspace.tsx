@@ -50,7 +50,10 @@ const QUOTE_COLS: { key: string; label: string; title?: string }[] = [
   { key: 'q图', label: '图' },
   { key: 'q名称', label: '产品名称' },
   { key: 'q品牌', label: '品牌/供应商' },
+  { key: 'q单位', label: '单位' },
   { key: 'q数量', label: '数量' },
+  { key: 'q税率', label: '税率' },
+  { key: 'q质保期', label: '质保期' },
   { key: 'q标准价', label: '标准价', title: '产品库建议销售价' },
   { key: 'q折扣率', label: '折扣率', title: '报价单价÷标准价，改折扣率自动算单价' },
   { key: 'q单价', label: '报价单价' },
@@ -530,7 +533,10 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     q图: 44,
     q名称: 176,
     q品牌: 120,
+    q单位: 56,
     q数量: 60,
+    q税率: 60,
+    q质保期: 76,
     q标准价: 84,
     q折扣率: 70,
     q单价: 96,
@@ -1340,7 +1346,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 )}
 
                 <div className="min-w-0 flex-1">
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <div className="max-h-[calc(100vh-265px)] overflow-auto rounded-lg border border-slate-200">
                 <table
                   className="table-fixed text-xs"
                   style={{ width: PROD_COLS.reduce((s, c) => s + (colW[c.key] ?? 100), 0) }}
@@ -1753,7 +1759,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <div className="max-h-[calc(100vh-385px)] overflow-auto rounded-lg border border-slate-200">
                 <table
                   className="table-fixed text-xs"
                   style={{ width: QUOTE_COLS.reduce((s, c) => s + (colW[c.key] ?? 100), 0) }}
@@ -1799,6 +1805,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                           <td className="max-w-28 truncate px-2 py-0.5 text-slate-500">
                             {[line.product.品牌, line.product.供应商名称].filter(Boolean).join(' / ') || '—'}
                           </td>
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">{line.product.单位 || '—'}</td>
                           <td className="px-2 py-0.5">
                             <input
                               value={line.数量}
@@ -1809,6 +1816,10 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                               }
                               className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs outline-none focus:border-jushi-accent"
                             />
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">{fmtTaxRate(line.product.税率)}</td>
+                          <td className="whitespace-nowrap px-2 py-0.5 text-slate-500">
+                            {line.product.质保期 ? `${line.product.质保期}个月` : '—'}
                           </td>
                           <td className="whitespace-nowrap px-2 py-0.5 text-slate-400">{line.product.建议销售价 || '—'}</td>
                           <td className="px-2 py-0.5">
@@ -1866,7 +1877,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     })}
                     {cart.length === 0 && (
                       <tr>
-                        <td colSpan={10} className="px-2 py-6 text-center text-slate-400">
+                        <td colSpan={13} className="px-2 py-6 text-center text-slate-400">
                           报价单为空——到「产品库」里查询产品并点「加入报价单」
                         </td>
                       </tr>
