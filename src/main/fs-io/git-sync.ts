@@ -145,3 +145,15 @@ export async function syncReadOnlyProductLibrary(dataDir: string): Promise<SyncR
     return { ok: false, message: `同步管理员产品库失败：${err instanceof Error ? err.message.slice(0, 200) : String(err)}` }
   }
 }
+
+/** 产品页统一入口：沿用已授权公司数据仓库和角色权限，不在安装包中内置私有仓库凭证。 */
+export async function syncProductLibraryData(dataDir: string, userName: string, isAdmin: boolean): Promise<SyncResult> {
+  const status = await getSyncStatus(dataDir)
+  if (status.isRepo && status.hasRemote) {
+    return isAdmin ? syncNow(dataDir, userName) : syncReadOnlyProductLibrary(dataDir)
+  }
+  return {
+    ok: false,
+    message: '当前公司数据目录尚未绑定同步仓库。请在「设置 → 数据目录」选择管理员提供的公司数据目录后重试。'
+  }
+}

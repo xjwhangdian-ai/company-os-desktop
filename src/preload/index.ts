@@ -176,6 +176,7 @@ const api: CompanyOsApi = {
   sync: {
     status: () => ipcRenderer.invoke(IPC.syncStatus),
     now: (userName: string) => ipcRenderer.invoke(IPC.syncNow, userName),
+    products: (userName: string) => ipcRenderer.invoke(IPC.syncProducts, userName),
     lastAt: () => ipcRenderer.invoke(IPC.syncLastAt)
   },
   sales: {

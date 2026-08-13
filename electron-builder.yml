@@ -10,6 +10,10 @@ asarUnpack:
 extraResources:
   - from: resources/company-os-template
     to: company-os-template
+    # 产品库是公司业务数据，只能登录后从公司数据仓库同步，绝不随安装包分发。
+    filter:
+      - '**/*'
+      - '!销售/产品库/**/*'
   # Windows CI 在打包前下载并缓存的离线运行环境；macOS 构建时目录为空，不增加 dmg 体积。
   - from: resources/windows-deps
     to: windows-deps

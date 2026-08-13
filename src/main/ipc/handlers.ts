@@ -27,7 +27,7 @@ import { repairDataDir, templateSrcPath } from '../config/first-run'
 import { checkEnv, installEnvItem } from '../fs-io/env-check'
 import { listBrandMatters, setBrandMatter } from '../fs-io/brand-workflow'
 import { processInvoices } from '../fs-io/finance-invoice'
-import { getSyncStatus, syncNow, syncReadOnlyProductLibrary } from '../fs-io/git-sync'
+import { getSyncStatus, syncNow, syncProductLibraryData, syncReadOnlyProductLibrary } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
 import {
@@ -369,6 +369,15 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.syncNow, async (_e, userName: string) => {
     const member = listTeamMembers().find((item) => item.name === userName)
     const result = member?.role === 'member' ? await syncReadOnlyProductLibrary(getDataDir()) : await syncNow(getDataDir(), userName)
+    if (result.ok) {
+      const company = getActiveCompany()
+      if (company) setLastSyncAt(company.id)
+    }
+    return result
+  })
+  ipcMain.handle(IPC.syncProducts, async (_e, userName: string) => {
+    const member = listTeamMembers().find((item) => item.name === userName)
+    const result = await syncProductLibraryData(getDataDir(), userName, member?.role === 'admin')
     if (result.ok) {
       const company = getActiveCompany()
       if (company) setLastSyncAt(company.id)

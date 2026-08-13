@@ -106,6 +106,7 @@ export const IPC = {
 
   syncStatus: 'sync:status',
   syncNow: 'sync:now',
+  syncProducts: 'sync:products',
   syncLastAt: 'sync:last-at',
 
   salesListProducts: 'sales:list-products',

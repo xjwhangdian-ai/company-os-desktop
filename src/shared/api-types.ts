@@ -283,6 +283,8 @@ export interface CompanyOsApi {
     status(): Promise<SyncStatus>
     /** 一键同步：提交本地改动 → pull --rebase → push；冲突时恢复原状并报冲突文件 */
     now(userName: string): Promise<SyncResult>
+    /** 产品页专用：通过已授权的公司数据仓库同步产品清单、分类字典和图片。 */
+    products(userName: string): Promise<SyncResult>
     /** 当前公司最近一次成功同步的时间戳 */
     lastAt(): Promise<number | null>
   }

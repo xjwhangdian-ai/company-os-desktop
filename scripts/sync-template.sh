@@ -52,5 +52,8 @@ done
 # 清理系统垃圾文件
 find "$DST" -name ".DS_Store" -delete
 
+# 产品库是运行数据，只保留空目录占位；即使以后上方同步逻辑调整，也不能进入安装模板。
+find "$DST/销售/产品库" -type f ! -name ".gitkeep" -delete
+
 echo "模板已生成: $DST"
 du -sh "$DST"

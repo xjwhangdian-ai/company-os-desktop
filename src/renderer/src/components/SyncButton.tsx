@@ -9,12 +9,18 @@ export function SyncButton({
   userName,
   readOnlyProductLibrary,
   compact,
+  label,
+  productData,
   onDone
 }: {
   userName: string
   /** 普通成员同步只拉取管理员产品库，不会提交或推送本机产品数据。 */
   readOnlyProductLibrary?: boolean
   compact?: boolean
+  /** 特定页面可覆盖按钮文案；同步权限与行为保持不变。 */
+  label?: string
+  /** 产品页专用同步：调用产品库同步通道，并保留同步失败提示。 */
+  productData?: boolean
   onDone?: (ok: boolean) => void
 }): React.JSX.Element | null {
   const [busy, setBusy] = useState(false)
@@ -22,17 +28,21 @@ export function SyncButton({
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   useEffect(() => {
+    if (productData) {
+      setAvailable(true)
+      return
+    }
     window.api.sync
       .status()
       .then((s) => setAvailable(s.isRepo && s.hasRemote))
       .catch(() => setAvailable(false))
-  }, [])
+  }, [productData])
 
   async function handleSync(): Promise<void> {
     setBusy(true)
     setResult(null)
     try {
-      const r = await window.api.sync.now(userName)
+      const r = productData ? await window.api.sync.products(userName) : await window.api.sync.now(userName)
       setResult(r)
       onDone?.(r.ok)
       setTimeout(() => setResult(null), r.ok ? 4000 : 12000)
@@ -59,9 +69,9 @@ export function SyncButton({
             ? 'rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-jushi-accent hover:text-jushi-accent disabled:opacity-50'
             : 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-white/60 disabled:opacity-50'
         }
-        title={available ? (readOnlyProductLibrary ? '拉取管理员发布的产品库；员工端不提交或推送产品数据' : '提交本地改动并与远程仓库同步（大脑与库；inbox/outputs 不同步）') : '未绑定同步仓库：点击查看处理说明'}
+        title={available ? (productData ? '获取管理员发布的产品清单、分类和图片；同步成功后显示' : readOnlyProductLibrary ? '拉取管理员发布的产品库；员工端不提交或推送产品数据' : '提交本地改动并与远程仓库同步（大脑与库；inbox/outputs 不同步）') : '未绑定同步仓库：点击查看处理说明'}
       >
-        {busy ? '⏳ 同步中…' : readOnlyProductLibrary ? '☁️ 同步产品库' : '☁️ 一键同步'}
+        {busy ? '⏳ 同步中…' : label ?? (readOnlyProductLibrary ? '☁️ 同步产品库' : '☁️ 一键同步')}
       </button>
       {result && (
         <p className={`mt-1 px-3 text-xs leading-snug ${result.ok ? 'text-emerald-600' : 'text-red-500'}`}>

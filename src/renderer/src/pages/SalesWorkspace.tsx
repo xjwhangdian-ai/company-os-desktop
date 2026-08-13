@@ -19,6 +19,7 @@ import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
+import { SyncButton } from '../components/SyncButton'
 import { HELP_CONTENT } from '../lib/help-content'
 import { useConfigStore } from '../stores/useConfigStore'
 import { useIdentityStore } from '../stores/useIdentityStore'
@@ -482,11 +483,15 @@ function matchExistingSuppliers(
 
 export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const isAdmin = useIdentityStore((state) => state.currentUser?.role === 'admin')
+  const currentUserName = useIdentityStore((state) => state.currentUser?.name ?? '')
   const config = useConfigStore((s) => s.config)
   const dataDir = config?.companies.find((c) => c.id === config.activeCompanyId)?.dataDir ?? null
+  const productSyncKey = config?.activeCompanyId ? `company-os-product-data-synced:${config.activeCompanyId}` : ''
 
   const [tab, setTab] = useState<SalesTab>('产品库')
   const [products, setProducts] = useState<ProductEntry[]>([])
+  /** 安装包不带产品清单；当前公司至少成功同步一次后，才允许读取和显示本地缓存。 */
+  const [productDataSynced, setProductDataSynced] = useState(false)
   /** 《产品分类规范》分类字典（销售/产品库/分类字典.json），一级/二级下拉的取值来源 */
   const [catDict, setCatDict] = useState<CategoryL1[]>([])
   const [query, setQuery] = useState('')
@@ -612,27 +617,42 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   }
 
   useEffect(() => {
-    refreshProducts()
-    refreshCategoryDict()
+    setProducts([])
+    setCatDict([])
+    setProductDataSynced(Boolean(productSyncKey && localStorage.getItem(productSyncKey) === '1'))
     refreshTemplates()
     refreshCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [productSyncKey])
 
   // 员工点击侧栏“同步产品库”后，当前页面立即切换到管理员刚下发的版本。
   useEffect(() => {
     const onSynced = (): void => {
+      if (productSyncKey) localStorage.setItem(productSyncKey, '1')
+      setProductDataSynced(true)
       void refreshProducts()
       void refreshCategoryDict()
     }
     window.addEventListener('company-os-product-library-synced', onSynced)
     return () => window.removeEventListener('company-os-product-library-synced', onSynced)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productSyncKey])
 
   useEffect(() => {
-    if (tab === '产品库') refreshProducts()
+    if (tab === '产品库' && productDataSynced) {
+      refreshProducts()
+      refreshCategoryDict()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab])
+  }, [tab, productDataSynced, productSyncKey])
+
+  function handleProductSyncDone(ok: boolean): void {
+    if (!ok) return
+    if (productSyncKey) localStorage.setItem(productSyncKey, '1')
+    setProductDataSynced(true)
+    void refreshProducts()
+    void refreshCategoryDict()
+  }
 
   /** 分类名 → 规范编码（一级 A-L / 二级 A1-L6），供搜索按编码检索、导航树标注 */
   const catCodeByName = useMemo(() => {
@@ -1009,6 +1029,28 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
           {/* ============ 产品库 ============ */}
           {tab === '产品库' && (
             <div className="flex min-h-0 flex-1 flex-col">
+              {!productDataSynced ? (
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                  <div className="w-full max-w-lg rounded-2xl border border-sky-200 bg-sky-50 px-8 py-10 text-center shadow-sm">
+                    <div className="mb-3 text-4xl">☁️</div>
+                    <h2 className="text-lg font-semibold text-slate-700">请先同步产品库数据</h2>
+                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                      安装包不包含公司产品清单。点击下方按钮，从公司数据仓库获取管理员发布的最新版；同步成功后才会显示产品内容。
+                    </p>
+                    <div className="mt-6 flex justify-center">
+                      <SyncButton
+                        userName={currentUserName}
+                        readOnlyProductLibrary={!isAdmin}
+                        compact
+                        label="☁️ 同步数据"
+                        productData
+                        onDone={handleProductSyncDone}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <input
                   value={query}
@@ -1094,6 +1136,14 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 >
                   ↻
                 </button>
+                <SyncButton
+                  userName={currentUserName}
+                  readOnlyProductLibrary={!isAdmin}
+                  compact
+                  label="☁️ 同步数据"
+                  productData
+                  onDone={handleProductSyncDone}
+                />
                 <span className="text-xs text-slate-400">共 {products.length} 条</span>
               </div>
 
@@ -1553,6 +1603,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 </div>
               </div>
 
+                </>
+              )}
             </div>
           )}
 
