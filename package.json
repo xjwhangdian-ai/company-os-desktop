@@ -1,6 +1,6 @@
 {
   "name": "company-os-desktop",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "台州炬视科技 · 数字人分身桌面客户端",
   "main": "./out/main/index.js",
   "author": "炬视科技",
@@ -10,7 +10,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "build:mac": "electron-vite build && electron-builder --mac",
-    "build:win": "electron-vite build && electron-builder --win",
+    "build:win": "node scripts/check-windows-build-host.mjs && electron-vite build && electron-builder --win --x64",
+    "verify:win": "node scripts/verify-windows-build.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-builder install-app-deps"
   },

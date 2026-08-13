@@ -41,6 +41,9 @@ jobs:
           # 未做代码签名——不触发签名流程，出未签名安装包
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
+      - name: Verify Windows x64 package
+        run: npm run verify:win
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
         with:

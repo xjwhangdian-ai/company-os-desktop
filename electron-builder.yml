@@ -24,9 +24,18 @@ mac:
   target:
     - dmg
 win:
+  # Windows 团队电脑统一使用 x64。主程序文件名使用 ASCII，避免快捷方式或安全软件
+  # 对中文可执行文件名处理不一致；界面及快捷方式仍显示“Agent工作台”。
+  executableName: AgentWorkbench
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  shortcutName: Agent工作台
+  uninstallDisplayName: Agent工作台
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
   include: build/windows-runtime.nsh

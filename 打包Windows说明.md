@@ -17,8 +17,12 @@ cd company-os-desktop
 # 2) 装依赖
 npm install
 
-# 3) 打包（自动 electron-vite build + electron-builder --win nsis）
+# 3) 打包（必须在 Windows x64 本机或 Windows x64 CI 执行）
+# 脚本会拒绝在 macOS/ARM64 上交叉打包，避免混入错误架构的主程序和 Agent 运行组件。
 npm run build:win
+
+# 4) 校验主程序与 Agent 运行组件均为 Windows x64
+npm run verify:win
 ```
 产物在 `dist\` 下：`炬视数字人分身工作台 Setup <版本>.exe`（NSIS 安装程序，可自选安装目录）。
 

@@ -36,5 +36,12 @@
   ; Python wheels：即使 Python 已有也可离线补齐，失败不阻止主程序安装。
   DetailPrint "正在安装离线 Python 依赖库…"
   nsExec::ExecToLog '"$SYSDIR\cmd.exe" /C "py -3 -m pip install --user --no-index --find-links=\"$INSTDIR\resources\windows-deps\wheels\" pypdf pillow numpy openpyxl pytesseract"'
+
+  ; 创建快捷方式前确认 x64 主程序确实落地。若安装文件缺失或被安全软件隔离，
+  ; 直接终止并给出可执行的处理建议，避免留下指向不存在文件的快捷方式。
+  ${IfNot} ${FileExists} "$INSTDIR\AgentWorkbench.exe"
+    MessageBox MB_ICONSTOP|MB_OK "Agent 工作台主程序安装失败。请检查 Windows 安全中心的‘保护历史记录’，确认是否拦截了 AgentWorkbench.exe；恢复后重新运行安装程序。"
+    Abort
+  ${EndIf}
   DetailPrint "环境检查完成，所需路径已自动加入当前用户 PATH。"
 !macroend
