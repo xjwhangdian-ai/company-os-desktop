@@ -999,10 +999,16 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div
+          className={
+            tab === '产品库'
+              ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-4'
+              : 'flex-1 overflow-y-auto p-4'
+          }
+        >
           {/* ============ 产品库 ============ */}
           {tab === '产品库' && (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <input
                   value={query}
@@ -1275,10 +1281,10 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 />
               )}
 
-              <div className="flex items-start gap-3">
+              <div className="flex min-h-0 flex-1 items-stretch gap-3">
                 {/* 左侧分类导航（可隐藏） */}
                 {showCatNav ? (
-                  <div className="w-44 shrink-0 rounded-lg border border-slate-200 bg-white p-1.5">
+                  <div className="h-full w-44 shrink-0 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5">
                     <div className="mb-1 flex items-center justify-between px-1.5">
                       <span className="text-[11px] font-medium text-slate-400">分类</span>
                       <button
@@ -1363,8 +1369,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   </button>
                 )}
 
-                <div className="min-w-0 flex-1">
-              <div className="max-h-[calc(100vh-265px)] overflow-auto rounded-lg border border-slate-200">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="h-full min-h-0 overflow-auto rounded-lg border border-slate-200">
                 <table
                   className="table-fixed text-xs"
                   style={{ width: PROD_COLS.reduce((s, c) => s + (colW[c.key] ?? 100), 0) }}
@@ -1547,7 +1553,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 </div>
               </div>
 
-            </>
+            </div>
           )}
 
           {/* ============ 选型（按需求+预算快速筛选） ============ */}
