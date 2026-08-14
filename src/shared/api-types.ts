@@ -248,6 +248,7 @@ export interface CompanyOsApi {
       assetName: string | null
       assetUrl: string | null
       assetSize: number
+      assetSha256: string | null
       releaseUrl: string
       说明: string
     }>

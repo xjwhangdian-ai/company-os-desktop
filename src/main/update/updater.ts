@@ -1,6 +1,7 @@
 import { app, shell, type BrowserWindow } from 'electron'
 import { spawn } from 'node:child_process'
-import { createWriteStream, existsSync, statSync } from 'node:fs'
+import { createWriteStream, existsSync, renameSync, rmSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -28,6 +29,8 @@ export interface UpdateInfo {
   assetName: string | null
   assetUrl: string | null
   assetSize: number
+  /** GitHub Release 返回的 sha256；缺失时只做文件大小校验 */
+  assetSha256: string | null
   releaseUrl: string
   说明: string
 }
@@ -84,6 +87,8 @@ interface GhAsset {
   /** API 资产地址——私有仓库必须走它 + Accept: octet-stream 才能下载 */
   url: string
   size: number
+  /** GitHub Release asset digest，如 sha256:abcdef... */
+  digest?: string
 }
 
 /** 按平台/架构挑安装包：mac 找 .dmg（优先带本机 arch 的），Windows 找 .exe */
@@ -109,6 +114,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     assetName: null,
     assetUrl: null,
     assetSize: 0,
+    assetSha256: null,
     releaseUrl: `https://github.com/${REPO}/releases/latest`
   }
   try {
@@ -137,6 +143,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
       assetName: asset?.name ?? null,
       assetUrl: asset?.browser_download_url ?? null,
       assetSize: asset?.size ?? 0,
+      assetSha256: asset?.digest?.replace(/^sha256:/i, '') || null,
       releaseUrl: rel.html_url ?? base.releaseUrl,
       说明: hasUpdate ? `发现新版本 v${latest}（当前 v${current}）` : `已是最新版本（v${current}）`
     }
@@ -153,7 +160,8 @@ export interface DownloadResult {
 
 /**
  * 下载并启动安装。进度通过 `update:progress` 事件推给渲染进程（0-100，-1=未知总长）。
- * 下载放系统「下载」文件夹——即使自动启动失败，用户也能自己双击。
+ * 下载放系统「下载」文件夹。只在大小与 SHA-256 校验通过后才覆盖旧包并启动安装，
+ * 避免网络中断后把不完整的 NSIS 安装程序当作有效升级包运行。
  */
 export async function downloadAndInstall(win: BrowserWindow | null, info: UpdateInfo): Promise<DownloadResult> {
   if (!info.assetUrl || !info.assetName) {
@@ -161,26 +169,59 @@ export async function downloadAndInstall(win: BrowserWindow | null, info: Update
     return { ok: false, 说明: '这次发布没有本平台的安装包，已打开 Releases 页面请手动下载' }
   }
   const dest = join(app.getPath('downloads'), info.assetName)
+  const temp = `${dest}.part`
   try {
-    const resp = await fetchAny(info.assetUrl, 'application/octet-stream')
-    if (!resp.ok || !resp.body) return { ok: false, 说明: `下载失败（HTTP ${resp.status}），稍后重试或去 Releases 页手动下载` }
-    const total = Number(resp.headers.get('content-length') ?? info.assetSize ?? 0)
-    let received = 0
-    let lastSent = 0
-    const progress = new TransformStreamPolyfill((chunk: Uint8Array) => {
-      received += chunk.byteLength
-      const pct = total > 0 ? Math.round((received / total) * 100) : -1
-      if (pct !== lastSent) {
-        lastSent = pct
-        win?.webContents.send('update:progress', { pct, received, total })
+    // 覆盖旧版同名包前先写入 .part；失败时不会把半截文件当安装包保留。
+    rmSync(temp, { force: true })
+    rmSync(dest, { force: true })
+    let verified = false
+    let lastError = ''
+
+    for (let attempt = 1; attempt <= 2 && !verified; attempt++) {
+      try {
+        rmSync(temp, { force: true })
+        const resp = await fetchAny(info.assetUrl, 'application/octet-stream')
+        if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`)
+
+        const total = Number(resp.headers.get('content-length') ?? info.assetSize ?? 0)
+        const expectedSize = info.assetSize > 0 ? info.assetSize : total
+        let received = 0
+        let lastSent = -1
+        const hash = createHash('sha256')
+        const nodeStream = Readable.fromWeb(resp.body as import('stream/web').ReadableStream, { highWaterMark: 1 << 20 })
+        nodeStream.on('data', (chunk: Buffer) => {
+          received += chunk.byteLength
+          hash.update(chunk)
+          const pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : -1
+          if (pct !== lastSent) {
+            lastSent = pct
+            win?.webContents.send('update:progress', { pct, received, total })
+          }
+        })
+        await pipeline(nodeStream, createWriteStream(temp))
+
+        if (expectedSize > 0 && received !== expectedSize) {
+          throw new Error(`文件大小不匹配：应为 ${expectedSize} 字节，实际为 ${received} 字节`)
+        }
+        const actualSha256 = hash.digest('hex')
+        if (info.assetSha256 && actualSha256.toLowerCase() !== info.assetSha256.toLowerCase()) {
+          throw new Error('SHA-256 校验不匹配')
+        }
+        if (!existsSync(temp) || statSync(temp).size !== received || received === 0) {
+          throw new Error('临时安装包写入不完整')
+        }
+        renameSync(temp, dest)
+        verified = true
+      } catch (err) {
+        rmSync(temp, { force: true })
+        lastError = err instanceof Error ? err.message : String(err)
       }
-    })
-    // web ReadableStream → node stream，边写文件边报进度
-    const nodeStream = Readable.fromWeb(resp.body as import('stream/web').ReadableStream, { highWaterMark: 1 << 20 })
-    nodeStream.on('data', (chunk: Buffer) => progress.onChunk(chunk))
-    await pipeline(nodeStream, createWriteStream(dest))
-    if (!existsSync(dest) || statSync(dest).size === 0) return { ok: false, 说明: '下载的文件为空，请重试' }
+    }
+    if (!verified) {
+      return { ok: false, 说明: `安装包下载校验失败（已自动重试一次）：${lastError}。请检查网络后重试，或在 Releases 页面重新下载。` }
+    }
   } catch (err) {
+    rmSync(temp, { force: true })
     return { ok: false, 说明: `下载失败：${err instanceof Error ? err.message : String(err)}` }
   }
 
@@ -204,13 +245,5 @@ export async function downloadAndInstall(win: BrowserWindow | null, info: Update
     ok: true,
     path: dest,
     说明: '新版安装盘已打开：把「Agent工作台」拖进旁边的"应用程序"文件夹替换旧版，然后重新打开 App'
-  }
-}
-
-/** 极简进度回调包装（避免引 web TransformStream 类型噪音） */
-class TransformStreamPolyfill {
-  constructor(private cb: (chunk: Uint8Array) => void) {}
-  onChunk(chunk: Uint8Array): void {
-    this.cb(chunk)
   }
 }
