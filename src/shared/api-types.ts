@@ -261,13 +261,13 @@ export interface CompanyOsApi {
   }
   identity: {
     list(): Promise<TeamMember[]>
+    /** 首次安装时在本机创建自己的账号和 PIN；账号不跨电脑同步。 */
+    register(name: string, pin: string): Promise<{ ok: boolean; member?: TeamMember; message?: string }>
     /** 添加成员（管理员在设置页分配；初始 PIN 123456）。首个成员强制管理员 */
     add(name: string, role?: MemberRole, 可见分身?: AgentName[]): Promise<TeamMember>
     remove(id: string): Promise<void>
     verifyPin(id: string, pin?: string): Promise<boolean>
     resetAllMembers(): Promise<void>
-    /** 首次登录同步后，强制按管理员花名册重建本机账号。 */
-    syncRoster(): Promise<TeamMember[]>
     /** 成员自助改 PIN（先验旧 PIN；新 PIN 4-8 位数字） */
     changePin(id: string, oldPin: string, newPin: string): Promise<{ ok: boolean; message?: string }>
     /** 管理员重置成员 PIN 回 123456 */

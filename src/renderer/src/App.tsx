@@ -121,7 +121,7 @@ export default function App(): React.JSX.Element {
   const shouldShowGuide = !guideAcknowledged && !localStorage.getItem(guideKey)
 
   const isAdmin = currentUser.role === 'admin'
-  // 员工只看到管理员分配的分身（未配置=全部可见）；管理员恒为全部
+  // 本机普通账号仅显示为其配置的分身（未配置=全部可见）；管理员恒为全部
   const visibleList = isAdmin
     ? list
     : list.filter((a) => !currentUser.可见分身 || currentUser.可见分身.includes(a.name))

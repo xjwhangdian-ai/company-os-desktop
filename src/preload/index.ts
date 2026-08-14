@@ -162,6 +162,7 @@ const api: CompanyOsApi = {
   },
   identity: {
     list: () => ipcRenderer.invoke(IPC.identityList),
+    register: (name: string, pin: string) => ipcRenderer.invoke(IPC.identityRegister, name, pin),
     add: (name: string, role?: MemberRole, 可见分身?: AgentName[]) => ipcRenderer.invoke(IPC.identityAdd, name, role, 可见分身),
     changePin: (id: string, oldPin: string, newPin: string) => ipcRenderer.invoke(IPC.identityChangePin, id, oldPin, newPin),
     resetPin: (id: string) => ipcRenderer.invoke(IPC.identityResetPin, id),
@@ -169,7 +170,6 @@ const api: CompanyOsApi = {
     remove: (id: string) => ipcRenderer.invoke(IPC.identityRemove, id),
     verifyPin: (id: string, pin?: string) => ipcRenderer.invoke(IPC.identityVerifyPin, id, pin),
     resetAllMembers: () => ipcRenderer.invoke(IPC.identityResetAllMembers),
-    syncRoster: () => ipcRenderer.invoke(IPC.identitySyncRoster),
     setRole: (id: string, role: MemberRole) => ipcRenderer.invoke(IPC.identitySetRole, id, role),
     notifyLogin: (name: string) => ipcRenderer.invoke(IPC.identityNotifyLogin, name)
   },

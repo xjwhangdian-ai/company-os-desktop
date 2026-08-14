@@ -1,5 +1,5 @@
 import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
-import { addCompany, addTeamMember, resetAllTeamMembers, changePin, getActiveCompany, getConfig, getDataDir, getGithubToken, getLastSyncAt, listTeamMembers, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setGithubToken, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, setVideoModelConfig, syncTeamRoster, verifyPin } from '../config/store'
+import { addCompany, addTeamMember, resetAllTeamMembers, changePin, getActiveCompany, getConfig, getDataDir, getGithubToken, getLastSyncAt, listTeamMembers, registerLocalAccount, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setGithubToken, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, setVideoModelConfig, verifyPin } from '../config/store'
 import { copyFileSync, cpSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc-channels'
@@ -147,7 +147,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.configSetActiveCompany, (_e, id: string) => setActiveCompany(id))
   ipcMain.handle(IPC.configRepairDataDir, () => repairDataDir(getDataDir()))
   ipcMain.handle(IPC.identityResetAllMembers, () => resetAllTeamMembers())
-  ipcMain.handle(IPC.identitySyncRoster, () => syncTeamRoster())
+  ipcMain.handle(IPC.identityRegister, (_e, name: string, pin: string) => registerLocalAccount(name, pin))
   ipcMain.handle(IPC.financeProcessInvoices, (_e, files: string[]) => processInvoices(getDataDir(), files))
   ipcMain.handle(IPC.intelKeywordSuggestions, () => getKeywordSuggestions(getDataDir()))
   ipcMain.handle(IPC.brandListMatters, () => listBrandMatters(getDataDir()))

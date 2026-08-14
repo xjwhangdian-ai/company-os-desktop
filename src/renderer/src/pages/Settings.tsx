@@ -515,21 +515,19 @@ function AboutSection({ onFlash }: { onFlash: (t: string) => void }): React.JSX.
   )
 }
 
-/** 团队成员与角色管理（仅管理员看得到设置页）。轻量权限：界面级区分，不是安全体系。 */
+/** 本机账号与角色管理（仅管理员看得到设置页）。轻量权限：界面级区分，不是安全体系。 */
 function MemberSection({ onFlash }: { onFlash: (text: string) => void }): React.JSX.Element {
   const { members, loadMembers, removeMember, currentUser } = useIdentityStore()
 
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-medium text-slate-700">团队成员与角色</h3>
+      <h3 className="text-sm font-medium text-slate-700">本机账号与角色</h3>
       <p className="text-xs text-slate-400">
-        账号由管理员在这里统一分配，初始 PIN 都是 <b>123456</b>（成员首次登录会被提示修改）。
+        每位成员在自己的电脑首次打开 App 时，自行创建账号和 PIN 密码；账号不跨电脑同步，也不需要管理员分配。
         管理员：可进设置页、可见全部 9 个分身。普通员工：只见分配给 TA 的分身（不勾选=全部可见）。此为界面级权限，不是安全体系。
         <br />
-        📡 <b>跨电脑下发</b>：这里的成员与分身分配会自动写入数据仓库（.claude/team-roster.json）——改完点侧栏「一键同步」推送；
-        员工电脑打开 App 或点同步后自动按最新花名册生效（员工机上的本地增删会被花名册覆盖）。PIN 各机独立保管，不随仓库同步。
+        本页面仅管理当前电脑上已有账号；不会影响其他成员设备的账号、PIN 或权限。
       </p>
-      <AddMemberInline onFlash={onFlash} />
       <div className="space-y-1.5">
         {members.map((m) => (
           <div key={m.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
@@ -589,43 +587,6 @@ function MemberSection({ onFlash }: { onFlash: (text: string) => void }): React.
   )
 }
 
-
-/** 管理员分配新账号：名字+角色；初始 PIN 固定 123456 */
-function AddMemberInline({ onFlash }: { onFlash: (text: string) => void }): React.JSX.Element {
-  const addMember = useIdentityStore((s) => s.addMember)
-  const [name, setName] = useState('')
-  const [role, setRole] = useState<'admin' | 'member'>('member')
-
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="新成员名字"
-        className="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-jushi-accent"
-      />
-      <select
-        value={role}
-        onChange={(e) => setRole(e.target.value as 'admin' | 'member')}
-        className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none"
-      >
-        <option value="member">普通员工</option>
-        <option value="admin">管理员</option>
-      </select>
-      <button
-        onClick={async () => {
-          if (!name.trim()) return
-          await addMember(name.trim(), role)
-          onFlash(`已添加 ${name.trim()}（初始 PIN 123456）`)
-          setName('')
-        }}
-        className="shrink-0 rounded-md bg-jushi-accent px-3 py-1.5 text-xs font-medium text-white"
-      >
-        ＋ 分配账号
-      </button>
-    </div>
-  )
-}
 
 const ALL_AGENTS: { name: import('@shared/agent-types').AgentName; label: string }[] = [
   { name: 'sales', label: '销售' },
