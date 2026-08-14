@@ -72,7 +72,7 @@ foreach ($package in @('pypdf', 'pillow', 'numpy', 'openpyxl', 'pytesseract')) {
 $manifestPath = Join-Path $deps 'runtime-manifest.json'
 $base = (Resolve-Path $deps).Path.TrimEnd('\')
 $files = Get-ChildItem $deps -Recurse -File |
-  Where-Object { $_.Name -ne 'runtime-manifest.json' -and $_.Length -gt 0 } |
+  Where-Object { $_.Name -ne 'runtime-manifest.json' -and $_.Name -ne '.gitkeep' -and $_.Length -gt 0 } |
   ForEach-Object {
     [ordered]@{
       path = $_.FullName.Substring($base.Length).TrimStart('\').Replace('\', '/')
