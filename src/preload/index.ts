@@ -194,6 +194,7 @@ const api: CompanyOsApi = {
     applyCatalogPairing: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesApplyCatalogPairing, pdfFileName),
     catalogProgress: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesCatalogProgress, pdfFileName),
     exportZcy: (productIds: string[]) => ipcRenderer.invoke(IPC.salesExportZcy, productIds),
+    publishProductCatalog: () => ipcRenderer.invoke(IPC.salesPublishProductCatalog),
     generateQuoteXlsx: (
       lines: QuoteLineInput[],
       customerName: string,

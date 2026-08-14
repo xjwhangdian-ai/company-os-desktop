@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { delimiter } from 'node:path'
 import { promisify } from 'node:util'
 import type { SyncResult, SyncStatus } from '@shared/agent-types'
+import { syncPublishedProductCatalog } from './product-catalog'
 
 const execFileAsync = promisify(execFile)
 
@@ -146,14 +147,12 @@ export async function syncReadOnlyProductLibrary(dataDir: string): Promise<SyncR
   }
 }
 
-/** 产品页统一入口：沿用已授权公司数据仓库和角色权限，不在安装包中内置私有仓库凭证。 */
+/**
+ * 产品页统一入口：从独立的公开产品发布源读取脱敏销售目录。
+ * 不再要求新装电脑的数据目录是 Git 仓库，也不会在安装包内携带私有产品数据。
+ */
 export async function syncProductLibraryData(dataDir: string, userName: string, isAdmin: boolean): Promise<SyncResult> {
-  const status = await getSyncStatus(dataDir)
-  if (status.isRepo && status.hasRemote) {
-    return isAdmin ? syncNow(dataDir, userName) : syncReadOnlyProductLibrary(dataDir)
-  }
-  return {
-    ok: false,
-    message: '当前公司数据目录尚未绑定同步仓库。请在「设置 → 数据目录」选择管理员提供的公司数据目录后重试。'
-  }
+  void userName
+  void isAdmin
+  return syncPublishedProductCatalog(dataDir)
 }

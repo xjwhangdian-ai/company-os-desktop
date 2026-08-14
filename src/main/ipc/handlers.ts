@@ -28,6 +28,7 @@ import { checkEnv, installEnvItem } from '../fs-io/env-check'
 import { listBrandMatters, setBrandMatter } from '../fs-io/brand-workflow'
 import { processInvoices } from '../fs-io/finance-invoice'
 import { getSyncStatus, syncNow, syncProductLibraryData, syncReadOnlyProductLibrary } from '../fs-io/git-sync'
+import { publishProductCatalog } from '../fs-io/product-catalog'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
 import {
@@ -387,6 +388,12 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.syncLastAt, () => {
     const company = getActiveCompany()
     return company ? getLastSyncAt(company.id) : null
+  })
+
+  ipcMain.handle(IPC.salesPublishProductCatalog, async () => {
+    const member = listTeamMembers().find((item) => item.name === currentUserName)
+    if (member?.role !== 'admin') throw new Error('仅管理员可以发布产品库')
+    return publishProductCatalog(getDataDir(), getGithubToken())
   })
 
   // ============ 销售工作台 ============

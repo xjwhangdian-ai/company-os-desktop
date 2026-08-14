@@ -284,7 +284,7 @@ export interface CompanyOsApi {
     status(): Promise<SyncStatus>
     /** 一键同步：提交本地改动 → pull --rebase → push；冲突时恢复原状并报冲突文件 */
     now(userName: string): Promise<SyncResult>
-    /** 产品页专用：通过已授权的公司数据仓库同步产品清单、分类字典和图片。 */
+    /** 产品页专用：从独立产品发布源同步脱敏产品清单与分类字典。 */
     products(userName: string): Promise<SyncResult>
     /** 当前公司最近一次成功同步的时间戳 */
     lastAt(): Promise<number | null>
@@ -325,6 +325,8 @@ export interface CompanyOsApi {
     exportZcy(
       productIds: string[]
     ): Promise<{ ok: boolean; outDir?: string; count?: number; 管制数?: number; 缺图?: string[]; 说明: string }>
+    /** 管理员把当前产品库脱敏发布到独立产品目录；成本、供应商及联系人不会发布。 */
+    publishProductCatalog(): Promise<{ ok: boolean; message: string }>
     /** 分身核对进度（读 _核对进度.json）；无进度文件返回 null */
     catalogProgress(pdfFileName: string): Promise<{ 已核对页: number; 总页: number } | null>
     applyCatalogPairing(pdfFileName: string): Promise<{

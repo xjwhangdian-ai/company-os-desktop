@@ -654,6 +654,25 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     void refreshCategoryDict()
   }
 
+  function handleStartLocalProductLibrary(): void {
+    if (productSyncKey) localStorage.setItem(productSyncKey, '1')
+    setProductDataSynced(true)
+    void refreshProducts()
+    void refreshCategoryDict()
+  }
+
+  async function handlePublishProductCatalog(): Promise<void> {
+    setBusy(true)
+    try {
+      const result = await window.api.sales.publishProductCatalog()
+      flash(result.ok ? `✅ ${result.message}` : `⚠ ${result.message}`)
+    } catch (err) {
+      flash(`发布失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /** 分类名 → 规范编码（一级 A-L / 二级 A1-L6），供搜索按编码检索、导航树标注 */
   const catCodeByName = useMemo(() => {
     const m = new Map<string, string>()
@@ -1035,7 +1054,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     <div className="mb-3 text-4xl">☁️</div>
                     <h2 className="text-lg font-semibold text-slate-700">请先同步产品库数据</h2>
                     <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                      安装包不包含公司产品清单。点击下方按钮，从公司数据仓库获取管理员发布的最新版；同步成功后才会显示产品内容。
+                      安装包不包含公司产品清单。点击下方按钮，从产品库发布源下载销售可见的最新版；同步成功后才会显示产品内容。
                     </p>
                     <div className="mt-6 flex justify-center">
                       <SyncButton
@@ -1047,6 +1066,19 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                         onDone={handleProductSyncDone}
                       />
                     </div>
+                    {isAdmin && (
+                      <div className="mt-4 border-t border-sky-200 pt-4">
+                        <p className="text-xs leading-5 text-slate-500">
+                          首次建库或发布源暂时为空？可先在本机维护产品库、导入供应商资料，核对后再点击「发布产品库」。
+                        </p>
+                        <button
+                          onClick={handleStartLocalProductLibrary}
+                          className="mt-2 rounded-lg border border-sky-300 px-3 py-1.5 text-sm text-jushi-accent hover:bg-white"
+                        >
+                          开始维护产品库
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1144,6 +1176,16 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                   productData
                   onDone={handleProductSyncDone}
                 />
+                {isAdmin && (
+                  <button
+                    onClick={() => void handlePublishProductCatalog()}
+                    disabled={busy}
+                    title="把当前产品库的销售可见字段发布给其他电脑；成本、供应商、联系人、原始资料和图片路径不会发布"
+                    className="rounded-lg border border-emerald-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                  >
+                    {busy ? '发布中…' : '☁️ 发布产品库'}
+                  </button>
+                )}
                 <span className="text-xs text-slate-400">共 {products.length} 条</span>
               </div>
 
