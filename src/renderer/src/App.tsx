@@ -187,7 +187,7 @@ export default function App(): React.JSX.Element {
 
         <SyncButton
           userName={currentUser.name}
-          readOnlyProductLibrary={!isAdmin}
+          label="☁️ 同步产品库"
           onDone={(ok) => {
             if (ok) window.dispatchEvent(new Event('company-os-product-library-synced'))
           }}

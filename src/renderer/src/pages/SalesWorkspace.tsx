@@ -1059,10 +1059,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     <div className="mt-6 flex justify-center">
                       <SyncButton
                         userName={currentUserName}
-                        readOnlyProductLibrary={!isAdmin}
                         compact
                         label="☁️ 同步数据"
-                        productData
                         onDone={handleProductSyncDone}
                       />
                     </div>
@@ -1170,10 +1168,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 </button>
                 <SyncButton
                   userName={currentUserName}
-                  readOnlyProductLibrary={!isAdmin}
                   compact
                   label="☁️ 同步数据"
-                  productData
                   onDone={handleProductSyncDone}
                 />
                 {isAdmin && (
