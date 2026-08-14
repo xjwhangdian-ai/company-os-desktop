@@ -19,7 +19,6 @@ import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
-import { SyncButton } from '../components/SyncButton'
 import { HELP_CONTENT } from '../lib/help-content'
 import { useConfigStore } from '../stores/useConfigStore'
 import { useIdentityStore } from '../stores/useIdentityStore'
@@ -117,6 +116,7 @@ const EMPTY_PRODUCT_FORM: ProductFields = {
 }
 
 const SUPPLIER_DOC_FILTERS = [{ name: '供应商资料', extensions: ['xlsx', 'csv', 'pdf', 'docx', 'doc', 'txt', 'md'] }]
+const MEMBER_CATALOG_FILTERS = [{ name: '管理员产品库 Excel', extensions: ['xlsx'] }]
 const TEMPLATE_FILTERS = [{ name: '报价模板', extensions: ['docx', 'pdf', 'md', 'txt', 'xlsx'] }]
 const IMAGE_FILTERS = [{ name: '产品图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'] }]
 
@@ -483,15 +483,11 @@ function matchExistingSuppliers(
 
 export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const isAdmin = useIdentityStore((state) => state.currentUser?.role === 'admin')
-  const currentUserName = useIdentityStore((state) => state.currentUser?.name ?? '')
   const config = useConfigStore((s) => s.config)
   const dataDir = config?.companies.find((c) => c.id === config.activeCompanyId)?.dataDir ?? null
-  const productSyncKey = config?.activeCompanyId ? `company-os-product-data-synced:${config.activeCompanyId}` : ''
 
   const [tab, setTab] = useState<SalesTab>('产品库')
   const [products, setProducts] = useState<ProductEntry[]>([])
-  /** 安装包不带产品清单；当前公司至少成功同步一次后，才允许读取和显示本地缓存。 */
-  const [productDataSynced, setProductDataSynced] = useState(false)
   /** 《产品分类规范》分类字典（销售/产品库/分类字典.json），一级/二级下拉的取值来源 */
   const [catDict, setCatDict] = useState<CategoryL1[]>([])
   const [query, setQuery] = useState('')
@@ -619,55 +615,45 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   useEffect(() => {
     setProducts([])
     setCatDict([])
-    setProductDataSynced(Boolean(productSyncKey && localStorage.getItem(productSyncKey) === '1'))
+    void refreshProducts()
+    void refreshCategoryDict()
     refreshTemplates()
     refreshCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productSyncKey])
-
-  // 员工点击侧栏“同步产品库”后，当前页面立即切换到管理员刚下发的版本。
-  useEffect(() => {
-    const onSynced = (): void => {
-      if (productSyncKey) localStorage.setItem(productSyncKey, '1')
-      setProductDataSynced(true)
-      void refreshProducts()
-      void refreshCategoryDict()
-    }
-    window.addEventListener('company-os-product-library-synced', onSynced)
-    return () => window.removeEventListener('company-os-product-library-synced', onSynced)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productSyncKey])
+  }, [config?.activeCompanyId])
 
   useEffect(() => {
-    if (tab === '产品库' && productDataSynced) {
+    if (tab === '产品库') {
       refreshProducts()
       refreshCategoryDict()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, productDataSynced, productSyncKey])
+  }, [tab, config?.activeCompanyId])
 
-  function handleProductSyncDone(ok: boolean): void {
-    if (!ok) return
-    if (productSyncKey) localStorage.setItem(productSyncKey, '1')
-    setProductDataSynced(true)
-    void refreshProducts()
-    void refreshCategoryDict()
-  }
-
-  function handleStartLocalProductLibrary(): void {
-    if (productSyncKey) localStorage.setItem(productSyncKey, '1')
-    setProductDataSynced(true)
-    void refreshProducts()
-    void refreshCategoryDict()
-  }
-
-  async function handlePublishProductCatalog(): Promise<void> {
+  async function handleImportMemberCatalog(): Promise<void> {
+    const paths = await window.api.dialog.pickFiles(MEMBER_CATALOG_FILTERS)
+    if (paths.length === 0) return
     setBusy(true)
     try {
-      const result = await window.api.sales.publishProductCatalog()
-      flash(result.ok ? `✅ ${result.message}` : `⚠ ${result.message}`)
+      const result = await window.api.sales.importMemberCatalog(paths[0])
+      flash(`✅ 已导入成员产品库：新增 ${result.added} 条、更新 ${result.updated} 条${result.attachedImages ? `，导入图片 ${result.attachedImages} 张` : ''}`)
+      await refreshProducts()
+      await refreshCategoryDict()
     } catch (err) {
-      flash(`发布失败：${err instanceof Error ? err.message : String(err)}`)
+      flash(`导入失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleExportMemberCatalog(): Promise<void> {
+    setBusy(true)
+    try {
+      const result = await window.api.sales.exportMemberCatalog()
+      flash(`✅ 已导出 ${result.count} 条成员产品库数据`)
+      await window.api.shell.showItemInFolder(result.outPath)
+    } catch (err) {
+      flash(`导出失败：${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setBusy(false)
     }
@@ -1048,39 +1034,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
           {/* ============ 产品库 ============ */}
           {tab === '产品库' && (
             <div className="flex min-h-0 flex-1 flex-col">
-              {!productDataSynced ? (
-                <div className="flex min-h-0 flex-1 items-center justify-center">
-                  <div className="w-full max-w-lg rounded-2xl border border-sky-200 bg-sky-50 px-8 py-10 text-center shadow-sm">
-                    <div className="mb-3 text-4xl">☁️</div>
-                    <h2 className="text-lg font-semibold text-slate-700">请先同步产品库数据</h2>
-                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                      安装包不包含公司产品清单。点击下方按钮，从产品库发布源下载销售可见的最新版；同步成功后才会显示产品内容。
-                    </p>
-                    <div className="mt-6 flex justify-center">
-                      <SyncButton
-                        userName={currentUserName}
-                        compact
-                        label="☁️ 同步数据"
-                        onDone={handleProductSyncDone}
-                      />
-                    </div>
-                    {isAdmin && (
-                      <div className="mt-4 border-t border-sky-200 pt-4">
-                        <p className="text-xs leading-5 text-slate-500">
-                          首次建库或发布源暂时为空？可先在本机维护产品库、导入供应商资料，核对后再点击「发布产品库」。
-                        </p>
-                        <button
-                          onClick={handleStartLocalProductLibrary}
-                          className="mt-2 rounded-lg border border-sky-300 px-3 py-1.5 text-sm text-jushi-accent hover:bg-white"
-                        >
-                          开始维护产品库
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <>
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <input
                   value={query}
@@ -1116,6 +1069,24 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     </option>
                   ))}
                 </select>
+                <button
+                  onClick={() => void handleImportMemberCatalog()}
+                  disabled={busy}
+                  title="导入管理员交付的成员产品库 Excel，只写当前电脑的数据目录，不会联网同步"
+                  className="rounded-lg border border-sky-300 px-3 py-1.5 text-sm text-jushi-accent hover:bg-sky-50 disabled:opacity-50"
+                >
+                  📥 导入产品库 Excel
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => void handleExportMemberCatalog()}
+                    disabled={busy || products.length === 0}
+                    title="导出可交付给成员电脑的产品库 Excel（不含成本、供应商与联系人）"
+                    className="rounded-lg border border-emerald-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                  >
+                    📤 导出成员产品库
+                  </button>
+                )}
                 {isAdmin && (
                   <>
                     <button
@@ -1166,22 +1137,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 >
                   ↻
                 </button>
-                <SyncButton
-                  userName={currentUserName}
-                  compact
-                  label="☁️ 同步数据"
-                  onDone={handleProductSyncDone}
-                />
-                {isAdmin && (
-                  <button
-                    onClick={() => void handlePublishProductCatalog()}
-                    disabled={busy}
-                    title="把当前产品库的销售可见字段发布给其他电脑；成本、供应商、联系人、原始资料和图片路径不会发布"
-                    className="rounded-lg border border-emerald-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-                  >
-                    {busy ? '发布中…' : '☁️ 发布产品库'}
-                  </button>
-                )}
                 <span className="text-xs text-slate-400">共 {products.length} 条</span>
               </div>
 
@@ -1631,7 +1586,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     {filteredProducts.length === 0 && (
                       <tr>
                         <td colSpan={PROD_COLS.length} className="px-2 py-6 text-center text-slate-400">
-                          {products.length === 0 ? '产品库为空——上传供应商资料或手动添加' : '没有匹配的产品'}
+                          {products.length === 0 ? '产品库为空——请导入管理员提供的产品库 Excel' : '没有匹配的产品'}
                         </td>
                       </tr>
                     )}
@@ -1640,9 +1595,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               </div>
                 </div>
               </div>
-
-                </>
-              )}
             </div>
           )}
 

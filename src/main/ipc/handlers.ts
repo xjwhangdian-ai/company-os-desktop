@@ -1,5 +1,5 @@
 import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
-import { addCompany, addTeamMember, resetAllTeamMembers, changePin, getActiveCompany, getConfig, getDataDir, getGithubToken, getLastSyncAt, listTeamMembers, registerLocalAccount, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setGithubToken, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, setVideoModelConfig, verifyPin } from '../config/store'
+import { addCompany, addTeamMember, resetAllTeamMembers, changePin, getActiveCompany, getConfig, getDataDir, getLastSyncAt, listTeamMembers, registerLocalAccount, removeCompany, removeTeamMember, resetPin, setActiveCompany, setActiveProvider, setCompanyDataDir, setLastSyncAt, setMemberAgents, setMemberRole, setProviderConfig, setVideoModelConfig, verifyPin } from '../config/store'
 import { copyFileSync, cpSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc-channels'
@@ -27,8 +27,7 @@ import { repairDataDir, templateSrcPath } from '../config/first-run'
 import { checkEnv, installEnvItem } from '../fs-io/env-check'
 import { listBrandMatters, setBrandMatter } from '../fs-io/brand-workflow'
 import { processInvoices } from '../fs-io/finance-invoice'
-import { getSyncStatus, syncNow, syncProductLibraryData, syncReadOnlyProductLibrary } from '../fs-io/git-sync'
-import { publishProductCatalog } from '../fs-io/product-catalog'
+import { getSyncStatus, syncNow } from '../fs-io/git-sync'
 import { buildAgentDisplayList } from '../agents/loader'
 import { runAgent } from '../agents/runner'
 import {
@@ -73,10 +72,12 @@ import { getIntelKeywords, setIntelKeywords, getKeywordSuggestions, getIntelKeyw
 import { listLegalDocs, listLegalTemplates, markReviewed, generateLegalRedline } from '../fs-io/legal-workflow'
 import {
   addFollowUp,
+  exportMemberProductCatalog,
   exportQuoteImages,
   generateQuoteExcel,
   generateSupplierQuoteList,
   importExcelByHeader,
+  importMemberProductCatalog,
   linkCustomerFile,
   listCategoryDict,
   listCustomers,
@@ -109,10 +110,10 @@ export function getCurrentUserName(): string {
   return currentUserName
 }
 
-/** 产品库是全员共用的规范库；删除会影响报价与选型，因此仅管理员可执行。 */
+/** 产品库的新增、编辑、删除会影响当前电脑的报价与选型，因此仅管理员可执行。 */
 function requireCurrentAdmin(): void {
   const member = listTeamMembers().find((item) => item.name === currentUserName)
-  if (member?.role !== 'admin') throw new Error('产品库仅允许管理员维护；普通成员请点击“同步产品库”获取最新版本')
+  if (member?.role !== 'admin') throw new Error('产品库仅允许管理员维护；成员可导入管理员交付的产品库 Excel')
 }
 
 function isCurrentAdmin(): boolean {
@@ -347,8 +348,6 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   ipcMain.handle(IPC.updateCheck, () => checkForUpdate())
   ipcMain.handle(IPC.updateDownload, (_e, info: UpdateInfo) => downloadAndInstall(getMainWindow(), info))
-  ipcMain.handle(IPC.updateGetTokenSet, () => Boolean(getGithubToken()))
-  ipcMain.handle(IPC.updateSetToken, (_e, token: string | null) => setGithubToken(token))
   ipcMain.handle(IPC.shellOpenPath, (_e, path: string) => shell.openPath(path))
 
   ipcMain.handle(IPC.identityList, () => listTeamMembers())
@@ -368,17 +367,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   // ============ 一键同步 ============
   ipcMain.handle(IPC.syncStatus, () => getSyncStatus(getDataDir()))
   ipcMain.handle(IPC.syncNow, async (_e, userName: string) => {
-    const member = listTeamMembers().find((item) => item.name === userName)
-    const result = member?.role === 'member' ? await syncReadOnlyProductLibrary(getDataDir()) : await syncNow(getDataDir(), userName)
-    if (result.ok) {
-      const company = getActiveCompany()
-      if (company) setLastSyncAt(company.id)
-    }
-    return result
-  })
-  ipcMain.handle(IPC.syncProducts, async (_e, userName: string) => {
-    const member = listTeamMembers().find((item) => item.name === userName)
-    const result = await syncProductLibraryData(getDataDir(), userName, member?.role === 'admin')
+    const result = await syncNow(getDataDir(), userName)
     if (result.ok) {
       const company = getActiveCompany()
       if (company) setLastSyncAt(company.id)
@@ -388,12 +377,6 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.syncLastAt, () => {
     const company = getActiveCompany()
     return company ? getLastSyncAt(company.id) : null
-  })
-
-  ipcMain.handle(IPC.salesPublishProductCatalog, async () => {
-    const member = listTeamMembers().find((item) => item.name === currentUserName)
-    if (member?.role !== 'admin') throw new Error('仅管理员可以发布产品库')
-    return publishProductCatalog(getDataDir(), getGithubToken())
   })
 
   // ============ 销售工作台 ============
@@ -436,6 +419,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.salesImportExcel, (_e, relativePath: string) => {
     requireCurrentAdmin()
     return importExcelByHeader(getDataDir(), relativePath)
+  })
+  ipcMain.handle(IPC.salesImportMemberCatalog, (_e, sourcePath: string) => importMemberProductCatalog(getDataDir(), sourcePath))
+  ipcMain.handle(IPC.salesExportMemberCatalog, () => {
+    requireCurrentAdmin()
+    return exportMemberProductCatalog(getDataDir())
   })
 
   ipcMain.handle(IPC.salesListTemplates, () => listQuotationTemplates(getDataDir()))

@@ -147,8 +147,6 @@ const api: CompanyOsApi = {
     check: () => ipcRenderer.invoke(IPC.updateCheck),
     appVersion: () => ipcRenderer.invoke(IPC.appVersion),
     download: (info: unknown) => ipcRenderer.invoke(IPC.updateDownload, info),
-    getTokenSet: () => ipcRenderer.invoke(IPC.updateGetTokenSet),
-    setToken: (token: string | null) => ipcRenderer.invoke(IPC.updateSetToken, token),
     onProgress: (cb: (p: { pct: number; received: number; total: number }) => void) => {
       const listener = (_e: unknown, payload: { pct: number; received: number; total: number }): void => cb(payload)
       ipcRenderer.on('update:progress', listener)
@@ -176,7 +174,6 @@ const api: CompanyOsApi = {
   sync: {
     status: () => ipcRenderer.invoke(IPC.syncStatus),
     now: (userName: string) => ipcRenderer.invoke(IPC.syncNow, userName),
-    products: (userName: string) => ipcRenderer.invoke(IPC.syncProducts, userName),
     lastAt: () => ipcRenderer.invoke(IPC.syncLastAt)
   },
   sales: {
@@ -187,6 +184,8 @@ const api: CompanyOsApi = {
     setProductImage: (id: string, sourcePath: string) => ipcRenderer.invoke(IPC.salesSetProductImage, id, sourcePath),
     uploadSupplierDoc: (sourcePath: string) => ipcRenderer.invoke(IPC.salesUploadSupplierDoc, sourcePath),
     importExcel: (relativePath: string) => ipcRenderer.invoke(IPC.salesImportExcel, relativePath),
+    importMemberCatalog: (sourcePath: string) => ipcRenderer.invoke(IPC.salesImportMemberCatalog, sourcePath),
+    exportMemberCatalog: () => ipcRenderer.invoke(IPC.salesExportMemberCatalog),
     exportQuoteImages: (productIds: string[], customerName: string) =>
       ipcRenderer.invoke(IPC.salesExportQuoteImages, productIds, customerName),
     genPdfQuoteList: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesGenPdfQuoteList, pdfFileName),
@@ -194,7 +193,6 @@ const api: CompanyOsApi = {
     applyCatalogPairing: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesApplyCatalogPairing, pdfFileName),
     catalogProgress: (pdfFileName: string) => ipcRenderer.invoke(IPC.salesCatalogProgress, pdfFileName),
     exportZcy: (productIds: string[]) => ipcRenderer.invoke(IPC.salesExportZcy, productIds),
-    publishProductCatalog: () => ipcRenderer.invoke(IPC.salesPublishProductCatalog),
     generateQuoteXlsx: (
       lines: QuoteLineInput[],
       customerName: string,

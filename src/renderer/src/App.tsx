@@ -5,7 +5,6 @@ import { useAgentsStore } from './stores/useAgentsStore'
 import { useIdentityStore } from './stores/useIdentityStore'
 import { AgentPicker } from './components/AgentPicker'
 import { IdentityGate } from './components/IdentityGate'
-import { SyncButton } from './components/SyncButton'
 import { UpdateBanner } from './components/UpdateBanner'
 import { Settings } from './pages/Settings'
 import { GenericAgentPage } from './pages/GenericAgentPage'
@@ -185,13 +184,6 @@ export default function App(): React.JSX.Element {
           </button>
         </div>
 
-        <SyncButton
-          userName={currentUser.name}
-          label="☁️ 同步产品库"
-          onDone={(ok) => {
-            if (ok) window.dispatchEvent(new Event('company-os-product-library-synced'))
-          }}
-        />
         <button
           onClick={() => setView('settings')}
           className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${

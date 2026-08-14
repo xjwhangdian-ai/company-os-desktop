@@ -2,7 +2,6 @@ import { execFile } from 'node:child_process'
 import { delimiter } from 'node:path'
 import { promisify } from 'node:util'
 import type { SyncResult, SyncStatus } from '@shared/agent-types'
-import { syncPublishedProductCatalog } from './product-catalog'
 
 const execFileAsync = promisify(execFile)
 
@@ -124,35 +123,4 @@ export async function syncNow(dataDir: string, userName: string): Promise<SyncRe
   }
 
   return { ok: true, committed, message: committed ? '本地改动已提交并与远程同步完成' : '已与远程同步完成（本地无新改动）' }
-}
-
-/**
- * 员工同步：产品库完全以管理员远程版本为准。
- * 先清掉本机产品库的改动、暂存资料和图片，再仅拉取远程；不提交、不推送任何员工端内容。
- */
-export async function syncReadOnlyProductLibrary(dataDir: string): Promise<SyncResult> {
-  const status = await getSyncStatus(dataDir)
-  if (!status.isRepo) return { ok: false, message: '该数据目录不是 git 仓库' }
-  if (!status.hasRemote) return { ok: false, message: '还没配置远程仓库，无法同步管理员产品库' }
-  const branch = status.branch || 'main'
-  const productPath = '销售/产品库'
-  try {
-    // 仅清理产品库范围，员工的 inbox、outputs 与其它工作文件不受影响。
-    await git(dataDir, ['restore', '--source=HEAD', '--staged', '--worktree', '--', productPath]).catch(() => null)
-    await git(dataDir, ['clean', '-fd', '--', productPath])
-    await git(dataDir, ['pull', '--ff-only', 'origin', branch], 120000)
-    return { ok: true, committed: false, message: '已同步管理员产品库（员工端为只读，不会提交本机产品数据）' }
-  } catch (err) {
-    return { ok: false, message: `同步管理员产品库失败：${err instanceof Error ? err.message.slice(0, 200) : String(err)}` }
-  }
-}
-
-/**
- * 产品页统一入口：从独立的公开产品发布源读取脱敏销售目录。
- * 不再要求新装电脑的数据目录是 Git 仓库，也不会在安装包内携带私有产品数据。
- */
-export async function syncProductLibraryData(dataDir: string, userName: string, isAdmin: boolean): Promise<SyncResult> {
-  void userName
-  void isAdmin
-  return syncPublishedProductCatalog(dataDir)
 }

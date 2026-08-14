@@ -544,6 +544,97 @@ export async function importExcelByHeader(dataDir: string, relativePath: string)
   return { ...result, attachedImages: attached }
 }
 
+/** 成员产品库交付只包含销售使用字段；成本、供应商与联系人不写入 Excel。 */
+const MEMBER_CATALOG_COLUMNS: { key: keyof ProductFields; label: string; width: number }[] = [
+  { key: '图片', label: '图片', width: 10 },
+  { key: '产品名称', label: '产品名称', width: 24 },
+  { key: '品牌', label: '品牌', width: 14 },
+  { key: '型号', label: '产品型号', width: 20 },
+  { key: '瑾智型号', label: '瑾智型号', width: 18 },
+  { key: '生产制造商', label: '生产制造商', width: 18 },
+  { key: '产地', label: '产地', width: 12 },
+  { key: '一级分类', label: '一级分类', width: 22 },
+  { key: '二级分类', label: '二级分类', width: 18 },
+  { key: '产品分类', label: '产品分类', width: 18 },
+  { key: '技术参数', label: '技术参数', width: 48 },
+  { key: '单位', label: '单位', width: 10 },
+  { key: '税率', label: '税率', width: 10 },
+  { key: '质保期', label: '质保期', width: 14 },
+  { key: '交货期', label: '交货期', width: 14 },
+  { key: '物料代码', label: '物料代码', width: 18 },
+  { key: '建议销售价', label: '建议销售价', width: 14 },
+  { key: '投标报价', label: '投标报价', width: 14 },
+  { key: '备注', label: '备注', width: 24 }
+]
+
+function memberCatalogDate(): string {
+  const d = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function memberCatalogImageExt(path: string): 'jpeg' | 'png' | 'gif' | null {
+  const ext = extname(path).toLowerCase()
+  if (ext === '.jpg' || ext === '.jpeg') return 'jpeg'
+  if (ext === '.png') return 'png'
+  if (ext === '.gif') return 'gif'
+  return null
+}
+
+/**
+ * 管理员导出可交付给成员电脑的离线产品库 Excel。
+ * 表内嵌入可用产品图片；成员在产品库点「导入产品库 Excel」后，图片会随行写入自己的本地库。
+ */
+export async function exportMemberProductCatalog(dataDir: string): Promise<{ outPath: string; count: number }> {
+  const db = readProductDb(dataDir)
+  const date = memberCatalogDate()
+  const outDir = join(dataDir, 'outputs', '01_销售_sales', `${date}_成员产品库`)
+  mkdirSync(outDir, { recursive: true })
+  const outPath = join(outDir, `${date}_成员产品库.xlsx`)
+  const ExcelJS = (await import('exceljs')).default
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('成员产品库')
+  sheet.columns = MEMBER_CATALOG_COLUMNS.map((column) => ({ header: column.label, key: column.key, width: column.width }))
+  sheet.views = [{ state: 'frozen', ySplit: 1 }]
+  sheet.autoFilter = { from: 'A1', to: `${String.fromCharCode(64 + MEMBER_CATALOG_COLUMNS.length)}1` }
+  const header = sheet.getRow(1)
+  header.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } }
+  header.alignment = { vertical: 'middle', horizontal: 'center' }
+  header.height = 24
+
+  for (const product of db.products) {
+    const row = sheet.addRow(MEMBER_CATALOG_COLUMNS.map((column) => (column.key === '图片' ? '' : product[column.key] ?? '')))
+    row.height = 48
+    row.alignment = { vertical: 'top', wrapText: true }
+    const picturePath = product.图片 ? join(dataDir, product.图片) : ''
+    const extension = picturePath && existsSync(picturePath) ? memberCatalogImageExt(picturePath) : null
+    if (!extension) continue
+    try {
+      const imageId = workbook.addImage({ filename: picturePath, extension })
+      sheet.addImage(imageId, {
+        tl: { col: 0.12, row: row.number - 1 + 0.08 },
+        ext: { width: 48, height: 48 },
+        editAs: 'oneCell'
+      })
+    } catch {
+      // 个别格式不兼容时跳过图片，不影响产品信息导出。
+    }
+  }
+  await workbook.xlsx.writeFile(outPath)
+  return { outPath, count: db.products.length }
+}
+
+/** 成员将管理员交付的 Excel 导入自己的本机产品库；不会访问网络或改变其他电脑的数据。 */
+export async function importMemberProductCatalog(dataDir: string, sourcePath: string): Promise<MergeResult> {
+  if (extname(sourcePath).toLowerCase() !== '.xlsx') throw new Error('请导入管理员导出的 .xlsx 产品库文件')
+  const importDir = join(dataDir, '销售', '产品库', '成员导入')
+  mkdirSync(importDir, { recursive: true })
+  const localFile = join(importDir, `${Date.now()}_${basename(sourcePath)}`)
+  copyFileSync(sourcePath, localFile)
+  return importExcelByHeader(dataDir, relative(dataDir, localFile))
+}
+
 /** 把报价单勾选产品的图片导出到报价产出目录的 图片/ 子文件夹（文件名=产品名称），返回导出情况 */
 export function exportQuoteImages(
   dataDir: string,

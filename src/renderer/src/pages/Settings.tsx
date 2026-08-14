@@ -422,13 +422,6 @@ function AboutSection({ onFlash }: { onFlash: (t: string) => void }): React.JSX.
   const [info, setInfo] = useState<Awaited<ReturnType<typeof window.api.update.check>> | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [pct, setPct] = useState<number | null>(null)
-  const [tokenSet, setTokenSet] = useState(false)
-  const [tokenInput, setTokenInput] = useState('')
-
-  useEffect(() => {
-    window.api.update.getTokenSet().then(setTokenSet)
-  }, [])
-
   useEffect(() => {
     if (!downloading) return
     return window.api.update.onProgress((p) => setPct(p.pct))
@@ -491,52 +484,6 @@ function AboutSection({ onFlash }: { onFlash: (t: string) => void }): React.JSX.
         <span className="text-[11px] text-slate-400">
           自动对比 GitHub Releases；启动 8 秒后也会静默检查一次，有新版在窗口顶部提示。
         </span>
-      </div>
-      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-slate-600">产品库发布</span>
-          {tokenSet && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">发布令牌已配置</span>}
-          <input
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            type="password"
-            autoComplete="off"
-            placeholder={tokenSet ? '输入新令牌可替换' : '粘贴 GitHub Fine-grained Token'}
-            className="min-w-56 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs outline-none focus:border-jushi-accent"
-          />
-          <button
-            disabled={!tokenInput.trim()}
-            onClick={async () => {
-              const token = tokenInput.trim()
-              if (/\s/.test(token) || token.length < 20) {
-                onFlash('令牌格式不正确，请粘贴 GitHub 生成的完整 Fine-grained Token')
-                return
-              }
-              await window.api.update.setToken(token)
-              setTokenInput('')
-              setTokenSet(true)
-              onFlash('产品库发布令牌已保存到本机')
-            }}
-            className="rounded-md border border-jushi-accent px-3 py-1 text-xs text-jushi-accent hover:bg-sky-50 disabled:opacity-40"
-          >
-            保存令牌
-          </button>
-          {tokenSet && (
-            <button
-              onClick={async () => {
-                await window.api.update.setToken(null)
-                setTokenSet(false)
-                onFlash('产品库发布令牌已清除')
-              }}
-              className="rounded-md border border-slate-300 px-3 py-1 text-xs text-slate-500 hover:border-red-300 hover:text-red-500"
-            >
-              清除
-            </button>
-          )}
-        </div>
-        <p className="mt-2 text-[11px] leading-snug text-slate-400">
-          仅在维护产品库的电脑配置一次。请创建仅授予 <span className="font-mono">company-os-desktop</span> 仓库「Contents: Read and write」权限的 Fine-grained Token；它只保存在这台电脑，用于发布脱敏产品目录，不用于 App 更新。
-        </p>
       </div>
     </section>
   )

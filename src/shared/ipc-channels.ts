@@ -41,7 +41,6 @@ export const IPC = {
   salesApplyCatalogPairing: 'sales:apply-catalog-pairing',
   salesCatalogProgress: 'sales:catalog-progress',
   salesExportZcy: 'sales:export-zcy',
-  salesPublishProductCatalog: 'sales:publish-product-catalog',
   operationUploadTemplate: 'operation:upload-template',
   operationListTemplates: 'operation:list-templates',
   operationRecentArticles: 'operation:recent-articles',
@@ -94,8 +93,6 @@ export const IPC = {
   gzhGenerateCover: 'gzh:generate-cover',
   updateCheck: 'update:check',
   updateDownload: 'update:download',
-  updateGetTokenSet: 'update:get-token-set',
-  updateSetToken: 'update:set-token',
   shellOpenPath: 'shell:open-path',
 
   identityList: 'identity:list',
@@ -107,7 +104,6 @@ export const IPC = {
 
   syncStatus: 'sync:status',
   syncNow: 'sync:now',
-  syncProducts: 'sync:products',
   syncLastAt: 'sync:last-at',
 
   salesListProducts: 'sales:list-products',
@@ -117,6 +113,8 @@ export const IPC = {
   salesSetProductImage: 'sales:set-product-image',
   salesUploadSupplierDoc: 'sales:upload-supplier-doc',
   salesImportExcel: 'sales:import-excel',
+  salesImportMemberCatalog: 'sales:import-member-catalog',
+  salesExportMemberCatalog: 'sales:export-member-catalog',
   salesExportQuoteImages: 'sales:export-quote-images',
   salesGenerateQuoteXlsx: 'sales:generate-quote-xlsx',
   salesListTemplates: 'sales:list-templates',

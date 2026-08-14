@@ -255,9 +255,6 @@ export interface CompanyOsApi {
     /** 人工确认后：下载安装包（进度走 onProgress）并自动拉起安装 */
     download(info: Awaited<ReturnType<CompanyOsApi['update']['check']>>): Promise<{ ok: boolean; path?: string; 说明: string }>
     onProgress(cb: (p: { pct: number; received: number; total: number }) => void): () => void
-    /** 私有仓库用：是否已配置只读 GitHub Token / 保存（null=清除）。Token 只存本机配置 */
-    getTokenSet(): Promise<boolean>
-    setToken(token: string | null): Promise<void>
   }
   identity: {
     list(): Promise<TeamMember[]>
@@ -284,8 +281,6 @@ export interface CompanyOsApi {
     status(): Promise<SyncStatus>
     /** 一键同步：提交本地改动 → pull --rebase → push；冲突时恢复原状并报冲突文件 */
     now(userName: string): Promise<SyncResult>
-    /** 产品页专用：从独立产品发布源同步脱敏产品清单与分类字典。 */
-    products(userName: string): Promise<SyncResult>
     /** 当前公司最近一次成功同步的时间戳 */
     lastAt(): Promise<number | null>
   }
@@ -303,6 +298,10 @@ export interface CompanyOsApi {
     uploadSupplierDoc(sourcePath: string): Promise<SupplierDocPreview>
     /** 按表头识别结果把 xlsx/csv 机械导入产品库（不经过 AI） */
     importExcel(relativePath: string): Promise<{ added: number; updated: number; skipped: number; attachedImages?: number }>
+    /** 成员导入管理员交付的产品库 Excel，只写当前电脑的本地产品库。 */
+    importMemberCatalog(sourcePath: string): Promise<{ added: number; updated: number; skipped: number; attachedImages?: number }>
+    /** 管理员导出可交付给成员的产品库 Excel（仅销售字段，内嵌可用图片）。 */
+    exportMemberCatalog(): Promise<{ outPath: string; count: number }>
     /** 把报价单产品的图片导出到 outputs 报价目录的 图片/ 子文件夹 */
     exportQuoteImages(productIds: string[], customerName: string): Promise<{ dir: string; exported: number; missing: string[] }>
     /** PDF 产品手册 → 供应商报价清单骨架：分身先提取 JSON（needExtract 时），App 机械填模板生成 xlsx */
@@ -325,8 +324,6 @@ export interface CompanyOsApi {
     exportZcy(
       productIds: string[]
     ): Promise<{ ok: boolean; outDir?: string; count?: number; 管制数?: number; 缺图?: string[]; 说明: string }>
-    /** 管理员把当前产品库脱敏发布到独立产品目录；成本、供应商及联系人不会发布。 */
-    publishProductCatalog(): Promise<{ ok: boolean; message: string }>
     /** 分身核对进度（读 _核对进度.json）；无进度文件返回 null */
     catalogProgress(pdfFileName: string): Promise<{ 已核对页: number; 总页: number } | null>
     applyCatalogPairing(pdfFileName: string): Promise<{
