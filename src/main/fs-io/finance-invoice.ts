@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
-import { augmentedPath } from './env-check'
+import { augmentedPath, resolvePython } from './env-check'
 
 // ============ 财务：发票 OCR 识别入台账（纯机械，不经过 AI）============
 // 选发票图片 → macOS Vision OCR 提取（发票号码/日期/购销双方/价税合计，红字负数）→
@@ -37,16 +37,6 @@ export interface InvoiceProcessResult {
   进项合计: number
   台账路径: string
   说明: string
-}
-
-function resolvePython(): string | null {
-  const candidates = isWin ? ['python', 'py'] : ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
-  for (const c of candidates) {
-    if (c.startsWith('/')) {
-      if (existsSync(c)) return c
-    } else return c
-  }
-  return null
 }
 
 function runOcr(dataDir: string, files: string[]): Promise<{ records: InvoiceRecord[]; failures: { 原文件: string; 原因: string }[] }> {

@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { app } from 'electron'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
@@ -19,10 +19,17 @@ function windowsRuntimeBinDirs(): string[] {
   const base = [
     join(local, 'Programs', 'Python', 'Python312'),
     join(local, 'Programs', 'Python', 'Python312', 'Scripts'),
+    join(roaming, 'AgentWorkbench', 'runtime', 'tesseract'),
     join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Tesseract-OCR')
   ]
-  const popplerRoot = join(roaming, 'Agent工作台', 'runtime', 'poppler')
-  if (existsSync(popplerRoot)) {
+  // AgentWorkbench is the current ASCII runtime folder. Keep the old Chinese
+  // folder as a read-only fallback so v0.1.17 installs still work after upgrade.
+  const popplerRoots = [
+    join(roaming, 'AgentWorkbench', 'runtime', 'poppler'),
+    join(roaming, 'Agent工作台', 'runtime', 'poppler')
+  ]
+  for (const popplerRoot of popplerRoots) {
+    if (!existsSync(popplerRoot)) continue
     const walk = (dir: string): void => {
       try {
         for (const name of readdirSync(dir)) {
@@ -48,7 +55,7 @@ export function augmentedPath(): string {
 /** 安装包内置 Windows 环境一键安装脚本：Python、PDF 渲染、发票 OCR 与 Python 依赖。 */
 function windowsBootstrapPath(): string {
   const root = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
-  return join(root, 'company-os-template', 'tools', 'windows-env-setup.bat')
+  return join(root, 'windows-deps', 'repair-runtime.bat')
 }
 
 function run(cmd: string, args: string[], timeoutMs = 20000): Promise<{ ok: boolean; out: string }> {
@@ -64,10 +71,20 @@ function run(cmd: string, args: string[], timeoutMs = 20000): Promise<{ ok: bool
   })
 }
 
-function resolvePython(): string | null {
-  const candidates = isWin
-    ? ['python', 'py']
-    : ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
+/**
+ * Windows always prefers the Python 3.12 installed by our offline package.
+ * This avoids `py -3` selecting a different machine-wide Python whose ABI does
+ * not match the bundled cp312 wheels.
+ */
+export function resolvePython(): string | null {
+  if (isWin) {
+    const candidates = [
+      join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Python', 'Python312', 'python.exe'),
+      join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Python312', 'python.exe')
+    ]
+    return candidates.find((candidate) => existsSync(candidate)) ?? 'python'
+  }
+  const candidates = ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
   for (const c of candidates) {
     if (c.startsWith('/')) {
       if (existsSync(c)) return c
@@ -210,13 +227,17 @@ export async function installEnvItem(key: string): Promise<{ ok: boolean; 说明
   if (isWin && ['python', 'pydeps', 'poppler', 'tesseract'].includes(key)) {
     const script = windowsBootstrapPath()
     if (!existsSync(script)) return { ok: false, 说明: '安装包内未找到 Windows 环境安装脚本，请重新下载安装包' }
-    try {
-      const child = spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: false })
-      child.unref()
-      return { ok: true, 说明: '已打开 Windows 环境安装窗口：将自动安装 Python、PDF 渲染、Tesseract 与依赖库；完成后关闭并重新打开工作台，再点“重新检测”。' }
-    } catch (err) {
-      return { ok: false, 说明: `无法启动环境安装脚本：${err instanceof Error ? err.message : String(err)}` }
-    }
+    const result = await new Promise<{ ok: boolean; out: string }>((resolve) => {
+      execFile(
+        'cmd.exe',
+        ['/c', script],
+        { timeout: 600_000, windowsHide: true, env: { ...process.env, PATH: augmentedPath() } },
+        (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout ?? ''}${stderr ?? ''}`.trim() })
+      )
+    })
+    return result.ok
+      ? { ok: true, 说明: 'Windows 本机环境已自动修复：Python 3.12、PDF 渲染、Tesseract 和离线依赖均已验证；现在可直接重新检测或继续使用。' }
+      : { ok: false, 说明: `自动修复未完成：${result.out.slice(-200) || '请重新运行安装包后再试'}` }
   }
   const python = resolvePython()
   if (key === 'pydeps' || key === 'ocrmac') {

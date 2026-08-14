@@ -30,7 +30,9 @@ jobs:
         run: npm ci
 
       - name: Prepare bundled offline runtime
-        shell: powershell
+        # PowerShell 7 reads UTF-8 scripts consistently. Windows PowerShell 5.1
+        # misread Chinese text and caused the v0.1.16 CI failure.
+        shell: pwsh
         run: .\scripts\prepare-windows-deps.ps1
 
       - name: Build Windows installer (NSIS)

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { augmentedPath } from './env-check'
+import { augmentedPath, resolvePython } from './env-check'
 import { spawn } from 'node:child_process'
 
 // ============ 产品画册 PDF → 抽图 + 文本提取（销售分身用）============
@@ -23,21 +23,6 @@ export interface PdfCatalogResult {
 }
 
 const isWin = process.platform === 'win32'
-
-/** 跨平台找 python3：mac 常见绝对路径 → PATH 里的 python3/python/py（Windows 官方装包是 python/py） */
-function resolvePython(): string | null {
-  const candidates = isWin
-    ? ['python', 'py']
-    : ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3']
-  for (const c of candidates) {
-    if (c.startsWith('/')) {
-      if (existsSync(c)) return c
-    } else {
-      return c // 交给 PATH 解析；spawn error 时会落到"无法启动 Python"分支给出安装指引
-    }
-  }
-  return null
-}
 
 const INSTALL_HINT = isWin
   ? '本机没有可用的 Python——请安装 python.org 的 Python 3 并勾选 Add to PATH，再执行 pip install pypdf pillow numpy 后重试'
