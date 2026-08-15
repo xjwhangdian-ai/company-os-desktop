@@ -12,7 +12,7 @@
     "build:mac": "npm run verify:template && electron-vite build && electron-builder --mac",
     "build:win": "node scripts/check-windows-build-host.mjs && npm run verify:template && electron-vite build && electron-builder --win --x64",
     "verify:template": "node scripts/verify-template-no-product-data.mjs",
-    "verify:win": "node scripts/verify-windows-build.mjs",
+    "verify:win": "node scripts/verify-windows-build.mjs && node scripts/write-windows-installer-checksum.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-builder install-app-deps"
   },

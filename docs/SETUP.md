@@ -113,7 +113,10 @@ cd <company-os目录> && git remote add lan ~/company-os-hub.git && git push lan
 ```bash
 npm run build:mac   # macOS dmg
 npm run build:win   # Windows nsis 安装包
+npm run verify:win  # 仅在 Windows x64 构建机：校验安装包、离线依赖并生成 .sha256
 ```
+
+Windows 安装包只能在 Windows x64 环境构建。正式发布前必须等 GitHub Actions 的「Build Windows Installer」通过；Release 中的 `.exe.sha256` 是浏览器手工下载后的完整性校验文件。Windows 可运行 `certutil -hashfile AgentWorkbench-Setup-版本号.exe SHA256`，其结果必须与 `.sha256` 文件一致；不一致时删除该 `.exe` 后重新下载，不要尝试安装。
 
 打包前需要在 `build/` 目录放应用图标（`icon.icns` / `icon.ico`），当前仓库还没有——用现成的炬视 Logo 素材转换即可，参考 `knowledge/brand/` 下的 VI 规范。
 
