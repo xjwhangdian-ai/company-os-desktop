@@ -40,6 +40,8 @@ done
 find "$DST/tools/bidding-intel" -type f \( -name "*_report_*.txt" -o -name "*_data_*.json" -o -name "*_state.json" \) -delete 2>/dev/null || true
 find "$DST/tools/intel-reports" -type f \( -name "*_report_*.txt" -o -name "*_data_*.json" -o -name "*_state.json" \) -delete 2>/dev/null || true
 find "$DST/tools/bidding-intel" -type f -exec perl -pi -e 's/[[:space:]]+$//' {} + 2>/dev/null || true
+rm -rf "$DST/tools/bidding-intel/scripts/downloads" "$DST/tools/bidding-intel/scripts/logs" "$DST/tools/intel-reports/scripts/downloads" "$DST/tools/intel-reports/scripts/logs"
+find "$DST/tools" -type f -name "*.sync-conflict-*" -delete 2>/dev/null || true
 
 [ -f "$SRC/tools/windows-env-setup.bat" ] && cp "$SRC/tools/windows-env-setup.bat" "$DST/tools/windows-env-setup.bat"
 
