@@ -20,6 +20,8 @@ interface AgentChatProps {
   pendingAutoSend?: boolean
   /** 自动发送成功时回调，供工作台显示“任务已开始”的执行反馈。 */
   onPendingPromptAutoSent?: () => void
+  /** 自动发送时分身正忙、任务仅填入输入框时回调。 */
+  onPendingPromptHeld?: () => void
   /** 本组件发起的分身任务结束时回调，供工作台刷新成果区并提示完成。 */
   onRunComplete?: () => void
   /** 外部注入待发送附件（如运营页的素材上传区），合并进输入框旁的附件列表，不自动发送 */
@@ -35,6 +37,7 @@ export function AgentChat({
   onPendingPromptConsumed,
   pendingAutoSend,
   onPendingPromptAutoSent,
+  onPendingPromptHeld,
   onRunComplete,
   pendingAttachments: injectedAttachments,
   onPendingAttachmentsConsumed
@@ -65,6 +68,7 @@ export function AgentChat({
         onPendingPromptAutoSent?.()
       } else {
         setInput(pendingPrompt)
+        onPendingPromptHeld?.()
       }
       onPendingPromptConsumed?.()
     }

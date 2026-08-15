@@ -97,6 +97,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [notice, setNotice] = useState<string | null>(null)
   const [queuedFinanceJob, setQueuedFinanceJob] = useState<FinanceJob | null>(null)
   const [runningFinanceJob, setRunningFinanceJob] = useState<FinanceJob | null>(null)
+  const [pendingAutoSend, setPendingAutoSend] = useState(false)
 
   useEffect(() => {
     if (pendingPrompt) setShowChat(true)
@@ -165,6 +166,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   function startFinanceJob(job: FinanceJob, prompt: string): void {
     const { label, outputDir } = FINANCE_JOB_META[job]
     setQueuedFinanceJob(job)
+    setPendingAutoSend(true)
     setPendingPrompt(prompt)
     setShowChat(true)
     flash(`${label}已提交：将读取本月票据并生成成果到 ${outputDir(ym)}；执行进度和结果会显示在右侧对话区。`)
@@ -176,6 +178,13 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     setRunningFinanceJob(queuedFinanceJob)
     setQueuedFinanceJob(null)
     flash(`${label}正在执行，完成后会自动提示；成果目录：${outputDir(ym)}`)
+  }
+
+  function handleFinanceJobHeld(): void {
+    if (!queuedFinanceJob) return
+    const { label } = FINANCE_JOB_META[queuedFinanceJob]
+    setQueuedFinanceJob(null)
+    flash(`${label}尚未执行：财务分身正在处理其他任务，已将本次任务填入右侧输入框；请在当前任务结束后确认并点击“发送”。`)
   }
 
   async function handleFinanceJobComplete(): Promise<void> {
@@ -402,7 +411,10 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                 </button>
                 {savedAt && <span className="text-xs text-emerald-600">已保存</span>}
                 <button
-                  onClick={() => setPendingPrompt(buildSalaryPrompt(ym, employees, payday))}
+                  onClick={() => {
+                    setPendingAutoSend(false)
+                    setPendingPrompt(buildSalaryPrompt(ym, employees, payday))
+                  }}
                   className="ml-auto rounded-lg border border-jushi-accent px-3 py-1.5 text-xs font-medium text-jushi-accent hover:bg-jushi-accent/5"
                 >
                   ✍️ 生成本月工资表
@@ -430,7 +442,10 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
             {CONSULT_CHIPS.map((q) => (
               <button
                 key={q}
-                onClick={() => setPendingPrompt(q)}
+                onClick={() => {
+                  setPendingAutoSend(false)
+                  setPendingPrompt(q)
+                }}
                 className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:border-jushi-accent hover:text-jushi-accent"
                 title={q}
               >
@@ -443,9 +458,13 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
           <AgentChat
             agent={agent}
             pendingPrompt={pendingPrompt}
-            pendingAutoSend
-            onPendingPromptConsumed={() => setPendingPrompt(null)}
+            pendingAutoSend={pendingAutoSend}
+            onPendingPromptConsumed={() => {
+              setPendingPrompt(null)
+              setPendingAutoSend(false)
+            }}
             onPendingPromptAutoSent={handleFinanceJobAutoSent}
+            onPendingPromptHeld={handleFinanceJobHeld}
             onRunComplete={() => void handleFinanceJobComplete()}
           />
         </div>
