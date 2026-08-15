@@ -8,7 +8,7 @@ import { generateContractRedline, type RedlineItem, type RedlineResult } from '.
 //   待审队列：input/04_法务_legal/【类型】合同文件（平铺，一合同一文件）
 //   已处理：  input/04_法务_legal/已处理/（"标记已审"把原文件移进来）
 //   审核产出：outputs/04_法务_legal/{日期_合同名}/（意见书等，分身按项目文件夹写入）
-//   合同模板：法务/_模板/合同模板/{类型}/（跨项目库，不动）
+//   合同模板：libraries/04_法务_legal/_模板/合同模板/{类型}/（跨项目库，不动）
 
 const PENDING_DIR_REL = join('input', '04_法务_legal')
 const DONE_DIR_REL = join('input', '04_法务_legal', '已处理')
@@ -125,7 +125,7 @@ export async function generateLegalRedline(dataDir: string, fileName: string): P
 }
 
 export function listLegalTemplates(dataDir: string): ContractTemplate[] {
-  const root = join(dataDir, '法务', '_模板', '合同模板')
+  const root = join(dataDir, 'libraries', '04_法务_legal', '_模板', '合同模板')
   const templates: ContractTemplate[] = []
   for (const category of CONTRACT_CATEGORIES) {
     const dir = join(root, category)

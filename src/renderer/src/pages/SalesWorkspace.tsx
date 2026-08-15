@@ -288,7 +288,7 @@ function buildPdfQuoteListPrompt(preview: PreviewCard, jsonRel: string): string 
     `2. 分类按手册的章节/目录归类；品牌、型号只有页面上明确标注才填，否则填空字符串""——绝不猜测编造。`,
     `3. 手册页码填印刷页码（字符串），方便人工回查原文。`,
     `4. 用 Write 把 JSON 数组写入 ${jsonRel}，文件内容只有 JSON 数组本身。`,
-    `5. 不要修改 销售/产品库/产品库.json。`,
+    `5. 不要修改 libraries/01_销售_sales/产品库/产品库.json。`,
     `完成后回复提取了多少个产品、哪些字段普遍缺失。之后我会在工作台点「生成报价清单」由 App 机械填模板出 xlsx（价格等留空待人工）。`
   ].join('\n')
 }
@@ -298,7 +298,7 @@ function buildParsePrompt(preview: PreviewCard): string {
   const readTarget = preview.companionRelativePath
     ? `${preview.companionRelativePath}（这是 App 从 ${preview.relativePath} 提取的纯文本，优先读它；需要时也可对照原文件）`
     : preview.relativePath
-  const stagingFile = `销售/产品库/_待入库/入库_${Date.now()}.json`
+  const stagingFile = `libraries/01_销售_sales/产品库/_待入库/入库_${Date.now()}.json`
   if (preview.mode === 'bid') {
     return [
       `解析这份投标报价文件，提取各产品的投标报价写入暂存区。`,
@@ -307,7 +307,7 @@ function buildParsePrompt(preview: PreviewCard): string {
       `1. 每个产品提取为一个 JSON 对象，只填两个字段的值：产品名称、投标报价；其余字段（一级分类、二级分类、产品分类、品牌、型号、瑾智型号、生产制造商、产地、技术参数、单位、税率、质保期、交货期、物料代码、成本价、建议销售价、供应商名称、供应商联系人、供应商联系方式、备注）一律填空字符串""，来源文件填"${preview.fileName}"。`,
       `2. 产品名称照抄文件原文写法（App 会按名称匹配到产品库里的已有条目回填投标报价）；投标报价保留原文（含单位/含税说明）。`,
       `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身。`,
-      `4. 不要修改 销售/产品库/产品库.json。`,
+      `4. 不要修改 libraries/01_销售_sales/产品库/产品库.json。`,
       `完成后回复提取了多少条。`
     ].join('\n')
   }
@@ -317,10 +317,10 @@ function buildParsePrompt(preview: PreviewCard): string {
     `要求：`,
     `0. 只提取"产品明细表格里的真实产品行"（每行有型号/规格和价格）；表头行、标题、致供应商说明、填写说明/须知、示例行（备注写着"示例"）、公司落款、日期/联系人等一律不是产品，绝对不要提取。`,
     `1. 每个产品提取为一个 JSON 对象，字段名严格使用：产品名称、一级分类、二级分类、产品分类、品牌、型号、瑾智型号、生产制造商、产地、技术参数、单位、税率、质保期、交货期、物料代码、成本价、建议销售价、投标报价、供应商名称、供应商联系人、供应商联系方式、备注、来源文件（来源文件统一填"${preview.fileName}"）。瑾智型号是我方自编型号（资料里通常没有，留空）；交货期照原文（如"30天/现货"）。`,
-    `1.1 分类按《产品分类规范》填：先读 销售/产品库/分类字典.json 的「分类树」和「归属规则」，一级分类填字典里一级的"名称"原文（如"视频监控与智能感知"），二级分类填该一级下二级的"名称"原文（如"摄像机与云台"），产品分类填三级细分品类（字典三级里有就用原文，没有就照产品自身品类写短词）。一款产品只能归一个三级分类；拿不准归哪类就把三个分类字段都留空由人工补，禁止硬凑。`,
+    `1.1 分类按《产品分类规范》填：先读 libraries/01_销售_sales/产品库/分类字典.json 的「分类树」和「归属规则」，一级分类填字典里一级的"名称"原文（如"视频监控与智能感知"），二级分类填该一级下二级的"名称"原文（如"摄像机与云台"），产品分类填三级细分品类（字典三级里有就用原文，没有就照产品自身品类写短词）。一款产品只能归一个三级分类；拿不准归哪类就把三个分类字段都留空由人工补，禁止硬凑。`,
     `2. 供应商报价表里的价格是给我们的进货价，填进"成本价"；资料里明确写了建议零售价/指导价才填"建议销售价"，没有就留空。品牌/型号/生产制造商/产地/单位/税率照资料原文填（质保期折算成月数，如"三年"填"36"）；注意区分：品牌是产品品牌（如海康威视），供应商名称是把货卖给我们的渠道公司，两者可能不同。技术参数把规格/关键参数拼成一段完整文字；所有价格保留资料原文写法（含单位、含税说明）；资料里没有的字段填空字符串""，禁止编造。`,
     `3. 用 Write 工具把 JSON 数组写入 ${stagingFile}，文件内容只有 JSON 数组本身，不要包裹代码块或其它文字。`,
-    `4. 不要修改 销售/产品库/产品库.json——那是桌面 App 托管的规范库，你写的暂存文件会由 App 校验后合并进去。`,
+    `4. 不要修改 libraries/01_销售_sales/产品库/产品库.json——那是桌面 App 托管的规范库，你写的暂存文件会由 App 校验后合并进去。`,
     `完成后回复：提取了多少条产品、哪些字段缺失比较多。`
   ].join('\n')
 }
@@ -424,7 +424,7 @@ function ProductForm({
         </div>
         {catDict.length === 0 && (
           <p className="col-span-3 text-[11px] text-amber-600">
-            没读到分类字典（销售/产品库/分类字典.json），一二级下拉不可用——补上字典文件后重开工作台即可。
+            没读到分类字典（libraries/01_销售_sales/产品库/分类字典.json），一二级下拉不可用——补上字典文件后重开工作台即可。
           </p>
         )}
       </div>
@@ -486,7 +486,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
 
   const [tab, setTab] = useState<SalesTab>('产品库')
   const [products, setProducts] = useState<ProductEntry[]>([])
-  /** 《产品分类规范》分类字典（销售/产品库/分类字典.json），一级/二级下拉的取值来源 */
+  /** 《产品分类规范》分类字典（libraries/01_销售_sales/产品库/分类字典.json），一级/二级下拉的取值来源 */
   const [catDict, setCatDict] = useState<CategoryL1[]>([])
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('全部') // '全部' 或分类路径 '一级/二级/三级'
@@ -912,7 +912,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
       `需求清单：`,
       needsText.trim(),
       ``,
-      `要求：读 销售/产品库/产品库.json（只读，禁止写入），对每条需求给出 1-2 个推荐产品（产品名称/品牌/型号/关键参数/建议报价），同一产品多家供应商时按成本价低、货源稳的优先并说明理由；没有匹配产品的需求明确说"库里没有"，不要硬凑。最后给推荐组合的合计金额${budget.trim() ? '与预算对比' : ''}。只在对话里回复，不用写文件。注意：回复里不要出现供应商联系人/联系方式（采购侧信息）。`
+      `要求：读 libraries/01_销售_sales/产品库/产品库.json（只读，禁止写入），对每条需求给出 1-2 个推荐产品（产品名称/品牌/型号/关键参数/建议报价），同一产品多家供应商时按成本价低、货源稳的优先并说明理由；没有匹配产品的需求明确说"库里没有"，不要硬凑。最后给推荐组合的合计金额${budget.trim() ? '与预算对比' : ''}。只在对话里回复，不用写文件。注意：回复里不要出现供应商联系人/联系方式（采购侧信息）。`
     ]
       .filter(Boolean)
       .join('\n')
@@ -2022,7 +2022,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               </div>
               <p className="mt-2 text-xs text-slate-400">
                 报价单价默认取建议销售价（缺失时退投标报价/成本价，注意核对加价）。品牌列只取产品的「品牌」字段，成本价与供应商信息绝不会写进对外报价。
-                内置版式会内嵌产品缩略图，并把原图导出到报价目录的 图片/ 子文件夹；每张报价单自动登记进 销售/报价台账.json（进销存的单据源头）。
+                内置版式会内嵌产品缩略图，并把原图导出到报价目录的 图片/ 子文件夹；每张报价单自动登记进 libraries/01_销售_sales/报价台账.json（进销存的单据源头）。
               </p>
             </>
           )}

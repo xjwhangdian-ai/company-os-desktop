@@ -4,7 +4,7 @@ import { relative, sep } from 'node:path'
 // 只给"分身真正生成的产出"盖操作人戳——outputs/、bidding/、法务/已审 是产出归档地，
 // 法务/待审 是原始上传（人传的，不是分身生成的）不盖；knowledge/ 本来就禁止写入。
 // 这里的前缀固定用正斜杠，因为下面 toPosixRelative 已经把路径分隔符统一成正斜杠了。
-const STAMPABLE_PREFIXES = ['outputs/', 'bidding/', '法务/已审/']
+const STAMPABLE_PREFIXES = ['outputs/']
 
 function toPosixRelative(dataDir: string, absPath: string): string {
   return relative(dataDir, absPath).split(sep).join('/')

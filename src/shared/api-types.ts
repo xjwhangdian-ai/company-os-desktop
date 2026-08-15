@@ -292,9 +292,9 @@ export interface CompanyOsApi {
     /** 新增（不传 id）或整体更新（传 id）一条产品记录 */
     saveProduct(fields: ProductFields, id?: string): Promise<ProductEntry>
     removeProduct(id: string): Promise<void>
-    /** 设置/替换产品图片（拷入 销售/产品库/图片库/，旧图自动清理） */
+    /** 设置/替换产品图片（拷入 libraries/01_销售_sales/产品库/图片库/，旧图自动清理） */
     setProductImage(id: string, sourcePath: string): Promise<ProductEntry>
-    /** 供应商资料/投标报价文件上传到 销售/产品库/原始资料/，生成伴生提取文本，xlsx/csv 顺带做表头识别预览 */
+    /** 供应商资料/投标报价文件上传到 libraries/01_销售_sales/产品库/原始资料/，生成伴生提取文本，xlsx/csv 顺带做表头识别预览 */
     uploadSupplierDoc(sourcePath: string): Promise<SupplierDocPreview>
     /** 按表头识别结果把 xlsx/csv 机械导入产品库（不经过 AI） */
     importExcel(relativePath: string): Promise<{ added: number; updated: number; skipped: number; attachedImages?: number }>
@@ -362,7 +362,7 @@ export interface CompanyOsApi {
     /** 某月（缺省=本月）财税任务清单+员工配置+发薪日提醒+票据数 */
     overview(ym?: string): Promise<FinanceOverview>
     toggleTask(ym: string, taskKey: string, done: boolean): Promise<void>
-    /** 保存员工配置与发薪日（财务/财税台账.json，App 托管） */
+    /** 保存员工配置与发薪日（libraries/08_财务_finance/财税台账.json，App 托管） */
     saveEmployees(员工: FinanceEmployee[], 发薪日: number): Promise<FinanceLedger>
     /** 票据上传 → input/08_财务_finance/票据/{YYYY-MM}/ */
     uploadReceipt(ym: string, sourcePath: string): Promise<{ relativePath: string }>

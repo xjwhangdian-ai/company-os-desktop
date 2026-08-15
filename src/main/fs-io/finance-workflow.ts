@@ -6,11 +6,11 @@ import type { FinanceEmployee, FinanceLedger, FinanceOverview, FinanceTask, Outp
 // 定位：把财税代理公司的「记账、报税、凭证相关服务」搬进 App——
 //   票据归档 → input/08_财务_finance/票据/{YYYY-MM}/（输入侧）
 //   记账凭证/报税底稿/工资表 → outputs/08_财务_finance/{YYYY-MM}_xxx/（finance 分身产出）
-//   员工配置/发薪日/月度任务勾选 → 财务/财税台账.json（App 托管，path-guard 拦分身直写）
+//   员工配置/发薪日/月度任务勾选 → libraries/08_财务_finance/财税台账.json（App 托管，path-guard 拦分身直写）
 // 红线：App 与分身只做「提醒 + 底稿 + 台账」，实际申报在电子税务局由人完成；
 //       口径以税务机关与税务师为准，社保基数等地方数字由分身联网查并标注来源。
 
-const LEDGER_REL = join('财务', '财税台账.json')
+const LEDGER_REL = join('libraries', '08_财务_finance', '财税台账.json')
 const RECEIPTS_ROOT_REL = join('input', '08_财务_finance', '票据')
 
 function ledgerPath(dataDir: string): string {
@@ -48,7 +48,7 @@ export function readLedger(dataDir: string): FinanceLedger {
 
 function writeLedger(dataDir: string, ledger: FinanceLedger): void {
   const p = ledgerPath(dataDir)
-  mkdirSync(join(dataDir, '财务'), { recursive: true })
+  mkdirSync(join(dataDir, 'libraries', '08_财务_finance'), { recursive: true })
   const tmp = `${p}.tmp`
   writeFileSync(tmp, JSON.stringify(ledger, null, 2), 'utf-8')
   renameSync(tmp, p)

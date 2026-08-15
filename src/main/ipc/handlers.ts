@@ -221,9 +221,9 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC.helpMemberGuide, () => {
     // 老安装目录可能在 v0.1.14 前就已初始化，里面没有新增手册；此时直接回退到
     // 当前安装包内置模板，保证首次登录的“下载/查看”永远可用。
-    const dataGuide = join(getDataDir(), '使用说明', '成员首次使用手册.md')
+    const dataGuide = join(getDataDir(), 'docs', '使用说明', '成员首次使用手册.md')
     if (existsSync(dataGuide)) return dataGuide
-    const bundledGuide = join(templateSrcPath(), '使用说明', '成员首次使用手册.md')
+    const bundledGuide = join(templateSrcPath(), 'docs', '使用说明', '成员首次使用手册.md')
     return existsSync(bundledGuide) ? bundledGuide : null
   })
 
@@ -381,7 +381,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     const preview: SupplierDocPreview = { relativePath, fileName: basename(absPath) }
 
     const companionAbs = await extractCompanion(absPath)
-    if (companionAbs) preview.companionRelativePath = `销售/产品库/原始资料/${basename(companionAbs)}`
+    if (companionAbs) preview.companionRelativePath = `libraries/01_销售_sales/产品库/原始资料/${basename(companionAbs)}`
 
     // xlsx/csv 顺带做表头机械识别，识别成功 UI 会提供"直接导入"（免 AI）
     if (/\.(xlsx|csv)$/i.test(absPath)) {

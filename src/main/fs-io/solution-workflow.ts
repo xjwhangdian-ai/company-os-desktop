@@ -7,19 +7,19 @@ import { extractCompanion } from './doc-extract'
 // 统一 input/outputs 约定：需求文件（输入）在 input，方案成品（产出）在 outputs 按项目建夹；
 // 资料库/模板是跨项目的"库"，留在 解决方案/ 工作区：
 //   input/02_解决方案_solution/需求文件/  ← 钉钉会议录音(mp3/m4a/wav)、需求纪要(md/docx/pdf) + 转写产物 _转写.md
-//   解决方案/基础产品库/                  ← 基础产品资料（可上传补充；产品统一口径仍以 knowledge/products/ 为准）
-//   解决方案/基础解决方案库/               ← 历史方案/行业方案，生成新方案时取结构与打法参考
-//   解决方案/_模板/解决方案模板/           ← 方案文档模板
+//   libraries/02_解决方案_solution/基础产品库/                  ← 基础产品资料（可上传补充；产品统一口径仍以 knowledge/products/ 为准）
+//   libraries/02_解决方案_solution/基础解决方案库/               ← 历史方案/行业方案，生成新方案时取结构与打法参考
+//   libraries/02_解决方案_solution/_模板/解决方案模板/           ← 方案文档模板
 //   outputs/02_解决方案_solution/{日期_项目}/ ← 方案成品（分身写入）
 // 转写由 App 本地完成，方案生成由 solution 分身完成。
 
 const KIND_DIRS: Record<SolutionFileKind, string> = {
   requirement: join('input', '02_解决方案_solution', '需求文件'),
-  productLib: join('解决方案', '基础产品库'),
-  solutionLib: join('解决方案', '基础解决方案库'),
-  policyLib: join('解决方案', '政策文件库'),
-  trendLib: join('解决方案', '行业趋势库'),
-  template: join('解决方案', '_模板', '解决方案模板')
+  productLib: join('libraries', '02_解决方案_solution', '基础产品库'),
+  solutionLib: join('libraries', '02_解决方案_solution', '基础解决方案库'),
+  policyLib: join('libraries', '02_解决方案_solution', '政策文件库'),
+  trendLib: join('libraries', '02_解决方案_solution', '行业趋势库'),
+  template: join('libraries', '02_解决方案_solution', '_模板', '解决方案模板')
 }
 
 const AUDIO_EXTS = new Set(['.mp3', '.m4a', '.wav'])
@@ -28,7 +28,7 @@ export function ensureSolutionDirs(dataDir: string): void {
   for (const rel of Object.values(KIND_DIRS)) {
     mkdirSync(join(dataDir, rel), { recursive: true })
   }
-  const readmePath = join(dataDir, '解决方案', 'README.md')
+  const readmePath = join(dataDir, 'libraries', '02_解决方案_solution', 'README.md')
   if (!existsSync(readmePath)) {
     writeFileSync(
       readmePath,

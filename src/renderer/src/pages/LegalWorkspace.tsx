@@ -184,7 +184,7 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       <button
                         onClick={() =>
                           setPendingPrompt(
-                            `对比一下这两份合同：input/04_法务_legal/${doc.fileName} 和模板 ${templateFor(doc.category)?.fileName}（法务/_模板/合同模板/${doc.category}/${templateFor(doc.category)?.fileName}），逐条列出差异，尤其标出对我方不利的改动，其余按《合同审核意见书》格式输出，写到 ${reviewOutputDir(doc.fileName)}/模板对比意见书.md`
+                            `对比一下这两份合同：input/04_法务_legal/${doc.fileName} 和模板 ${templateFor(doc.category)?.fileName}（libraries/04_法务_legal/_模板/合同模板/${doc.category}/${templateFor(doc.category)?.fileName}），逐条列出差异，尤其标出对我方不利的改动，其余按《合同审核意见书》格式输出，写到 ${reviewOutputDir(doc.fileName)}/模板对比意见书.md`
                           )
                         }
                         className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"

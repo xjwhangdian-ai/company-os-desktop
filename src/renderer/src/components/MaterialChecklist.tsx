@@ -25,7 +25,7 @@ export function MaterialChecklist({ refreshKey }: { refreshKey?: number }): Reac
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-400">
-        以下是 bidding/_素材库/ 各分类的文件数量粗判，仅供参考——0 个文件大概率是缺口，具体是否够用由 bidding
+        以下是 libraries/03_招投标_bidding/_素材库/ 各分类的文件数量粗判，仅供参考——0 个文件大概率是缺口，具体是否够用由 bidding
         分身在生成投标文件时判断。
       </p>
       {CATEGORIES.map((cat) => (

@@ -10,7 +10,7 @@ import { extractCompanion } from './doc-extract'
 //   法务：  input/04_法务_legal/【类型】合同（处理完移 已处理/） → 意见书进 outputs/04_法务_legal/{日期_合同}/
 //   销售：  input/01_销售_sales/供应商资料/ → 报价进 outputs/01_销售_sales/{日期_客户_报价}/
 //   方案：  input/02_解决方案_solution/需求文件/ → 方案进 outputs/02_解决方案_solution/{日期_项目}/
-// 跨项目复用的"库"不属于输入也不属于产出，留在各工作区：bidding/_素材库、销售/产品库+图片库+模板、
+// 跨项目复用的"库"不属于输入也不属于产出，留在各工作区：libraries/03_招投标_bidding/_素材库、销售/产品库+图片库+模板、
 // 解决方案/基础产品库+基础解决方案库+模板、法务/_模板。
 
 function uniqueDestPath(destDir: string, fileName: string): string {
@@ -123,10 +123,10 @@ export function uploadToMaterialLibrary(
   category: string,
   sourcePath: string
 ): { absPath: string; relativePath: string } {
-  const destDir = join(dataDir, 'bidding', '_素材库', category)
+  const destDir = join(dataDir, 'libraries', '03_招投标_bidding', '_素材库', category)
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `bidding/_素材库/${category}/${basename(dest)}` }
+  return { absPath: dest, relativePath: `libraries/03_招投标_bidding/_素材库/${category}/${basename(dest)}` }
 }
 
 /**
@@ -151,16 +151,16 @@ export function uploadToLegalPending(
   return { absPath: dest, relativePath: `input/04_法务_legal/${basename(dest)}` }
 }
 
-/** 法务专属：合同模板按类型存进 法务/_模板/合同模板/{category}/，供"与模板对比"功能匹配 */
+/** 法务专属：合同模板按类型存进 libraries/04_法务_legal/_模板/合同模板/{category}/，供"与模板对比"功能匹配 */
 export function uploadToLegalTemplate(
   dataDir: string,
   category: string,
   sourcePath: string
 ): { absPath: string; relativePath: string } {
-  const destDir = join(dataDir, '法务', '_模板', '合同模板', category)
+  const destDir = join(dataDir, 'libraries', '04_法务_legal', '_模板', '合同模板', category)
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `法务/_模板/合同模板/${category}/${basename(dest)}` }
+  return { absPath: dest, relativePath: `libraries/04_法务_legal/_模板/合同模板/${category}/${basename(dest)}` }
 }
 
 /** 销售专属：供应商产品资料/投标报价文件落 input/01_销售_sales/供应商资料/（喂产品库的原料，属输入侧） */
@@ -255,12 +255,12 @@ export function applyOperationImageNames(
   return { renamed, listRelative: `input/05_运营_operation/${t}/配图清单.md`, total: seq }
 }
 
-/** 销售专属：报价文件模板落 销售/_模板/报价模板/ */
+/** 销售专属：报价文件模板落 libraries/01_销售_sales/_模板/报价模板/ */
 export function uploadToSalesTemplate(dataDir: string, sourcePath: string): { absPath: string; relativePath: string } {
-  const destDir = join(dataDir, '销售', '_模板', '报价模板')
+  const destDir = join(dataDir, 'libraries', '01_销售_sales', '_模板', '报价模板')
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `销售/_模板/报价模板/${basename(dest)}` }
+  return { absPath: dest, relativePath: `libraries/01_销售_sales/_模板/报价模板/${basename(dest)}` }
 }
 
 // ============ 运营（风格模板 + 最近文章）============

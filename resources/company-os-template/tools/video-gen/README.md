@@ -49,7 +49,7 @@ python3 video_gen.py clone-voice-url https://xxx/voice_sample.wav
 python3 video_gen.py tts 口播文案.txt 口播.mp3
 # ③ 照片→开口讲话的数字人视频（图生视频+对口型两步自动串联）
 python3 video_gen.py avatar 人像.jpg 口播.mp3 口播视频.mp4
-# ④ 产品图→动态 B-roll（可多条，产品图直接从 销售/产品库/图片库/ 取）
+# ④ 产品图→动态 B-roll（可多条，产品图直接从 libraries/01_销售_sales/产品库/图片库/ 取）
 python3 video_gen.py broll 产品图.jpg "产品特写缓慢环绕展示" b1.mp4
 # ⑤ 成片：口播为主轨，B-roll 第3秒起依次插播，竖版 1080×1920
 python3 video_gen.py assemble 口播视频.mp4 成片.mp4 --broll b1.mp4,b2.mp4 [--bgm 音乐.mp3]

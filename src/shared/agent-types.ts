@@ -313,12 +313,12 @@ export interface SyncResult {
 }
 
 // ============ 销售工作台 ============
-// 产品库/客户库是 App 托管的规范化 JSON（销售/产品库/产品库.json、销售/客户库.json），
+// 产品库/客户库是 App 托管的规范化 JSON（libraries/01_销售_sales/产品库/产品库.json、libraries/01_销售_sales/客户库.json），
 // 字段名直接用中文——用户会直接打开这两个 JSON 看，也和上传的供应商资料表头对得上。
 // 采购侧敏感字段（供应商联系人/联系方式）只进产品库，绝不进对外报价文件。
 
 /**
- * 产品分类规范（销售/产品库/分类字典.json 的「分类树」）：一级 A-L、二级 A1-L6 为固定枚举，
+ * 产品分类规范（libraries/01_销售_sales/产品库/分类字典.json 的「分类树」）：一级 A-L、二级 A1-L6 为固定枚举，
  * 三级随入库生长。App 端的一级/二级下拉只能从这里取值，字典文件缺失时降级为自由填写。
  */
 export interface CategoryL2 {
@@ -367,7 +367,7 @@ export interface ProductEntry {
   供应商名称: string
   供应商联系人: string
   供应商联系方式: string
-  /** 产品图片，相对数据目录路径（销售/产品库/图片库/xxx.png），由 App 托管 */
+  /** 产品图片，相对数据目录路径（libraries/01_销售_sales/产品库/图片库/xxx.png），由 App 托管 */
   图片?: string
   备注?: string
   /** 这条记录最初从哪份上传资料提取而来 */
@@ -568,7 +568,7 @@ export interface FinanceEmployee {
   参保: boolean
 }
 
-/** 财务/财税台账.json —— App 托管（path-guard 拦分身直写） */
+/** libraries/08_财务_finance/财税台账.json —— App 托管（path-guard 拦分身直写） */
 export interface FinanceLedger {
   version: 1
   /** 发薪日（1-28） */

@@ -7,7 +7,7 @@ import { readTenderSource } from './intel-source'
 // ============ 招投标项目 = input/outputs 两侧同名文件夹配对 ============
 //   input/03_招投标_bidding/{YYYY-MM-DD_项目}/    ← 招标原件（App 上传时机械建夹）
 //   outputs/03_招投标_bidding/{YYYY-MM-DD_项目}/  ← 解析报告/质疑函/投标文件（分身写入）
-// 跨项目共享的素材库仍在 bidding/_素材库/（它是库，不是某个项目的输入或产出）。
+// 跨项目共享的素材库仍在 libraries/03_招投标_bidding/_素材库/（它是库，不是某个项目的输入或产出）。
 
 const INBOX_ROOT_REL = join('input', '03_招投标_bidding')
 const OUTPUTS_ROOT_REL = join('outputs', '03_招投标_bidding')
@@ -254,7 +254,7 @@ export function resolveBiddingProjectPaths(dataDir: string, folderName: string):
 
 /** 素材库五分类的文件数量粗判——只做数量统计，不做语义匹配（精确判断留给分身在生成时做） */
 export function getMaterialLibraryCounts(dataDir: string): MaterialLibraryCounts {
-  const libRoot = join(dataDir, 'bidding', '_素材库')
+  const libRoot = join(dataDir, 'libraries', '03_招投标_bidding', '_素材库')
   const counts = {} as MaterialLibraryCounts
   for (const category of MATERIAL_CATEGORIES) {
     counts[category] = countFilesRecursive(join(libRoot, category))

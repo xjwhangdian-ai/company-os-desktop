@@ -29,25 +29,25 @@ import { detectHeaders, readWorkbookRows, readWorkbookRowImages } from './doc-ex
 // ============ 销售工作台的数据层 ============
 // 统一 input/outputs 约定后，供应商资料原件在输入侧 input/01_销售_sales/供应商资料/（见 upload-router），
 // 报价成品在 outputs/01_销售_sales/{日期_客户_报价}/；本模块只管跨项目复用的"库"：
-//   销售/产品库/产品库.json      ← 产品库规范数据，App 托管（分身禁止直接写，见 path-guard）
-//   销售/产品库/_待入库/         ← 分身解析产出的暂存 JSON，App 校验合并后归档到 已合并/
-//   销售/产品库/图片库/          ← 产品图片，文件名由 App 生成并关联到产品记录
-//   销售/_模板/报价模板/         ← 报价文件模板
-//   销售/客户库.json             ← CRM 客户数据，App 托管
+//   libraries/01_销售_sales/产品库/产品库.json      ← 产品库规范数据，App 托管（分身禁止直接写，见 path-guard）
+//   libraries/01_销售_sales/产品库/_待入库/         ← 分身解析产出的暂存 JSON，App 校验合并后归档到 已合并/
+//   libraries/01_销售_sales/产品库/图片库/          ← 产品图片，文件名由 App 生成并关联到产品记录
+//   libraries/01_销售_sales/_模板/报价模板/         ← 报价文件模板
+//   libraries/01_销售_sales/客户库.json             ← CRM 客户数据，App 托管
 // 设计原则同 bidding/legal：AI 只做语义提取（写暂存文件），规范库的合并/去重/落盘由 App 机械完成。
 //
 // 为什么产品库是"一个 JSON"而不是按供应商拆多个文件：查询/去重都是跨供应商的（同一产品
 // 多家供货要合并对比），单文件一次读取全量过滤最简单；量级是公司采购目录（几百到几千条），
 // 单文件毫秒级；Google Drive 双机同步下文件越少冲突面越小；"多个供应商资料库"的原始形态
 // 已经完整保留在 input/01_销售_sales/供应商资料/ 里，产品库.json 只是合并后的索引。
-const PRODUCT_DB_REL = join('销售', '产品库', '产品库.json')
-const CUSTOMER_DB_REL = join('销售', '客户库.json')
-const STAGING_DIR_REL = join('销售', '产品库', '_待入库')
-const STAGING_DONE_REL = join('销售', '产品库', '_待入库', '已合并')
-const IMAGE_DIR_REL = join('销售', '产品库', '图片库')
-const TEMPLATE_DIR_REL = join('销售', '_模板', '报价模板')
+const PRODUCT_DB_REL = join('libraries', '01_销售_sales', '产品库', '产品库.json')
+const CUSTOMER_DB_REL = join('libraries', '01_销售_sales', '客户库.json')
+const STAGING_DIR_REL = join('libraries', '01_销售_sales', '产品库', '_待入库')
+const STAGING_DONE_REL = join('libraries', '01_销售_sales', '产品库', '_待入库', '已合并')
+const IMAGE_DIR_REL = join('libraries', '01_销售_sales', '产品库', '图片库')
+const TEMPLATE_DIR_REL = join('libraries', '01_销售_sales', '_模板', '报价模板')
 /** 产品分类规范：一级/二级固定枚举的唯一来源（人工维护，App 只读） */
-const CATEGORY_DICT_REL = join('销售', '产品库', '分类字典.json')
+const CATEGORY_DICT_REL = join('libraries', '01_销售_sales', '产品库', '分类字典.json')
 
 interface ProductDb {
   version: number
@@ -63,7 +63,7 @@ export function ensureSalesDirs(dataDir: string): void {
   for (const rel of [STAGING_DONE_REL, IMAGE_DIR_REL, TEMPLATE_DIR_REL]) {
     mkdirSync(join(dataDir, rel), { recursive: true })
   }
-  const readmePath = join(dataDir, '销售', 'README.md')
+  const readmePath = join(dataDir, 'libraries', '01_销售_sales', 'README.md')
   if (!existsSync(readmePath)) {
     writeFileSync(
       readmePath,
@@ -146,6 +146,10 @@ function readProductDb(dataDir: string): ProductDb {
   const db = readJson<ProductDb>(path, { version: 3, products: [] })
   let changed = false
   for (const p of db.products as unknown as Record<string, string>[]) {
+    if (p.图片?.startsWith('销售/产品库/')) {
+      p.图片 = p.图片.replace('销售/产品库/', 'libraries/01_销售_sales/产品库/')
+      changed = true
+    }
     if ('单价' in p) {
       if (!p.成本价) p.成本价 = p.单价
       delete p.单价
@@ -406,7 +410,7 @@ export function listProducts(dataDir: string, ingest = true): { products: Produc
 }
 
 /**
- * 读《产品分类规范》分类字典（销售/产品库/分类字典.json）供一级/二级下拉取值。
+ * 读《产品分类规范》分类字典（libraries/01_销售_sales/产品库/分类字典.json）供一级/二级下拉取值。
  * 字典由人工维护、App 只读；文件缺失或格式不对就返回空数组——UI 降级成自由填写，不阻塞录入。
  */
 export function listCategoryDict(dataDir: string): CategoryL1[] {
@@ -476,7 +480,7 @@ export function setProductImage(dataDir: string, id: string, sourcePath: string)
   const fileName = `${normName(target.产品名称).slice(0, 40)}_${id.slice(0, 8)}${ext}`
   const destAbs = join(dataDir, IMAGE_DIR_REL, fileName)
   copyFileSync(sourcePath, destAbs)
-  const newRel = `销售/产品库/图片库/${fileName}`
+  const newRel = `libraries/01_销售_sales/产品库/图片库/${fileName}`
   if (target.图片 && target.图片 !== newRel) {
     try {
       unlinkSync(join(dataDir, target.图片))
@@ -533,7 +537,7 @@ export async function importExcelByHeader(dataDir: string, relativePath: string)
       const fileName = `${normName(target.产品名称).slice(0, 40)}_${target.id.slice(0, 8)}.${img.ext.replace(/^\./, '') || 'png'}`
       try {
         writeFileSync(join(dataDir, IMAGE_DIR_REL, fileName), img.buffer)
-        target.图片 = `销售/产品库/图片库/${fileName}`
+        target.图片 = `libraries/01_销售_sales/产品库/图片库/${fileName}`
         attached += 1
       } catch {
         // 单张写入失败不影响导入
@@ -628,7 +632,7 @@ export async function exportMemberProductCatalog(dataDir: string): Promise<{ out
 /** 将产品库 Excel 导入自己的本机产品库；不会访问网络或改变其他电脑的数据。 */
 export async function importMemberProductCatalog(dataDir: string, sourcePath: string): Promise<MergeResult> {
   if (extname(sourcePath).toLowerCase() !== '.xlsx') throw new Error('请导入管理员导出的 .xlsx 产品库文件')
-  const importDir = join(dataDir, '销售', '产品库', '成员导入')
+  const importDir = join(dataDir, 'libraries', '01_销售_sales', '产品库', '成员导入')
   mkdirSync(importDir, { recursive: true })
   const localFile = join(importDir, `${Date.now()}_${basename(sourcePath)}`)
   copyFileSync(sourcePath, localFile)
@@ -666,7 +670,7 @@ export function exportQuoteImages(
 
 // ============ 机械报价单（Excel 秒出，不经过 AI） ============
 
-const QUOTE_LOG_REL = join('销售', '报价台账.json')
+const QUOTE_LOG_REL = join('libraries', '01_销售_sales', '报价台账.json')
 
 interface QuoteLogEntry {
   单号: string
@@ -808,10 +812,10 @@ interface QuoteListItem {
   页码?: string
 }
 
-/** 分身提取结果的约定路径：销售/产品库/_待入库/报价清单提取_{pdf名去扩展}.json */
+/** 分身提取结果的约定路径：libraries/01_销售_sales/产品库/_待入库/报价清单提取_{pdf名去扩展}.json */
 export function quoteListJsonRel(pdfFileName: string): string {
   const stem = pdfFileName.replace(/\.[^.]+$/, '')
-  return `销售/产品库/_待入库/报价清单提取_${stem}.json`
+  return `libraries/01_销售_sales/产品库/_待入库/报价清单提取_${stem}.json`
 }
 
 /**
@@ -843,7 +847,7 @@ export async function generateSupplierQuoteList(
     ? readdirSync(tplDir).find((f) => f.includes('报价清单') && f.toLowerCase().endsWith('.xlsx'))
     : undefined
   if (!tplName) {
-    return { ok: false, needExtract: false, jsonRel, 说明: '报价模板库里没有《供应商报价清单》模板（销售/_模板/报价模板/）' }
+    return { ok: false, needExtract: false, jsonRel, 说明: '报价模板库里没有《供应商报价清单》模板（libraries/01_销售_sales/_模板/报价模板/）' }
   }
 
   const ExcelJS = (await import('exceljs')).default
@@ -941,8 +945,8 @@ export function listQuotationTemplates(dataDir: string): QuotationTemplate[] {
       return {
         fileName,
         path: join(dir, fileName),
-        relativePath: `销售/_模板/报价模板/${fileName}`,
-        companionRelativePath: companion ? `销售/_模板/报价模板/${companion}` : undefined
+        relativePath: `libraries/01_销售_sales/_模板/报价模板/${fileName}`,
+        companionRelativePath: companion ? `libraries/01_销售_sales/_模板/报价模板/${companion}` : undefined
       }
     })
 }

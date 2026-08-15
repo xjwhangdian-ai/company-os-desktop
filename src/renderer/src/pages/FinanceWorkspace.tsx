@@ -53,7 +53,7 @@ function buildTaxPrompt(ym: string): string {
     `产出 outputs/08_财务_finance/${ym}_报税/${ym}_报税底稿.md，包含：`,
     `1. 增值税：销项明细、进项抵扣清单（注明哪些票需要先在电子税务局勾选认证）、应纳税额试算`,
     `2. 附加税费：城建税/教育费附加/地方教育附加试算（台州市区口径，比例标注来源）`,
-    `3. 个税（工资薪金）：按 财务/财税台账.json 的员工与工资，用累计预扣法试算本期应预扣个税`,
+    `3. 个税（工资薪金）：按 libraries/08_财务_finance/财税台账.json 的员工与工资，用累计预扣法试算本期应预扣个税`,
     `4. 印花税：本月合同（如有）按次试算并提示`,
     `5. 申报操作清单：去电子税务局逐项申报的步骤勾选表`,
     `红线：这是试算底稿，最终以电子税务局申报表自动计算为准；税率/口径不确定的联网查证并标注来源与「待确认」。`
@@ -64,7 +64,7 @@ function buildTaxPrompt(ym: string): string {
 function buildSalaryPrompt(ym: string, employees: FinanceEmployee[], payday: number): string {
   const 参保 = employees.filter((e) => e.参保)
   return [
-    `为 ${ym} 月做工资表与社保核对（发薪日：每月${payday}号）。员工配置（来自 财务/财税台账.json）：`,
+    `为 ${ym} 月做工资表与社保核对（发薪日：每月${payday}号）。员工配置（来自 libraries/08_财务_finance/财税台账.json）：`,
     ...employees.map((e) => `- ${e.姓名}（${e.角色}）月工资 ${e.月工资 || '【未填，先问我】'} 元，社保基数 ${e.社保基数 || '【未填：按工资与最低基数4986取高】'} 元，${e.参保 ? '参保' : '不参保'}`),
     ``,
     `产出 outputs/08_财务_finance/${ym}_工资社保/${ym}_工资表.md：`,

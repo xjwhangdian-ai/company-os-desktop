@@ -3,7 +3,7 @@ import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const productDir = join(projectRoot, 'resources', 'company-os-template', '销售', '产品库')
+const productDir = join(projectRoot, 'resources', 'company-os-template', 'libraries', '01_销售_sales', '产品库')
 
 function listForbiddenFiles(dir) {
   const files = []

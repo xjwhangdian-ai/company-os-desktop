@@ -55,7 +55,11 @@ export function repairDataDir(dataDir: string): { ok: boolean; copied: number; �
 export function ensureDefaultDataDir(): void {
   try {
     let company = listCompanies()[0] ?? null
-    if (company?.dataDir) return // 已配置过（即使目录暂时不可达也不擅自改绑，交给设置页人工处理）
+    if (company?.dataDir) {
+      // 已配置的数据目录不改绑；但允许新版本补齐骨架并迁移旧版资料库位置。
+      ensureCompanySkeleton(company.dataDir)
+      return
+    }
 
     const docs = app.getPath('documents')
     const looksLikeDataDir = (p: string): boolean => existsSync(join(p, 'CLAUDE.md')) || existsSync(join(p, 'knowledge'))

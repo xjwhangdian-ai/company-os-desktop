@@ -232,7 +232,7 @@ function ProjectCardEditor({
       {form.状态 === '已中标' && (
         <div className="mt-2 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700">
           🎉 已中标——两步闭环别忘：① 中标合同上传到「法务审核」工作台送审（input/04_法务_legal/）；② 合同签署版存入
-          bidding/_素材库/类似项目合同/ 对应分类（智能化类/装备类）——它就是下次投标的"类似项目业绩"。
+          libraries/03_招投标_bidding/_素材库/类似项目合同/ 对应分类（智能化类/装备类）——它就是下次投标的"类似项目业绩"。
         </div>
       )}
       {form.状态 === '未中标' && (
@@ -822,7 +822,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                             ...(clarificationFilesOf(project).length > 0
                               ? [`答疑/澄清文件（响应内容以最新澄清为准）：${clarificationFilesOf(project).join('、')}`]
                               : []),
-                            `严格按解析报告的标书目录框架、调用 bidding/_素材库/ 与 knowledge/，遵守 bidding 分身的全部投标规则；项目 input 侧 04_资质材料/ 如有本项目专用资质（如合作方资质），一并核对使用。`,
+                            `严格按解析报告的标书目录框架、调用 libraries/03_招投标_bidding/_素材库/ 与 knowledge/，遵守 bidding 分身的全部投标规则；项目 input 侧 04_资质材料/ 如有本项目专用资质（如合作方资质），一并核对使用。`,
                             `注意：${outputsDirOf(project)}/02_报价文件/ 下如有成本测算材料，只作内部参考，其内容严禁写入对外投标文件。`,
                             `产出：${outputsDirOf(project)}/04_投标文件成稿/${project.folderName}_投标文件初稿.md（三册一级标题结构）`
                           ].join('\n')
@@ -901,7 +901,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                 {showProjectUpload && (
                   <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <p className="mb-2 text-xs text-slate-500">
-                      为「{project.projectName}」补充素材——这些材料存进 bidding/_素材库/，其它项目生成投标文件时也能用到，不是这一个项目专属。
+                      为「{project.projectName}」补充素材——这些材料存进 libraries/03_招投标_bidding/_素材库/，其它项目生成投标文件时也能用到，不是这一个项目专属。
                     </p>
                     <MaterialChecklist refreshKey={refreshKey} />
                   </div>
