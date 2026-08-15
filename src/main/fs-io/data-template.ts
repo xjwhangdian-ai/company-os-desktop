@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 
 // ============ 数据目录骨架 ============
@@ -6,16 +6,26 @@ import { join } from 'node:path'
 // 由这里补齐全部空目录骨架——打包器会过滤 .gitkeep 隐藏文件导致空目录进不了安装包，
 // 所以骨架不依赖模板本身，代码建目录最稳。
 
+const LEGACY_INPUT_DIR = 'inbox'
+const INPUT_DIR = 'input'
+
+function migrateLegacyInputDir(dataDir: string): void {
+  const legacyDir = join(dataDir, LEGACY_INPUT_DIR)
+  const inputDir = join(dataDir, INPUT_DIR)
+  if (existsSync(legacyDir) && !existsSync(inputDir)) renameSync(legacyDir, inputDir)
+}
+
 const SKELETON_DIRS = [
-  'inbox/01_销售_sales/供应商资料',
-  'inbox/02_解决方案_solution/需求文件',
-  'inbox/03_招投标_bidding',
-  'inbox/04_法务_legal',
-  'inbox/05_运营_operation',
-  'inbox/06_品牌_brand',
-  'inbox/07_行政人力_ops-policy',
-  'inbox/08_财务_finance/票据',
-  'inbox/09_情报_intel',
+  'input/01_销售_sales/供应商资料',
+  'input/02_解决方案_solution/需求文件',
+  'input/03_招投标_bidding',
+  'input/04_法务_legal',
+  'input/05_运营_operation',
+  'input/06_品牌_brand',
+  'input/07_行政人力_ops-policy',
+  'input/08_财务_finance/票据',
+  'input/09_情报_intel',
+  'input/10_MBA学习_mba',
   'outputs/01_销售_sales',
   'outputs/02_解决方案_solution',
   'outputs/03_招投标_bidding',
@@ -28,6 +38,7 @@ const SKELETON_DIRS = [
   'outputs/07_行政人力_ops-policy/04_定稿',
   'outputs/08_财务_finance',
   'outputs/09_情报_intel',
+  'outputs/10_MBA学习_mba',
   'bidding/_素材库/产品资料',
   'bidding/_素材库/产品检测报告',
   'bidding/_素材库/产品解决方案',
@@ -49,6 +60,7 @@ const SKELETON_DIRS = [
 ]
 
 export function ensureCompanySkeleton(dataDir: string): void {
+  migrateLegacyInputDir(dataDir)
   for (const rel of SKELETON_DIRS) {
     mkdirSync(join(dataDir, rel), { recursive: true })
   }

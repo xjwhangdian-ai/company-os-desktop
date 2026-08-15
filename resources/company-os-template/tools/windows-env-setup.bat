@@ -31,6 +31,5 @@ echo [4/4] 安装 Python 依赖库...
 py -3 -m pip install --user pypdf pillow numpy openpyxl pytesseract
 
 echo.
-echo 安装命令已执行完成。请关闭本窗口，完全退出并重新打开 Agent工作台，
-echo 再进入“本机环境”点击“重新检测”。如有单项失败，请将本窗口截图发给管理员。
+echo 安装命令已执行完成。请完全退出并重新打开 Agent工作台，再进入“本机环境”点击“重新检测”。
 pause

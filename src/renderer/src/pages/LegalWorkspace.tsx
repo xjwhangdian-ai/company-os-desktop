@@ -32,7 +32,7 @@ function buildReviewPrompt(fileName: string): string {
   const dir = reviewOutputDir(fileName)
   const isDocx = /\.docx$/i.test(fileName)
   return [
-    `审一下这份合同：inbox/04_法务_legal/${fileName}`,
+    `审一下这份合同：input/04_法务_legal/${fileName}`,
     `（若是二进制格式，先读同目录的伴生提取文本 ${fileName}_提取文本.txt）`,
     ``,
     `产出两份文件：`,
@@ -184,7 +184,7 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                       <button
                         onClick={() =>
                           setPendingPrompt(
-                            `对比一下这两份合同：inbox/04_法务_legal/${doc.fileName} 和模板 ${templateFor(doc.category)?.fileName}（法务/_模板/合同模板/${doc.category}/${templateFor(doc.category)?.fileName}），逐条列出差异，尤其标出对我方不利的改动，其余按《合同审核意见书》格式输出，写到 ${reviewOutputDir(doc.fileName)}/模板对比意见书.md`
+                            `对比一下这两份合同：input/04_法务_legal/${doc.fileName} 和模板 ${templateFor(doc.category)?.fileName}（法务/_模板/合同模板/${doc.category}/${templateFor(doc.category)?.fileName}），逐条列出差异，尤其标出对我方不利的改动，其余按《合同审核意见书》格式输出，写到 ${reviewOutputDir(doc.fileName)}/模板对比意见书.md`
                           )
                         }
                         className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-jushi-accent hover:text-jushi-accent"

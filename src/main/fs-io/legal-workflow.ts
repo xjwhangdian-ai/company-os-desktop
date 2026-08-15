@@ -4,14 +4,14 @@ import type { ContractCategory, ContractTemplate, LegalDoc } from '@shared/agent
 import { CONTRACT_CATEGORIES } from '@shared/agent-types'
 import { generateContractRedline, type RedlineItem, type RedlineResult } from '../docgen/contract-redline'
 
-// ============ 法务工作流（统一 inbox/outputs 约定）============
-//   待审队列：inbox/04_法务_legal/【类型】合同文件（平铺，一合同一文件）
-//   已处理：  inbox/04_法务_legal/已处理/（"标记已审"把原文件移进来）
+// ============ 法务工作流（统一 input/outputs 约定）============
+//   待审队列：input/04_法务_legal/【类型】合同文件（平铺，一合同一文件）
+//   已处理：  input/04_法务_legal/已处理/（"标记已审"把原文件移进来）
 //   审核产出：outputs/04_法务_legal/{日期_合同名}/（意见书等，分身按项目文件夹写入）
 //   合同模板：法务/_模板/合同模板/{类型}/（跨项目库，不动）
 
-const PENDING_DIR_REL = join('inbox', '04_法务_legal')
-const DONE_DIR_REL = join('inbox', '04_法务_legal', '已处理')
+const PENDING_DIR_REL = join('input', '04_法务_legal')
+const DONE_DIR_REL = join('input', '04_法务_legal', '已处理')
 
 const IGNORE_NAMES = new Set(['.DS_Store', 'README.md'])
 

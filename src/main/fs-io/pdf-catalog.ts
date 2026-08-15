@@ -29,15 +29,15 @@ const INSTALL_HINT = isWin
   : '本机没有可用的 python3——终端执行 xcode-select --install（或 brew install python3），再 pip3 install pypdf pillow numpy 后重试'
 
 /**
- * 抽取产品画册：pdfFileName 为 inbox/01_销售_sales/供应商资料/ 下的 PDF 文件名。
+ * 抽取产品画册：pdfFileName 为 input/01_销售_sales/供应商资料/ 下的 PDF 文件名。
  * 产出到同目录的 {pdf名}_画册抽取/（产品图候选/ + 文本提取.md + _标注/ + _整页/）。
  * 跨平台：mac / Windows 都尝试本机 Python；没装或缺依赖时给出对应平台的安装指引。
  */
 export function extractPdfCatalog(dataDir: string, pdfFileName: string): Promise<PdfCatalogResult> {
-  const supplierDir = join(dataDir, 'inbox', '01_销售_sales', '供应商资料')
+  const supplierDir = join(dataDir, 'input', '01_销售_sales', '供应商资料')
   const pdf = join(supplierDir, pdfFileName)
   if (!existsSync(pdf)) {
-    return Promise.resolve({ ok: false, 说明: `找不到 PDF：${pdfFileName}（应在 inbox/01_销售_sales/供应商资料/ 下）` })
+    return Promise.resolve({ ok: false, 说明: `找不到 PDF：${pdfFileName}（应在 input/01_销售_sales/供应商资料/ 下）` })
   }
   const script = join(dataDir, 'tools', 'pdf-catalog', 'catalog_extract.py')
   if (!existsSync(script)) {
@@ -100,10 +100,10 @@ export interface CatalogApplyResult {
   说明: string
 }
 
-/** 抽取目录（相对 dataDir）：inbox/01_销售_sales/供应商资料/{pdf名}_画册抽取 */
+/** 抽取目录（相对 dataDir）：input/01_销售_sales/供应商资料/{pdf名}_画册抽取 */
 export function catalogOutDirRel(pdfFileName: string): string {
   const stem = basename(pdfFileName).replace(/\.[^.]+$/, '')
-  return join('inbox', '01_销售_sales', '供应商资料', `${stem}_画册抽取`)
+  return join('input', '01_销售_sales', '供应商资料', `${stem}_画册抽取`)
 }
 
 /** 分身核对进度（分身每核对完一页更新 _核对进度.json）；没有/坏文件返回 null */

@@ -4,18 +4,18 @@ import { migrateTrackDir } from './intel-fetch'
 
 // ============ 行业情报「保留最近三天」自动清理 ============
 // 每日管线（launchd 07:00/07:20）不断落新数据，旧的机读数据会堆积。
-// 打开「行业情报」分身时自动清一次：只清超过三天的**机读数据**（JSON 信息流/候选 + inbox 原始抓取），
+// 打开「行业情报」分身时自动清一次：只清超过三天的**机读数据**（JSON 信息流/候选 + input 原始抓取），
 // 保留人读产出（日报 .md、跟进台账.md、台账 CSV）。
 //
 // 清理目标：
 //   outputs/03_招投标_bidding/招投标每日追踪/{YYYY-MM-DD}_*.json   （信息流/候选项目）
 //   outputs/09_情报_intel/研报追踪/{YYYY-MM-DD}_*.json          （研报信息流）
-//   inbox/09_情报_intel/招投标每日/{YYYY-MM-DD}/                （整个原始抓取目录）
+//   input/09_情报_intel/招投标每日/{YYYY-MM-DD}/                （整个原始抓取目录）
 //   outputs/03_招投标_bidding/招投标每日追踪/候选项目处理状态.json    （逐条删除三天前的记录，文件保留）
 
 const OUTPUTS_TRACK_REL = join('outputs', '03_招投标_bidding', '招投标每日追踪')
 const OUTPUTS_REPORTS_REL = join('outputs', '09_情报_intel', '研报追踪')
-const INBOX_DAILY_REL = join('inbox', '09_情报_intel', '招投标每日')
+const INBOX_DAILY_REL = join('input', '09_情报_intel', '招投标每日')
 const STATE_FILE = '候选项目处理状态.json'
 
 /** 保留天数（含今天）：3 = 今天 + 前两天 */
@@ -52,7 +52,7 @@ function purgeDatedFiles(dataDir: string, relDir: string, matcher: RegExp, cutof
   return purged
 }
 
-/** 删 inbox 每日抓取目录里早于 cutoff 的整日目录 */
+/** 删 input 每日抓取目录里早于 cutoff 的整日目录 */
 function purgeDatedDirs(dataDir: string, relDir: string, cutoff: string): string[] {
   const dir = join(dataDir, relDir)
   if (!existsSync(dir)) return []
@@ -99,7 +99,7 @@ function pruneStateEntries(dataDir: string, cutoff: string): number {
 
 /**
  * 清除超过三天的旧情报机读数据。幂等、可反复调用（打开情报分身时触发）。
- * 只删机读 JSON 与 inbox 原始抓取，保留 .md 日报 / .csv 台账等人读产出。
+ * 只删机读 JSON 与 input 原始抓取，保留 .md 日报 / .csv 台账等人读产出。
  */
 export function purgeStaleIntelData(dataDir: string): { purged: string[] } {
   migrateTrackDir(dataDir)

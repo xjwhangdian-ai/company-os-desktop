@@ -2,7 +2,7 @@ import { readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import type { AgentName, OutputEntry } from '@shared/agent-types'
 
-/** 分身 → 编号文件夹名的唯一映射，outputs/ 与 inbox/ 共用同一套，保证两边结构互为镜像 */
+/** 分身 → 编号文件夹名的唯一映射，outputs/ 与 input/ 共用同一套，保证两边结构互为镜像 */
 export const AGENT_OUTPUT_FOLDER: Record<AgentName, string> = {
   sales: '01_销售_sales',
   solution: '02_解决方案_solution',

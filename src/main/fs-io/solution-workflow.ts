@@ -4,9 +4,9 @@ import type { SolutionFile, SolutionFileKind } from '@shared/agent-types'
 import { extractCompanion } from './doc-extract'
 
 // ============ 解决方案工作台的数据层 ============
-// 统一 inbox/outputs 约定：需求文件（输入）在 inbox，方案成品（产出）在 outputs 按项目建夹；
+// 统一 input/outputs 约定：需求文件（输入）在 input，方案成品（产出）在 outputs 按项目建夹；
 // 资料库/模板是跨项目的"库"，留在 解决方案/ 工作区：
-//   inbox/02_解决方案_solution/需求文件/  ← 钉钉会议录音(mp3/m4a/wav)、需求纪要(md/docx/pdf) + 转写产物 _转写.md
+//   input/02_解决方案_solution/需求文件/  ← 钉钉会议录音(mp3/m4a/wav)、需求纪要(md/docx/pdf) + 转写产物 _转写.md
 //   解决方案/基础产品库/                  ← 基础产品资料（可上传补充；产品统一口径仍以 knowledge/products/ 为准）
 //   解决方案/基础解决方案库/               ← 历史方案/行业方案，生成新方案时取结构与打法参考
 //   解决方案/_模板/解决方案模板/           ← 方案文档模板
@@ -14,7 +14,7 @@ import { extractCompanion } from './doc-extract'
 // 转写由 App 本地完成，方案生成由 solution 分身完成。
 
 const KIND_DIRS: Record<SolutionFileKind, string> = {
-  requirement: join('inbox', '02_解决方案_solution', '需求文件'),
+  requirement: join('input', '02_解决方案_solution', '需求文件'),
   productLib: join('解决方案', '基础产品库'),
   solutionLib: join('解决方案', '基础解决方案库'),
   policyLib: join('解决方案', '政策文件库'),
@@ -42,7 +42,7 @@ export function ensureSolutionDirs(dataDir: string): void {
 - \`行业趋势库/\` — 行业趋势报告与研报线索（同上，与行业情报分身打通）
 - \`_模板/解决方案模板/\` — 方案文档模板
 
-输入与产出走统一约定：需求文件（钉钉录音/纪要及其转写稿）在 \`inbox/02_解决方案_solution/需求文件/\`；
+输入与产出走统一约定：需求文件（钉钉录音/纪要及其转写稿）在 \`input/02_解决方案_solution/需求文件/\`；
 方案成品按项目归档在 \`outputs/02_解决方案_solution/{日期_项目}/\`。转写在本地完成（不消耗 AI 额度）。
 `,
       'utf-8'

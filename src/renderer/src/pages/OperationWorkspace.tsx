@@ -171,10 +171,10 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
       return
     }
     await refreshTemplates()
-    flash(`✅ 上传成功：${uploaded.join('、')}（已存入 inbox/05_运营_operation/_风格模板/）`)
+    flash(`✅ 上传成功：${uploaded.join('、')}（已存入 input/05_运营_operation/_风格模板/）`)
   }
 
-  /** 素材上传：填了主题就落主题文件夹并顺序改名，否则退回通用 inbox */
+  /** 素材上传：填了主题就落主题文件夹并顺序改名，否则退回通用 input */
   function uploadMedia(p: string): Promise<{ absPath: string; relativePath: string }> {
     return theme.trim() ? window.api.upload.operationTheme(theme.trim(), p) : window.api.upload.generic('operation', p)
   }
@@ -189,9 +189,9 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
     setInjectedPrompt(
       [
         `识别这次公众号配图的内容，供写文章时精准配图注（防图文不符）。`,
-        `1. 用 Read 工具**逐张打开** inbox/05_运营_operation/${t}/ 下的每张图片（jpg/png 等），看清实际画面。`,
+        `1. 用 Read 工具**逐张打开** input/05_运营_operation/${t}/ 下的每张图片（jpg/png 等），看清实际画面。`,
         `2. 为每张图写一个 JSON 对象：{"文件名":"原文件名带扩展名","描述":"画面内容4-12字如 讲师手持话筒演讲/校园红砖路人物背影","图注":"图：适合放进文章的一句说明"}。`,
-        `3. 用 Write 把 JSON 数组写到 inbox/05_运营_operation/${t}/_配图识别.json（只含 JSON 数组本身）。`,
+        `3. 用 Write 把 JSON 数组写到 input/05_运营_operation/${t}/_配图识别.json（只含 JSON 数组本身）。`,
         `4. 严格按真实画面写，绝不凭文件名臆测；看不清的图描述写"待人工确认"。`,
         `完成后回复识别了几张、有没有内容雷同或不适合入文的图。之后我点「应用重命名」App 会据此把图重命名并生成配图清单。`
       ].join('\n')
@@ -221,12 +221,12 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
     const isVideo = platform === '抖音' || platform === '微信视频号' || platform === '数字人短视频'
     const themeLine = t
       ? isVideo
-        ? `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_${PLATFORM_FOLDER[platform]}/（先建子文件夹）。视频/图片素材在 inbox/05_运营_operation/${t}/——先用 Glob 列出该目录全部文件，图片逐张 Read 看清画面再写分镜。`
-        : `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_${PLATFORM_FOLDER[platform]}/（先建子文件夹）。配图在 inbox/05_运营_operation/${t}/，若有 配图清单.md 先读它选图；插入每张图前用 Read 复核画面，图注严格对应画面内容，绝不张冠李戴。`
+        ? `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_${PLATFORM_FOLDER[platform]}/（先建子文件夹）。视频/图片素材在 input/05_运营_operation/${t}/——先用 Glob 列出该目录全部文件，图片逐张 Read 看清画面再写分镜。`
+        : `\n主题：${t}。产出写到 outputs/05_运营_operation/${t}_${PLATFORM_FOLDER[platform]}/（先建子文件夹）。配图在 input/05_运营_operation/${t}/，若有 配图清单.md 先读它选图；插入每张图前用 Read 复核画面，图注严格对应画面内容，绝不张冠李戴。`
       : ''
     const tplImages = templates.filter((x) => x.kind === '图片')
     const templateLine = selectedTemplate
-      ? `\n风格模板：先用 Read 读 inbox/05_运营_operation/_风格模板/${selectedTemplate}，仿照它的结构/语气/段落节奏组织本篇（内容仍以本次主题素材为准，不抄模板正文）。` +
+      ? `\n风格模板：先用 Read 读 input/05_运营_operation/_风格模板/${selectedTemplate}，仿照它的结构/语气/段落节奏组织本篇（内容仍以本次主题素材为准，不抄模板正文）。` +
         (tplImages.length > 0
           ? `同目录还有 ${tplImages.length} 张模板参考图（${tplImages
               .slice(0, 5)
@@ -263,7 +263,7 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
               onChange={(e) => setTheme(e.target.value)}
               placeholder="本篇主题，如 周末浙大充电学习"
               className="w-52 rounded-lg border border-slate-300 px-2.5 py-1 text-xs outline-none focus:border-jushi-accent"
-              title="填主题后，上传的图片/视频会归到 inbox/05_运营_operation/{主题}/ 并顺序改名，便于识别与配文"
+              title="填主题后，上传的图片/视频会归到 input/05_运营_operation/{主题}/ 并顺序改名，便于识别与配文"
             />
             <span className="ml-1 text-xs text-slate-400">素材：</span>
             {MEDIA_UPLOAD_KINDS.map((kind) => (
@@ -319,7 +319,7 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
             </select>
             <button
               onClick={() => handleUploadTemplate([{ name: '风格模板', extensions: ['html', 'htm', 'md'] }])}
-              title="上传 html/md 风格模板到 inbox/05_运营_operation/_风格模板/（跨主题复用）"
+              title="上传 html/md 风格模板到 input/05_运营_operation/_风格模板/（跨主题复用）"
               className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
             >
               📎 上传模板

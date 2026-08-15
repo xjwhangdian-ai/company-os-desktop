@@ -5,7 +5,7 @@ import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../components/PaneDivider'
 
 // ============ MBA 学习工作台（论文为主 + 课程学习） ============
-// 论文材料归 inbox/10_MBA学习_mba/_论文/{分类}/；课程材料归 {课程}/{分类}/。
+// 论文材料归 input/10_MBA学习_mba/_论文/{分类}/；课程材料归 {课程}/{分类}/。
 // 论文选题与研究框架来自《浙大MBA学生简况表》（分身定义内置），各阶段按钮组好提示词交给 mba 分身。
 
 interface CourseInfo {
@@ -32,7 +32,7 @@ const THESIS_STAGES: { icon: string; name: string; prompt: string }[] = [
   {
     icon: '🎯',
     name: '选题打磨',
-    prompt: `围绕我的意向选题 ${THESIS_TOPIC}，做一轮选题打磨：①把研究问题收敛为 1 个主问题 + 3 个子问题（可回答、可实证）②评估数据可得性（我能拿到的案例/访谈资源：海康在职+安防行业人脉）③给出 3 个可辩护的选题表述备选。先读 inbox/10_MBA学习_mba/_论文/开题与选题/ 里的已有材料再动手。`
+    prompt: `围绕我的意向选题 ${THESIS_TOPIC}，做一轮选题打磨：①把研究问题收敛为 1 个主问题 + 3 个子问题（可回答、可实证）②评估数据可得性（我能拿到的案例/访谈资源：海康在职+安防行业人脉）③给出 3 个可辩护的选题表述备选。先读 input/10_MBA学习_mba/_论文/开题与选题/ 里的已有材料再动手。`
   },
   {
     icon: '📋',
@@ -42,7 +42,7 @@ const THESIS_STAGES: { icon: string; name: string; prompt: string }[] = [
   {
     icon: '📚',
     name: '文献综述',
-    prompt: `读 inbox/10_MBA学习_mba/_论文/文献/ 下的全部文献，按主题聚类（商业模式创新/技术范式转换/工业AI与大模型产品化/竞争战略）写文献综述：每个主题先梳理共识，再指出分歧与缺口，最后落到"我的研究填补什么"。引用规范 GB/T 7714，同步更新 outputs/10_MBA学习_mba/_论文工作区/参考文献库.md（没有就新建）。`
+    prompt: `读 input/10_MBA学习_mba/_论文/文献/ 下的全部文献，按主题聚类（商业模式创新/技术范式转换/工业AI与大模型产品化/竞争战略）写文献综述：每个主题先梳理共识，再指出分歧与缺口，最后落到"我的研究填补什么"。引用规范 GB/T 7714，同步更新 outputs/10_MBA学习_mba/_论文工作区/参考文献库.md（没有就新建）。`
   },
   {
     icon: '🔬',
@@ -133,7 +133,7 @@ export function MbaWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.
     setShowChat(true)
     setPendingPrompt(
       `【一键生成作业】课程：「${course}」\n` +
-        `1. 先读 inbox/10_MBA学习_mba/${course}/ 下的全部材料（含根目录散文件与 作业与要求/、课件/ 子目录），找到作业要求与评分标准，逐条列出；没有作业要求就先停下来问我要。\n` +
+        `1. 先读 input/10_MBA学习_mba/${course}/ 下的全部材料（含根目录散文件与 作业与要求/、课件/ 子目录），找到作业要求与评分标准，逐条列出；没有作业要求就先停下来问我要。\n` +
         `2. 提炼课件与课堂录音转写里的核心框架与老师强调的工具。\n` +
         `3. 按 mba 分身规范完成作业：结合我的经历取材，有数据有立场有矛盾，学术诚信红线全守。\n` +
         `4. 产出到 outputs/10_MBA学习_mba/{今天日期_${course}_作业}/，md 底稿 + 按要求的成品格式。\n` +
@@ -148,7 +148,7 @@ export function MbaWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.
     }
     setShowChat(true)
     setPendingPrompt(
-      `读取 inbox/10_MBA学习_mba/${course}/课堂录音/ 下的转写纪要，按「概念→框架→案例→我的应用」四层整理成课堂笔记，输出到 outputs/10_MBA学习_mba/{今天日期_${course}_课堂笔记}/。音频没有对应转写的列出文件名提醒我先在钉钉导出。`
+      `读取 input/10_MBA学习_mba/${course}/课堂录音/ 下的转写纪要，按「概念→框架→案例→我的应用」四层整理成课堂笔记，输出到 outputs/10_MBA学习_mba/{今天日期_${course}_课堂笔记}/。音频没有对应转写的列出文件名提醒我先在钉钉导出。`
     )
   }
 
@@ -217,7 +217,7 @@ export function MbaWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.
               ))}
             </div>
 
-            <div className="mb-2 mt-4 text-xs font-semibold text-slate-500">论文材料（归档到 inbox/10_MBA学习_mba/_论文/）</div>
+            <div className="mb-2 mt-4 text-xs font-semibold text-slate-500">论文材料（归档到 input/10_MBA学习_mba/_论文/）</div>
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
               {THESIS_CATS.map((cat) => (
                 <div key={cat} className="flex flex-col rounded-xl border border-slate-200 bg-white p-3">

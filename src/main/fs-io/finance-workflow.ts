@@ -4,14 +4,14 @@ import type { FinanceEmployee, FinanceLedger, FinanceOverview, FinanceTask, Outp
 
 // ============ 财务工作台（记账/报税/工资社保，替代第三方财税代理） ============
 // 定位：把财税代理公司的「记账、报税、凭证相关服务」搬进 App——
-//   票据归档 → inbox/08_财务_finance/票据/{YYYY-MM}/（输入侧）
+//   票据归档 → input/08_财务_finance/票据/{YYYY-MM}/（输入侧）
 //   记账凭证/报税底稿/工资表 → outputs/08_财务_finance/{YYYY-MM}_xxx/（finance 分身产出）
 //   员工配置/发薪日/月度任务勾选 → 财务/财税台账.json（App 托管，path-guard 拦分身直写）
 // 红线：App 与分身只做「提醒 + 底稿 + 台账」，实际申报在电子税务局由人完成；
 //       口径以税务机关与税务师为准，社保基数等地方数字由分身联网查并标注来源。
 
 const LEDGER_REL = join('财务', '财税台账.json')
-const RECEIPTS_ROOT_REL = join('inbox', '08_财务_finance', '票据')
+const RECEIPTS_ROOT_REL = join('input', '08_财务_finance', '票据')
 
 function ledgerPath(dataDir: string): string {
   return join(dataDir, LEDGER_REL)
@@ -165,7 +165,7 @@ function countReceipts(dataDir: string, ym: string): number {
   return readdirSync(dir).filter((n) => !n.startsWith('.')).length
 }
 
-/** 票据（发票/回单/工资凭证扫描件）落 inbox/08_财务_finance/票据/{YYYY-MM}/，重名自动加序号 */
+/** 票据（发票/回单/工资凭证扫描件）落 input/08_财务_finance/票据/{YYYY-MM}/，重名自动加序号 */
 export function uploadReceipt(dataDir: string, ym: string, sourcePath: string): { relativePath: string } {
   const dir = receiptsDir(dataDir, ym)
   mkdirSync(dir, { recursive: true })

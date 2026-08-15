@@ -11,7 +11,7 @@ interface AgentChatProps {
   agent: AgentDisplayMeta
   /** 会话分桶键：默认按分身名共用一个对话；招投标按项目传 `bidding::{项目文件夹}`，每个项目独立对话 */
   sessionKey?: string
-  /** 上传文件落哪个目录：默认 inbox/，bidding 场景可传 biddingRoot */
+  /** 上传文件落哪个目录：默认 input/，bidding 场景可传 biddingRoot */
   uploadFn?: (sourcePath: string) => ReturnType<typeof window.api.upload.generic>
   /** 外部注入待发送草稿（如工作台的快捷动作按钮），填入输入框后清空，不自动发送 */
   pendingPrompt?: string | null

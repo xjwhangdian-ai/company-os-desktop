@@ -111,11 +111,11 @@ function ledgerSort(projects: BiddingProject[]): BiddingProject[] {
   })
 }
 
-/** 项目的招标原件（inbox 侧文件），供提示词点名让分身读 */
+/** 项目的招标原件（input 侧文件），供提示词点名让分身读 */
 function sourceFilesOf(project: BiddingProject): string[] {
   const flat = (entries: BiddingProject['files']): string[] =>
     entries.flatMap((e) => (e.isDirectory ? flat(e.children ?? []) : [e.relativePath]))
-  return flat(project.files).filter((rel) => rel.startsWith('inbox/'))
+  return flat(project.files).filter((rel) => rel.startsWith('input/'))
 }
 
 function clarificationFilesOf(project: BiddingProject): string[] {
@@ -231,7 +231,7 @@ function ProjectCardEditor({
       {/* 状态动作钩子：中标/未中标各自的闭环提示 */}
       {form.状态 === '已中标' && (
         <div className="mt-2 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700">
-          🎉 已中标——两步闭环别忘：① 中标合同上传到「法务审核」工作台送审（inbox/04_法务_legal/）；② 合同签署版存入
+          🎉 已中标——两步闭环别忘：① 中标合同上传到「法务审核」工作台送审（input/04_法务_legal/）；② 合同签署版存入
           bidding/_素材库/类似项目合同/ 对应分类（智能化类/装备类）——它就是下次投标的"类似项目业绩"。
         </div>
       )}
@@ -818,11 +818,11 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                         setPendingPrompt(
                           [
                             `对项目「${project.projectName}」生成投标文件初稿。`,
-                            `解析报告在 ${outputsDirOf(project)}/01_招标解析/ 下；招标原件：${sourceFilesOf(project).filter((r) => !r.includes('/02_答疑澄清/')).join('、') || '（inbox 侧未找到，先确认）'}。`,
+                            `解析报告在 ${outputsDirOf(project)}/01_招标解析/ 下；招标原件：${sourceFilesOf(project).filter((r) => !r.includes('/02_答疑澄清/')).join('、') || '（input 侧未找到，先确认）'}。`,
                             ...(clarificationFilesOf(project).length > 0
                               ? [`答疑/澄清文件（响应内容以最新澄清为准）：${clarificationFilesOf(project).join('、')}`]
                               : []),
-                            `严格按解析报告的标书目录框架、调用 bidding/_素材库/ 与 knowledge/，遵守 bidding 分身的全部投标规则；项目 inbox 侧 04_资质材料/ 如有本项目专用资质（如合作方资质），一并核对使用。`,
+                            `严格按解析报告的标书目录框架、调用 bidding/_素材库/ 与 knowledge/，遵守 bidding 分身的全部投标规则；项目 input 侧 04_资质材料/ 如有本项目专用资质（如合作方资质），一并核对使用。`,
                             `注意：${outputsDirOf(project)}/02_报价文件/ 下如有成本测算材料，只作内部参考，其内容严禁写入对外投标文件。`,
                             `产出：${outputsDirOf(project)}/04_投标文件成稿/${project.folderName}_投标文件初稿.md（三册一级标题结构）`
                           ].join('\n')
@@ -879,7 +879,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                       }
                     }}
                     className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                    title="答疑、澄清、变更公告——存进项目 inbox 侧的 02_答疑澄清/，解析和投标时分身会读"
+                    title="答疑、澄清、变更公告——存进项目 input 侧的 02_答疑澄清/，解析和投标时分身会读"
                   >
                     ＋ 答疑澄清
                   </button>

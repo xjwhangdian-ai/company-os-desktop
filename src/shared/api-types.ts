@@ -130,19 +130,19 @@ export interface CompanyOsApi {
     memberGuide(): Promise<string | null>
   }
   upload: {
-    /** 通用聊天上传：按分身落 inbox/{编号_分身}/，与 outputs/ 分身文件夹镜像 */
+    /** 通用聊天上传：按分身落 input/{编号_分身}/，与 outputs/ 分身文件夹镜像 */
     generic(agentName: AgentName, sourcePath: string): Promise<UploadResult>
-    /** 招标原件落 inbox/03_招投标_bidding/{日期_项目}/，返回配对的 outputs 侧目录 */
+    /** 招标原件落 input/03_招投标_bidding/{日期_项目}/，返回配对的 outputs 侧目录 */
     biddingProject(sourcePath: string): Promise<BiddingUploadResult>
     biddingMaterial(category: string, sourcePath: string): Promise<UploadResult>
     legalPending(sourcePath: string, category: ContractCategory): Promise<UploadResult>
-    /** 运营公众号素材按主题落 inbox/05_运营_operation/{主题}/，图片顺序重命名 {主题}_序号.ext */
+    /** 运营公众号素材按主题落 input/05_运营_operation/{主题}/，图片顺序重命名 {主题}_序号.ext */
     operationTheme(theme: string, sourcePath: string): Promise<UploadResult>
   }
   operation: {
     /** 读 {主题}/_配图识别.json（分身看图后写的），把图片重命名为 {主题}_序号_描述.ext 并生成 配图清单.md */
     applyImageNames(theme: string): Promise<{ renamed: number; listRelative: string; total: number }>
-    /** 风格模板（html/md）与模板参考图上传到 inbox/05_运营_operation/_风格模板/ */
+    /** 风格模板（html/md）与模板参考图上传到 input/05_运营_operation/_风格模板/ */
     uploadTemplate(sourcePath: string): Promise<UploadResult>
     listTemplates(): Promise<{ fileName: string; relativePath: string; kind: '模板' | '图片'; mtime: number }[]>
     /** outputs/05_运营_operation 下最近生成的推广文章（md/html，修改时间倒序前 10 条） */
@@ -158,9 +158,9 @@ export interface CompanyOsApi {
     saveCard(folderName: string, card: BidProjectCard): Promise<BidProjectCard>
     /** 导出跨项目台账 CSV 到 outputs/03_招投标_bidding/招标项目台账.csv */
     exportLedger(): Promise<{ path: string; count: number }>
-    /** 答疑/澄清文件上传到项目 inbox 侧的 答疑澄清/ 子文件夹 */
+    /** 答疑/澄清文件上传到项目 input 侧的 答疑澄清/ 子文件夹 */
     uploadClarification(projectFolder: string, sourcePath: string): Promise<UploadResult>
-    /** 人工下载的招标文件导入项目 inbox 侧 01_招标文件/（网站需登录验证，自动下载已改人工） */
+    /** 人工下载的招标文件导入项目 input 侧 01_招标文件/（网站需登录验证，自动下载已改人工） */
     uploadTenderFile(projectFolder: string, sourcePath: string): Promise<UploadResult>
     /** intel 每日追踪推送的待确认候选项目（已确认/已忽略的不再返回） */
     listCandidates(): Promise<IntelCandidate[]>
@@ -174,17 +174,17 @@ export interface CompanyOsApi {
     moveProjectToPriority(folderName: string): Promise<{ ok: boolean; 文件夹: string; 说明: string }>
     /** 采购结果公告「跟进」——中标信息+评审专家（标注采购人代表）入中标公告台账.xlsx，附件下载归档 */
     followWinner(key: string): Promise<{ ok: boolean; 说明: string; 归档目录?: string }>
-    /** 下载某项目的招标文件（浙江政采源，登录感知）→ inbox 01_招标文件/，并回填招标编号 */
+    /** 下载某项目的招标文件（浙江政采源，登录感知）→ input 01_招标文件/，并回填招标编号 */
     downloadTender(folderName: string): Promise<TenderDownloadResult>
     /** 下载前探测招标公告附件清单（不下载），供 UI 弹「人工确认后再下载」提示 */
     probeTender(folderName: string): Promise<TenderProbeResult>
-    /** 忽略/删除项目：inbox+outputs 两侧文件夹移入系统废纸篓（可从废纸篓恢复） */
+    /** 忽略/删除项目：input+outputs 两侧文件夹移入系统废纸篓（可从废纸篓恢复） */
     deleteProject(folderName: string): Promise<{ ok: boolean; 说明: string }>
   }
   intel: {
     /** sgpjbg.com 研报情报（行业趋势 + 政策文件），取最新一天信息流 */
     listReports(): Promise<IntelReport[]>
-    /** 清除超过三天的旧情报机读数据（信息流/候选/研报 JSON + inbox 原始抓取），保留日报 */
+    /** 清除超过三天的旧情报机读数据（信息流/候选/研报 JSON + input 原始抓取），保留日报 */
     purgeStale(): Promise<{ purged: string[] }>
     /** App 内置抓取最近三天招投标信息（浙江政采/台州工程/台州阳光采购，跨平台可用，不依赖 git 同步） */
     fetchNow(force?: boolean): Promise<{ ok: boolean; 新增条数: number; 平台结果: string[]; 说明: string }>
@@ -207,7 +207,7 @@ export interface CompanyOsApi {
     setReportKeywords(keywords: string[]): Promise<{ ok: boolean; 说明: string }>
   }
   mba: {
-    /** 课程列表（inbox/10_MBA学习_mba/ 下的课程文件夹与三类文件计数） */
+    /** 课程列表（input/10_MBA学习_mba/ 下的课程文件夹与三类文件计数） */
     listCourses(): Promise<{ name: string; 课件数: number; 作业数: number; 录音数: number }[]>
     /** 按课程归档上传：课件 / 作业与要求 / 课堂录音（含钉钉A1导出的转写与音频） */
     uploadCourse(course: string, category: '课件' | '作业与要求' | '课堂录音', sourcePath: string): Promise<{ absPath: string; relativePath: string }>
@@ -364,7 +364,7 @@ export interface CompanyOsApi {
     toggleTask(ym: string, taskKey: string, done: boolean): Promise<void>
     /** 保存员工配置与发薪日（财务/财税台账.json，App 托管） */
     saveEmployees(员工: FinanceEmployee[], 发薪日: number): Promise<FinanceLedger>
-    /** 票据上传 → inbox/08_财务_finance/票据/{YYYY-MM}/ */
+    /** 票据上传 → input/08_财务_finance/票据/{YYYY-MM}/ */
     uploadReceipt(ym: string, sourcePath: string): Promise<{ relativePath: string }>
     listReceipts(ym: string): Promise<OutputEntry[]>
     processInvoices(files: string[]): Promise<{

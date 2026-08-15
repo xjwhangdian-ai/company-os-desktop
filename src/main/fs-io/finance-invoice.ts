@@ -5,14 +5,14 @@ import { augmentedPath, resolvePython } from './env-check'
 
 // ============ 财务：发票 OCR 识别入台账（纯机械，不经过 AI）============
 // 选发票图片 → macOS Vision OCR 提取（发票号码/日期/购销双方/价税合计，红字负数）→
-// 按「开票日期-购买方-金额」重命名；输入侧保留一份到 inbox/08_财务_finance/票据/{开票月份}/，
+// 按「开票日期-购买方-金额」重命名；输入侧保留一份到 input/08_财务_finance/票据/{开票月份}/，
 // 输出侧把重命名发票与累计台账统一放进 outputs/08_财务_finance/发票台账/。
 // 台账只增不覆盖，按发票号码去重；识别失败件统一放同一输出目录下的 待人工/。
 // 方向自动判定：销售方含我方主体词=销项(开出)，购买方含=进项(收到)。
 
 const LEDGER_DIR_REL = join('outputs', '08_财务_finance', '发票台账')
 const LEDGER_NAME = '发票台账.xlsx'
-const RECEIPTS_REL = join('inbox', '08_财务_finance', '票据')
+const RECEIPTS_REL = join('input', '08_财务_finance', '票据')
 
 const isWin = process.platform === 'win32'
 
@@ -128,14 +128,14 @@ export async function processInvoices(dataDir: string, files: string[]): Promise
     if (n > 1) seen.add(String(row.getCell(2).value ?? ''))
   })
 
-  // v0.1.14 前的台账把发票只归档在 inbox/票据/{月份}/，第 8 列写「票据/月份/文件名」。
+  // v0.1.14 前的台账把发票只归档在 input/票据/{月份}/，第 8 列写「票据/月份/文件名」。
   // 读旧台账时机械补齐到输出目录，并把第 8 列改成与台账同目录的文件名。
   ws.eachRow((row, n) => {
     if (n <= 1) return
     const stored = String(row.getCell(8).value ?? '').trim()
     if (!stored || !stored.startsWith('票据/')) return
     const outputName = basename(stored)
-    const source = join(dataDir, 'inbox', '08_财务_finance', stored)
+    const source = join(dataDir, 'input', '08_财务_finance', stored)
     const output = join(ledgerDir, outputName)
     try {
       if (existsSync(source) && !existsSync(output)) copyFileSync(source, output)

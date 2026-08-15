@@ -9,12 +9,12 @@ import { extractZjgovParams, readTenderSource } from './intel-source'
 // 公告链接从项目 outputs 侧的 _情报来源.json / 00_情报来源.md 读（见 intel-source.ts）。
 // 下载走数据仓库的 zjgov_downloader.py（Selenium 复用 Chrome 调试 profile 登录态）——仅浙江政采源可自动下载。
 
-const INBOX_BIDDING_REL = join('inbox', '03_招投标_bidding')
+const INBOX_BIDDING_REL = join('input', '03_招投标_bidding')
 
 // 自动下载/探测依赖 Python(Selenium)+ 已登录调试 Chrome 的抓取栈，目前只在 Mac 管理员机就绪。
 // 非 macOS（如 Windows 成员机）直接给出手动下载指引，避免 spawn 不存在的可执行文件报错。
 const AUTO_DOWNLOAD_SUPPORTED = process.platform === 'darwin'
-const WIN_MANUAL_HINT = '当前系统不支持自动下载招标文件，请点项目名超链接在浏览器手动下载后，把文件拖进项目 inbox/01_招标文件/'
+const WIN_MANUAL_HINT = '当前系统不支持自动下载招标文件，请点项目名超链接在浏览器手动下载后，把文件拖进项目 input/01_招标文件/'
 
 /** Chrome 调试端口 9222 是否就绪；未就绪则拉起（独立 profile，需已登录政采会员） */
 function ensureChromeDebug(): Promise<boolean> {
@@ -150,7 +150,7 @@ export async function probeTenderFile(dataDir: string, folderName: string): Prom
 }
 
 /**
- * 下载某项目的招标文件到 inbox 侧 01_招标文件/，成功则回填项目卡招标编号。
+ * 下载某项目的招标文件到 input 侧 01_招标文件/，成功则回填项目卡招标编号。
  * 登录感知：脚本复用 Chrome 调试 profile 的登录态；若被反爬/未登录拦截，返回 needsLogin=true 让 UI 提示先登录。
  */
 export async function downloadTenderFile(dataDir: string, folderName: string): Promise<TenderDownloadResult> {

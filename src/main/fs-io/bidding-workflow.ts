@@ -4,12 +4,12 @@ import type { BidProjectCard, BiddingProject, MaterialLibraryCounts, OutputEntry
 import { BID_PROJECT_STATUSES } from '@shared/agent-types'
 import { readTenderSource } from './intel-source'
 
-// ============ 招投标项目 = inbox/outputs 两侧同名文件夹配对 ============
-//   inbox/03_招投标_bidding/{YYYY-MM-DD_项目}/    ← 招标原件（App 上传时机械建夹）
+// ============ 招投标项目 = input/outputs 两侧同名文件夹配对 ============
+//   input/03_招投标_bidding/{YYYY-MM-DD_项目}/    ← 招标原件（App 上传时机械建夹）
 //   outputs/03_招投标_bidding/{YYYY-MM-DD_项目}/  ← 解析报告/质疑函/投标文件（分身写入）
 // 跨项目共享的素材库仍在 bidding/_素材库/（它是库，不是某个项目的输入或产出）。
 
-const INBOX_ROOT_REL = join('inbox', '03_招投标_bidding')
+const INBOX_ROOT_REL = join('input', '03_招投标_bidding')
 const OUTPUTS_ROOT_REL = join('outputs', '03_招投标_bidding')
 const PROJECT_FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_.+/
 
@@ -21,7 +21,7 @@ const MATERIAL_CATEGORIES: Array<keyof MaterialLibraryCounts> = [
   '类似项目合同'
 ]
 
-/** 递归列出目录下全部文件，relativePath 相对数据目录（inbox/... 或 outputs/... 开头，UI 靠它区分来源侧） */
+/** 递归列出目录下全部文件，relativePath 相对数据目录（input/... 或 outputs/... 开头，UI 靠它区分来源侧） */
 function listFilesRecursive(dataDir: string, dir: string): OutputEntry[] {
   let names: string[] = []
   try {
@@ -197,7 +197,7 @@ export function exportBiddingLedger(dataDir: string): { path: string; count: num
   return { path: outPath, count: projects.length }
 }
 
-/** 扫描 inbox/outputs 两侧的项目文件夹并按同名配对，供项目列表页展示进度徽章 */
+/** 扫描 input/outputs 两侧的项目文件夹并按同名配对，供项目列表页展示进度徽章 */
 export function listBiddingProjects(dataDir: string): BiddingProject[] {
   const inboxRoot = join(dataDir, INBOX_ROOT_REL)
   const outputsRoot = join(dataDir, OUTPUTS_ROOT_REL)
@@ -241,7 +241,7 @@ export function listBiddingProjects(dataDir: string): BiddingProject[] {
   return projects
 }
 
-/** 返回项目 inbox/outputs 两侧文件夹的绝对路径（仅返回磁盘上确实存在的一侧）。删除项目时用它拿到要清理的路径。 */
+/** 返回项目 input/outputs 两侧文件夹的绝对路径（仅返回磁盘上确实存在的一侧）。删除项目时用它拿到要清理的路径。 */
 export function resolveBiddingProjectPaths(dataDir: string, folderName: string): string[] {
   if (!PROJECT_FOLDER_PATTERN.test(folderName)) return []
   const paths: string[] = []

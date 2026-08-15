@@ -25,7 +25,7 @@ const SRCDIR = path.dirname(path.resolve(SRC));
 const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 // 解析图片实际路径：绝对路径直用；相对路径先按 md 所在目录找，
-// 找不到再从 md 目录逐级向上，直到命中（分身写的图多是相对数据根的 inbox/…，
+// 找不到再从 md 目录逐级向上，直到命中（分身写的图多是相对数据根的 input/…，
 // 而 md 在 outputs/… 下，两者基准不同——向上兜底即可两种写法都命中）。
 function resolveImg(rel){
   if(path.isAbsolute(rel)) return fs.existsSync(rel) ? rel : null;
@@ -117,7 +117,7 @@ while(i<lines.length){
       // 找不到图片：给醒目占位并在控制台告警，绝不静默丢图
       console.error('⚠ 图片未找到，已占位：', m[2]);
       out.push(`<section style="${T.photoSlot}"><p style="${T.photoSlotLabel}">📷 图片未找到：${esc(m[1]||'配图')}</p>`
-        + `<p style="${T.photoSlotHint}">路径 ${esc(m[2])} 未定位到文件——请核对图片是否已上传到 inbox/05_运营_operation/，或在编辑器手动插入</p></section>`);
+        + `<p style="${T.photoSlotHint}">路径 ${esc(m[2])} 未定位到文件——请核对图片是否已上传到 input/05_运营_operation/，或在编辑器手动插入</p></section>`);
     }
     i++; continue;
   }

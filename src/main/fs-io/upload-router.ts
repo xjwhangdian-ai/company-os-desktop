@@ -5,11 +5,11 @@ import { AGENT_OUTPUT_FOLDER } from './outputs-scanner'
 import { extractCompanion } from './doc-extract'
 
 // ============ 统一约定（v3）============
-// 专属工作流的"输入"统一进 inbox/{编号_分身}/，"产出"统一进 outputs/{编号_分身}/{项目}/：
-//   招投标：inbox/03_招投标_bidding/{日期_项目}/（招标原件） ⇄ outputs/03_招投标_bidding/{日期_项目}/（解析/质疑/投标）
-//   法务：  inbox/04_法务_legal/【类型】合同（处理完移 已处理/） → 意见书进 outputs/04_法务_legal/{日期_合同}/
-//   销售：  inbox/01_销售_sales/供应商资料/ → 报价进 outputs/01_销售_sales/{日期_客户_报价}/
-//   方案：  inbox/02_解决方案_solution/需求文件/ → 方案进 outputs/02_解决方案_solution/{日期_项目}/
+// 专属工作流的"输入"统一进 input/{编号_分身}/，"产出"统一进 outputs/{编号_分身}/{项目}/：
+//   招投标：input/03_招投标_bidding/{日期_项目}/（招标原件） ⇄ outputs/03_招投标_bidding/{日期_项目}/（解析/质疑/投标）
+//   法务：  input/04_法务_legal/【类型】合同（处理完移 已处理/） → 意见书进 outputs/04_法务_legal/{日期_合同}/
+//   销售：  input/01_销售_sales/供应商资料/ → 报价进 outputs/01_销售_sales/{日期_客户_报价}/
+//   方案：  input/02_解决方案_solution/需求文件/ → 方案进 outputs/02_解决方案_solution/{日期_项目}/
 // 跨项目复用的"库"不属于输入也不属于产出，留在各工作区：bidding/_素材库、销售/产品库+图片库+模板、
 // 解决方案/基础产品库+基础解决方案库+模板、法务/_模板。
 
@@ -29,8 +29,8 @@ function uniqueDestPath(destDir: string, fileName: string): string {
 }
 
 /**
- * 通用聊天上传：按分身落到 inbox/{编号_分身}/ 子文件夹（与 outputs/ 的分身文件夹同名镜像），
- * 避免所有分身的上传混在一个平铺 inbox 里。返回相对数据目录的路径供拼进聊天 prompt。
+ * 通用聊天上传：按分身落到 input/{编号_分身}/ 子文件夹（与 outputs/ 的分身文件夹同名镜像），
+ * 避免所有分身的上传混在一个平铺 input 里。返回相对数据目录的路径供拼进聊天 prompt。
  */
 export function uploadToInbox(
   dataDir: string,
@@ -38,10 +38,10 @@ export function uploadToInbox(
   sourcePath: string
 ): { absPath: string; relativePath: string } {
   const folder = AGENT_OUTPUT_FOLDER[agentName]
-  const destDir = join(dataDir, 'inbox', folder)
+  const destDir = join(dataDir, 'input', folder)
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `inbox/${folder}/${basename(dest)}` }
+  return { absPath: dest, relativePath: `input/${folder}/${basename(dest)}` }
 }
 
 function todayStr(): string {
@@ -59,14 +59,14 @@ function deriveBiddingFolder(sourcePath: string): string {
   return `${todayStr()}_${stem || '未命名项目'}`
 }
 
-/** 项目内分桶（参考"投标项目管理"系统的分类结构，按输入/产出拆到 inbox/outputs 两侧） */
+/** 项目内分桶（参考"投标项目管理"系统的分类结构，按输入/产出拆到 input/outputs 两侧） */
 export const BIDDING_INBOX_BUCKETS = ['01_招标文件', '02_答疑澄清', '03_供应商信息', '04_资质材料', '99_往来沟通'] as const
 export const BIDDING_OUTPUT_BUCKETS = ['01_招标解析', '02_报价文件', '03_技术方案', '04_投标文件成稿', '05_合同与履约'] as const
 
 /** 新建/补齐项目的两侧分桶骨架（人往里放文件不用自己记该建哪些文件夹） */
 export function ensureBiddingProjectSkeleton(dataDir: string, projectFolder: string): void {
   for (const bucket of BIDDING_INBOX_BUCKETS) {
-    mkdirSync(join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, bucket), { recursive: true })
+    mkdirSync(join(dataDir, 'input', '03_招投标_bidding', projectFolder, bucket), { recursive: true })
   }
   for (const bucket of BIDDING_OUTPUT_BUCKETS) {
     mkdirSync(join(dataDir, 'outputs', '03_招投标_bidding', projectFolder, bucket), { recursive: true })
@@ -74,47 +74,47 @@ export function ensureBiddingProjectSkeleton(dataDir: string, projectFolder: str
 }
 
 /**
- * bidding 专属：招标原文件落 inbox/03_招投标_bidding/{日期_项目}/01_招标文件/，
+ * bidding 专属：招标原文件落 input/03_招投标_bidding/{日期_项目}/01_招标文件/，
  * 并同时建好两侧完整分桶骨架（两侧同名配对）。
  * 同一天重复上传同名文件会进同一个项目文件夹（追加而不是另开项目）。
  */
 export function uploadToBiddingProject(dataDir: string, sourcePath: string): BiddingUploadResult {
   const projectFolder = deriveBiddingFolder(sourcePath)
   ensureBiddingProjectSkeleton(dataDir, projectFolder)
-  const destDir = join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, '01_招标文件')
+  const destDir = join(dataDir, 'input', '03_招投标_bidding', projectFolder, '01_招标文件')
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
   return {
     absPath: dest,
-    relativePath: `inbox/03_招投标_bidding/${projectFolder}/01_招标文件/${basename(dest)}`,
+    relativePath: `input/03_招投标_bidding/${projectFolder}/01_招标文件/${basename(dest)}`,
     projectFolder,
     outputsDirRelative: `outputs/03_招投标_bidding/${projectFolder}`
   }
 }
 
-/** bidding 专属：人工下载的招标文件导入既有项目 inbox 侧的 01_招标文件/（网站需登录验证，自动下载已改人工） */
+/** bidding 专属：人工下载的招标文件导入既有项目 input 侧的 01_招标文件/（网站需登录验证，自动下载已改人工） */
 export function uploadToBiddingTenderFile(
   dataDir: string,
   projectFolder: string,
   sourcePath: string
 ): { absPath: string; relativePath: string } {
-  const destDir = join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, '01_招标文件')
+  const destDir = join(dataDir, 'input', '03_招投标_bidding', projectFolder, '01_招标文件')
   mkdirSync(destDir, { recursive: true })
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `inbox/03_招投标_bidding/${projectFolder}/01_招标文件/${basename(dest)}` }
+  return { absPath: dest, relativePath: `input/03_招投标_bidding/${projectFolder}/01_招标文件/${basename(dest)}` }
 }
 
-/** bidding 专属：答疑/澄清/变更公告落到项目 inbox 侧的 02_答疑澄清/ 分桶（追加解析时分身要读） */
+/** bidding 专属：答疑/澄清/变更公告落到项目 input 侧的 02_答疑澄清/ 分桶（追加解析时分身要读） */
 export function uploadToBiddingClarification(
   dataDir: string,
   projectFolder: string,
   sourcePath: string
 ): { absPath: string; relativePath: string } {
-  const destDir = join(dataDir, 'inbox', '03_招投标_bidding', projectFolder, '02_答疑澄清')
+  const destDir = join(dataDir, 'input', '03_招投标_bidding', projectFolder, '02_答疑澄清')
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `inbox/03_招投标_bidding/${projectFolder}/02_答疑澄清/${basename(dest)}` }
+  return { absPath: dest, relativePath: `input/03_招投标_bidding/${projectFolder}/02_答疑澄清/${basename(dest)}` }
 }
 
 /** bidding 专属：素材库 5 分类各自的上传入口 */
@@ -130,7 +130,7 @@ export function uploadToMaterialLibrary(
 }
 
 /**
- * 法务专属：待审合同落 inbox/04_法务_legal/（处理完由"标记已审"移进 已处理/ 子文件夹）。
+ * 法务专属：待审合同落 input/04_法务_legal/（处理完由"标记已审"移进 已处理/ 子文件夹）。
  * 合同类型（销售合同/工程合同/其他）编码进文件名前缀【类型】——待审队列保持平铺，
  * 一份合同一个文件，"每合同再套一层文件夹"只添点击不添信息；产出侧（审核意见书）
  * 才按项目建文件夹（outputs/04_法务_legal/{日期_合同名}/）。
@@ -140,7 +140,7 @@ export function uploadToLegalPending(
   sourcePath: string,
   category: string
 ): { absPath: string; relativePath: string } {
-  const destDir = join(dataDir, 'inbox', '04_法务_legal')
+  const destDir = join(dataDir, 'input', '04_法务_legal')
   const fileName = `【${category}】${basename(sourcePath)}`
   const dest = uniqueDestPath(destDir, fileName)
   copyFileSync(sourcePath, dest)
@@ -148,7 +148,7 @@ export function uploadToLegalPending(
   if (/\.(docx|doc)$/i.test(dest)) {
     void extractCompanion(dest).catch(() => null)
   }
-  return { absPath: dest, relativePath: `inbox/04_法务_legal/${basename(dest)}` }
+  return { absPath: dest, relativePath: `input/04_法务_legal/${basename(dest)}` }
 }
 
 /** 法务专属：合同模板按类型存进 法务/_模板/合同模板/{category}/，供"与模板对比"功能匹配 */
@@ -163,17 +163,17 @@ export function uploadToLegalTemplate(
   return { absPath: dest, relativePath: `法务/_模板/合同模板/${category}/${basename(dest)}` }
 }
 
-/** 销售专属：供应商产品资料/投标报价文件落 inbox/01_销售_sales/供应商资料/（喂产品库的原料，属输入侧） */
+/** 销售专属：供应商产品资料/投标报价文件落 input/01_销售_sales/供应商资料/（喂产品库的原料，属输入侧） */
 export function uploadToSalesRawDoc(dataDir: string, sourcePath: string): { absPath: string; relativePath: string } {
-  const destDir = join(dataDir, 'inbox', '01_销售_sales', '供应商资料')
+  const destDir = join(dataDir, 'input', '01_销售_sales', '供应商资料')
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `inbox/01_销售_sales/供应商资料/${basename(dest)}` }
+  return { absPath: dest, relativePath: `input/01_销售_sales/供应商资料/${basename(dest)}` }
 }
 
 // ============ 运营（公众号配图）专属 ============
 // 痛点：手机/微信图是哈希名，谁也看不出内容，分身配图文全靠猜 → 图文不符。
-// 解法：①按主题落 inbox/05_运营_operation/{主题}/ 并顺序重命名 {主题}_序号.ext（分组+编号）；
+// 解法：①按主题落 input/05_运营_operation/{主题}/ 并顺序重命名 {主题}_序号.ext（分组+编号）；
 //       ②「AI 识别配图」让分身逐张看图写 _配图识别.json，App 据此把文件重命名成
 //         {主题}_序号_{内容描述}.ext 并生成 配图清单.md，从此文件名自带内容、配文不再张冠李戴。
 
@@ -182,14 +182,14 @@ function sanitizeSeg(s: string): string {
   return (s || '').replace(/[\\/:*?"<>|\n\r\t]/g, '').replace(/\s+/g, '').trim()
 }
 
-/** 运营专属：公众号素材按主题落 inbox/05_运营_operation/{主题}/；图片顺序重命名 {主题}_序号.ext */
+/** 运营专属：公众号素材按主题落 input/05_运营_operation/{主题}/；图片顺序重命名 {主题}_序号.ext */
 export function uploadToOperationTheme(
   dataDir: string,
   theme: string,
   sourcePath: string
 ): { absPath: string; relativePath: string } {
   const t = sanitizeSeg(theme).slice(0, 40) || todayStr()
-  const destDir = join(dataDir, 'inbox', '05_运营_operation', t)
+  const destDir = join(dataDir, 'input', '05_运营_operation', t)
   mkdirSync(destDir, { recursive: true })
   const ext = extname(sourcePath).toLowerCase()
   let fileName: string
@@ -201,7 +201,7 @@ export function uploadToOperationTheme(
   }
   const dest = uniqueDestPath(destDir, fileName)
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `inbox/05_运营_operation/${t}/${basename(dest)}` }
+  return { absPath: dest, relativePath: `input/05_运营_operation/${t}/${basename(dest)}` }
 }
 
 /**
@@ -213,7 +213,7 @@ export function applyOperationImageNames(
   theme: string
 ): { renamed: number; listRelative: string; total: number } {
   const t = sanitizeSeg(theme).slice(0, 40)
-  const dir = join(dataDir, 'inbox', '05_运营_operation', t)
+  const dir = join(dataDir, 'input', '05_运营_operation', t)
   const jsonPath = join(dir, '_配图识别.json')
   if (!existsSync(jsonPath)) {
     throw new Error('还没有识别结果——请先点「🔍 AI 识别配图」让分身逐张看图并写出 _配图识别.json')
@@ -252,7 +252,7 @@ export function applyOperationImageNames(
     `# ${t} · 配图清单\n\n> App 按分身识别结果重命名并生成。写文章时据此选图配文，插入前仍需 Read 复核画面。\n\n${rows.join('\n')}\n`,
     'utf-8'
   )
-  return { renamed, listRelative: `inbox/05_运营_operation/${t}/配图清单.md`, total: seq }
+  return { renamed, listRelative: `input/05_运营_operation/${t}/配图清单.md`, total: seq }
 }
 
 /** 销售专属：报价文件模板落 销售/_模板/报价模板/ */
@@ -265,7 +265,7 @@ export function uploadToSalesTemplate(dataDir: string, sourcePath: string): { ab
 
 // ============ 运营（风格模板 + 最近文章）============
 
-const OPERATION_TEMPLATE_REL = join('inbox', '05_运营_operation', '_风格模板')
+const OPERATION_TEMPLATE_REL = join('input', '05_运营_operation', '_风格模板')
 const TEMPLATE_DOC_EXTS = ['html', 'htm', 'md']
 const TEMPLATE_IMG_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 
@@ -277,12 +277,12 @@ export interface OperationTemplateEntry {
   mtime: number
 }
 
-/** 运营专属：风格模板（html/md）与模板参考图上传到 inbox/05_运营_operation/_风格模板/ */
+/** 运营专属：风格模板（html/md）与模板参考图上传到 input/05_运营_operation/_风格模板/ */
 export function uploadOperationTemplate(dataDir: string, sourcePath: string): { absPath: string; relativePath: string } {
   const destDir = join(dataDir, OPERATION_TEMPLATE_REL)
   const dest = uniqueDestPath(destDir, basename(sourcePath))
   copyFileSync(sourcePath, dest)
-  return { absPath: dest, relativePath: `inbox/05_运营_operation/_风格模板/${basename(dest)}` }
+  return { absPath: dest, relativePath: `input/05_运营_operation/_风格模板/${basename(dest)}` }
 }
 
 export function listOperationTemplates(dataDir: string): OperationTemplateEntry[] {
@@ -296,7 +296,7 @@ export function listOperationTemplates(dataDir: string): OperationTemplateEntry[
     if (!kind) continue
     out.push({
       fileName: name,
-      relativePath: `inbox/05_运营_operation/_风格模板/${name}`,
+      relativePath: `input/05_运营_operation/_风格模板/${name}`,
       kind,
       mtime: statSync(join(dir, name)).mtimeMs
     })
@@ -344,7 +344,7 @@ export function listRecentOperationArticles(dataDir: string, limit = 10): Recent
   return out.sort((a, b) => b.mtime - a.mtime).slice(0, limit)
 }
 
-// ── MBA 学习分身：按课程归档（inbox/10_MBA学习_mba/{课程}/{分类}/）────────────
+// ── MBA 学习分身：按课程归档（input/10_MBA学习_mba/{课程}/{分类}/）────────────
 /** 课程三类 + 论文材料分类（开题与选题/文献/数据与案例/导师沟通），统一走本通道 */
 export type MbaUploadCategory = string
 
@@ -356,7 +356,7 @@ export function uploadToMbaCourse(
 ): { absPath: string; relativePath: string } {
   const c = sanitizeSeg(course).slice(0, 40) || '未分类课程'
   const cat = sanitizeSeg(category).slice(0, 20) || '未分类'
-  const rel = join('inbox', '10_MBA学习_mba', c, cat)
+  const rel = join('input', '10_MBA学习_mba', c, cat)
   const destDir = join(dataDir, rel)
   mkdirSync(destDir, { recursive: true })
   const dest = join(destDir, basename(sourcePath))
@@ -372,7 +372,7 @@ export interface MbaCourseInfo {
 }
 
 export function listMbaCourses(dataDir: string): MbaCourseInfo[] {
-  const root = join(dataDir, 'inbox', '10_MBA学习_mba')
+  const root = join(dataDir, 'input', '10_MBA学习_mba')
   if (!existsSync(root)) return []
   const count = (p: string): number => {
     try {

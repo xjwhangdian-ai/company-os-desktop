@@ -109,14 +109,14 @@ export interface BidProjectCard {
 }
 
 /**
- * 招投标项目 = inbox/03_招投标_bidding/{项目}/（招标原件）+ outputs/03_招投标_bidding/{项目}/（解析/质疑/投标产出）
+ * 招投标项目 = input/03_招投标_bidding/{项目}/（招标原件）+ outputs/03_招投标_bidding/{项目}/（解析/质疑/投标产出）
  * 同名文件夹配对；两侧任一存在即视为一个项目。
  */
 export interface BiddingProject {
   folderName: string
   projectName: string
   date: string
-  /** inbox 侧项目文件夹绝对路径（可能还没有，比如手工只建了产出侧） */
+  /** input 侧项目文件夹绝对路径（可能还没有，比如手工只建了产出侧） */
   inboxPath?: string
   /** outputs 侧项目文件夹绝对路径 */
   outputsPath?: string
@@ -128,7 +128,7 @@ export interface BiddingProject {
   card: BidProjectCard | null
   /** 情报推送来源（_情报来源.json）：公告链接 + 能否自动下载招标文件；手工建的项目为 null */
   tenderSource: TenderSource | null
-  /** 两侧文件合并列表（relativePath 以 inbox/ 或 outputs/ 开头区分来源） */
+  /** 两侧文件合并列表（relativePath 以 input/ 或 outputs/ 开头区分来源） */
   files: OutputEntry[]
 }
 
@@ -278,7 +278,7 @@ export interface ContractTemplate {
 
 /**
  * 角色：管理员管"大脑与库"（设置页、成员管理、数据目录/供应商配置），普通员工用分身干活
- * （上传 inbox、生成 outputs）。注意这是**轻量权限**（单机 App 的界面级区分），不是安全体系。
+ * （上传 input、生成 outputs）。注意这是**轻量权限**（单机 App 的界面级区分），不是安全体系。
  */
 export type MemberRole = 'admin' | 'member'
 

@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile)
 
 // ============ 一键同步（git pull --rebase + push） ============
 // 数据仓库的同步中枢是 git 远程（管理员机器指 GitHub，成员机器可指内网裸仓库）。
-// .gitignore 已把 inbox/outputs/knowledge-internal 排除在外——同步的只有"大脑与库"，
+// .gitignore 已把 input/outputs/knowledge-internal 排除在外——同步的只有"大脑与库"，
 // 上传原件与分身产出天然留在本机，这里不需要再做任何过滤。
 // 打包 App 从桌面启动时 PATH 可能不含 git 安装目录，这里按平台显式补上；
 // 代理环境变量（如 HTTPS_PROXY）随 process.env 自然继承。

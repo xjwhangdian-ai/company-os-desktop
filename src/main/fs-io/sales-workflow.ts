@@ -27,7 +27,7 @@ import type { CellValue } from 'exceljs'
 import { detectHeaders, readWorkbookRows, readWorkbookRowImages } from './doc-extract'
 
 // ============ 销售工作台的数据层 ============
-// 统一 inbox/outputs 约定后，供应商资料原件在输入侧 inbox/01_销售_sales/供应商资料/（见 upload-router），
+// 统一 input/outputs 约定后，供应商资料原件在输入侧 input/01_销售_sales/供应商资料/（见 upload-router），
 // 报价成品在 outputs/01_销售_sales/{日期_客户_报价}/；本模块只管跨项目复用的"库"：
 //   销售/产品库/产品库.json      ← 产品库规范数据，App 托管（分身禁止直接写，见 path-guard）
 //   销售/产品库/_待入库/         ← 分身解析产出的暂存 JSON，App 校验合并后归档到 已合并/
@@ -39,7 +39,7 @@ import { detectHeaders, readWorkbookRows, readWorkbookRowImages } from './doc-ex
 // 为什么产品库是"一个 JSON"而不是按供应商拆多个文件：查询/去重都是跨供应商的（同一产品
 // 多家供货要合并对比），单文件一次读取全量过滤最简单；量级是公司采购目录（几百到几千条），
 // 单文件毫秒级；Google Drive 双机同步下文件越少冲突面越小；"多个供应商资料库"的原始形态
-// 已经完整保留在 inbox/01_销售_sales/供应商资料/ 里，产品库.json 只是合并后的索引。
+// 已经完整保留在 input/01_销售_sales/供应商资料/ 里，产品库.json 只是合并后的索引。
 const PRODUCT_DB_REL = join('销售', '产品库', '产品库.json')
 const CUSTOMER_DB_REL = join('销售', '客户库.json')
 const STAGING_DIR_REL = join('销售', '产品库', '_待入库')
@@ -77,7 +77,7 @@ export function ensureSalesDirs(dataDir: string): void {
 - \`_模板/报价模板/\` — 对外报价文件模板
 - \`客户库.json\` — CRM 客户与跟进记录（App 托管）
 
-输入与产出走统一约定：供应商资料/投标报价原件在 \`inbox/01_销售_sales/供应商资料/\`；报价成品在 \`outputs/01_销售_sales/{日期_客户_报价}/\`。
+输入与产出走统一约定：供应商资料/投标报价原件在 \`input/01_销售_sales/供应商资料/\`；报价成品在 \`outputs/01_销售_sales/{日期_客户_报价}/\`。
 
 红线：产品库里的供应商联系人/联系方式/成本价是采购侧信息，**严禁出现在对外报价文件**里。
 `,
@@ -912,7 +912,7 @@ export async function generateSupplierQuoteList(
   const pad = (n: number): string => String(n).padStart(2, '0')
   const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   const stem = pdfFileName.replace(/\.[^.]+$/, '')
-  const outDir = join(dataDir, 'inbox', '01_销售_sales', '供应商资料')
+  const outDir = join(dataDir, 'input', '01_销售_sales', '供应商资料')
   mkdirSync(outDir, { recursive: true })
   const outPath = join(outDir, `${date}_供应商报价清单_${stem}_待补充.xlsx`)
   await wb.xlsx.writeFile(outPath)

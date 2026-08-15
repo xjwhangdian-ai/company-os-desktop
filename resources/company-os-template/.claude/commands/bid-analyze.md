@@ -1,4 +1,4 @@
-读取 inbox/ 下最新的招标文件，调用 bidding 子代理完成完整拆解。
+读取 input/ 下最新的招标文件，调用 bidding 子代理完成完整拆解。
 
 重点关注：$ARGUMENTS
 

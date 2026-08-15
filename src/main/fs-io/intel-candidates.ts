@@ -311,7 +311,7 @@ export function moveBiddingProjectToPriority(
 ): { ok: boolean; 文件夹: string; 说明: string } {
   if (!/^\d{4}-\d{2}-\d{2}_.+/.test(folderName)) return { ok: false, 文件夹: '', 说明: '项目文件夹格式不正确' }
   const outputsPath = join(dataDir, OUTPUTS_BIDDING_REL, folderName)
-  const inboxPath = join(dataDir, 'inbox', '03_招投标_bidding', folderName)
+  const inboxPath = join(dataDir, 'input', '03_招投标_bidding', folderName)
   if (!existsSync(outputsPath) && !existsSync(inboxPath)) return { ok: false, 文件夹: '', 说明: '跟进项目不存在，可能已被移动或删除' }
 
   const name = folderName.slice(11)
