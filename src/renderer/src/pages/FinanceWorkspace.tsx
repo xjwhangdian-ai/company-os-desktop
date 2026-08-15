@@ -8,6 +8,12 @@ import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 
 type FinanceTab = '财税日历' | '记账报税' | '工资社保'
+type FinanceJob = 'bookkeeping' | 'tax'
+
+const FINANCE_JOB_META: Record<FinanceJob, { label: string; outputDir: (ym: string) => string }> = {
+  bookkeeping: { label: 'AI 记账', outputDir: (ym) => `outputs/08_财务_finance/${ym}_记账/` },
+  tax: { label: '报税底稿', outputDir: (ym) => `outputs/08_财务_finance/${ym}_报税/` }
+}
 
 const RECEIPT_FILTERS = [{ name: '票据（发票/回单/扫描件）', extensions: ['pdf', 'jpg', 'jpeg', 'png', 'ofd', 'xlsx', 'csv'] }]
 
@@ -89,6 +95,8 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [showChat, setShowChat] = useState(true)
   const [chatW, setChatW] = usePersistedSize(CHAT_PANE_KEY, CHAT_PANE.def, CHAT_PANE.min, CHAT_PANE.max)
   const [notice, setNotice] = useState<string | null>(null)
+  const [queuedFinanceJob, setQueuedFinanceJob] = useState<FinanceJob | null>(null)
+  const [runningFinanceJob, setRunningFinanceJob] = useState<FinanceJob | null>(null)
 
   useEffect(() => {
     if (pendingPrompt) setShowChat(true)
@@ -152,6 +160,31 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     } finally {
       setInvoiceBusy(false)
     }
+  }
+
+  function startFinanceJob(job: FinanceJob, prompt: string): void {
+    const { label, outputDir } = FINANCE_JOB_META[job]
+    setQueuedFinanceJob(job)
+    setPendingPrompt(prompt)
+    setShowChat(true)
+    flash(`${label}已提交：将读取本月票据并生成成果到 ${outputDir(ym)}；执行进度和结果会显示在右侧对话区。`)
+  }
+
+  function handleFinanceJobAutoSent(): void {
+    if (!queuedFinanceJob) return
+    const { label, outputDir } = FINANCE_JOB_META[queuedFinanceJob]
+    setRunningFinanceJob(queuedFinanceJob)
+    setQueuedFinanceJob(null)
+    flash(`${label}正在执行，完成后会自动提示；成果目录：${outputDir(ym)}`)
+  }
+
+  async function handleFinanceJobComplete(): Promise<void> {
+    if (!runningFinanceJob) return
+    const { label, outputDir } = FINANCE_JOB_META[runningFinanceJob]
+    setRunningFinanceJob(null)
+    setShowOutputs(true)
+    await refresh()
+    flash(`${label}执行完成：请在右侧对话区核对结论，成果已保存到 ${outputDir(ym)}`)
   }
 
   async function handleSaveEmployees(): Promise<void> {
@@ -255,13 +288,13 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                   {invoiceBusy ? '识别中…' : '🧾 发票识别入台账'}
                 </button>
                 <button
-                  onClick={() => setPendingPrompt(buildBookkeepingPrompt(ym, receipts))}
+                  onClick={() => startFinanceJob('bookkeeping', buildBookkeepingPrompt(ym, receipts))}
                   className="rounded-lg bg-jushi-accent px-3 py-1.5 text-sm font-medium text-white"
                 >
                   ✍️ AI 记账（凭证+报表底稿）
                 </button>
                 <button
-                  onClick={() => setPendingPrompt(buildTaxPrompt(ym))}
+                  onClick={() => startFinanceJob('tax', buildTaxPrompt(ym))}
                   className="rounded-lg border border-jushi-accent px-3 py-1.5 text-sm font-medium text-jushi-accent hover:bg-jushi-accent/5"
                 >
                   🧾 生成报税底稿
@@ -407,7 +440,14 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
           </div>
         </div>
         <div className="min-h-0 flex-1">
-          <AgentChat agent={agent} pendingPrompt={pendingPrompt} onPendingPromptConsumed={() => setPendingPrompt(null)} />
+          <AgentChat
+            agent={agent}
+            pendingPrompt={pendingPrompt}
+            pendingAutoSend
+            onPendingPromptConsumed={() => setPendingPrompt(null)}
+            onPendingPromptAutoSent={handleFinanceJobAutoSent}
+            onRunComplete={() => void handleFinanceJobComplete()}
+          />
         </div>
       </div>
       </div>
@@ -423,7 +463,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         </button>
         {showOutputs && (
           <>
-            <h3 className="px-3 pb-1 text-xs font-semibold text-slate-500">产出：outputs/finance</h3>
+            <h3 className="px-3 pb-1 text-xs font-semibold text-slate-500">产出：outputs/08_财务_finance</h3>
             <div className="overflow-y-auto" style={{ maxHeight: 'calc(100% - 60px)' }}>
               <OutputsPanel
                 agentName="finance"

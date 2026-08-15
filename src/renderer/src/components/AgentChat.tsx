@@ -18,6 +18,10 @@ interface AgentChatProps {
   onPendingPromptConsumed?: () => void
   /** 为 true 时 pendingPrompt 直接自动发送（分身空闲时），不经输入框；分身正忙则退回填输入框 */
   pendingAutoSend?: boolean
+  /** 自动发送成功时回调，供工作台显示“任务已开始”的执行反馈。 */
+  onPendingPromptAutoSent?: () => void
+  /** 本组件发起的分身任务结束时回调，供工作台刷新成果区并提示完成。 */
+  onRunComplete?: () => void
   /** 外部注入待发送附件（如运营页的素材上传区），合并进输入框旁的附件列表，不自动发送 */
   pendingAttachments?: ChatAttachment[] | null
   onPendingAttachmentsConsumed?: () => void
@@ -30,6 +34,8 @@ export function AgentChat({
   pendingPrompt,
   onPendingPromptConsumed,
   pendingAutoSend,
+  onPendingPromptAutoSent,
+  onRunComplete,
   pendingAttachments: injectedAttachments,
   onPendingAttachmentsConsumed
 }: AgentChatProps): React.JSX.Element {
@@ -37,6 +43,8 @@ export function AgentChat({
   const [input, setInput] = useState('')
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
+  const startedByPendingPrompt = useRef(false)
+  const autoRunObserved = useRef(false)
 
   const session = useChatStore((s) => s.sessions[sessionKey])
   const sendMessage = useChatStore((s) => s.sendMessage)
@@ -51,7 +59,10 @@ export function AgentChat({
     if (pendingPrompt) {
       if (pendingAutoSend && !(session?.isRunning ?? false)) {
         // 直发模式（如画册抠图的核对任务）：跳过输入框直接发给分身；分身正忙则退回填输入框
+        startedByPendingPrompt.current = true
+        autoRunObserved.current = false
         sendMessage(agent.name as AgentName, sessionKey, pendingPrompt.trim())
+        onPendingPromptAutoSent?.()
       } else {
         setInput(pendingPrompt)
       }
@@ -59,6 +70,19 @@ export function AgentChat({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPrompt, pendingAutoSend, onPendingPromptConsumed])
+
+  useEffect(() => {
+    // 只反馈由工作台快捷按钮自动发起的任务，避免普通对话结束时出现误提示。
+    if (startedByPendingPrompt.current && (session?.isRunning ?? false)) {
+      autoRunObserved.current = true
+      return
+    }
+    if (startedByPendingPrompt.current && autoRunObserved.current) {
+      startedByPendingPrompt.current = false
+      autoRunObserved.current = false
+      onRunComplete?.()
+    }
+  }, [session?.isRunning, onRunComplete])
 
   useEffect(() => {
     if (injectedAttachments && injectedAttachments.length > 0) {
