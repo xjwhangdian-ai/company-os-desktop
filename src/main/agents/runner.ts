@@ -6,7 +6,6 @@ import { join } from 'node:path'
 import type { AgentName } from '@shared/agent-types'
 import type { AgentStreamEvent } from '@shared/stream-events'
 import { guardToolCall } from '../fs-io/path-guard'
-import { archiveIfUnderOutputs } from '../fs-io/git-archive'
 import { isStampablePath, stampProvenance } from '../fs-io/provenance'
 import { loadAgentDefinitions } from './loader'
 import { resolveModel } from '../config/model-mapping'
@@ -81,8 +80,8 @@ function mapAssistantErrorToMessage(err: string): string {
  */
 export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentStreamEvent> {
   const { agentName, prompt, dataDir, resumeSessionId, abortController, userName } = params
-  /** Write/Edit 的 tool_use 请求先记下目标文件路径，等对应 tool_result 确认成功了再落地归档/盖戳——
-   * 避免请求被拒绝或执行失败时也误把 git add / 操作人戳套用到一个其实没变化的文件上。 */
+  /** Write/Edit 的 tool_use 请求先记下目标文件路径，等对应 tool_result 确认成功后再盖操作人戳。
+   * 业务文件绝不由 App 自动执行 git add；Git 只由开发流程提交代码与配置。 */
   const pendingFileWrites = new Map<string, { toolName: string; filePath: string }>()
 
   const canUseTool: CanUseTool = async (toolName, input) => {
@@ -216,7 +215,6 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentStr
 
               const pending = pendingFileWrites.get(block.tool_use_id)
               if (pending && !isError) {
-                await archiveIfUnderOutputs(dataDir, pending.filePath)
                 if (userName && pending.toolName === 'Write' && isStampablePath(dataDir, pending.filePath)) {
                   stampProvenance(pending.filePath, userName)
                 }

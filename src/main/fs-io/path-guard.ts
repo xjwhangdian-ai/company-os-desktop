@@ -8,6 +8,9 @@ import { join, resolve, sep } from 'node:path'
  */
 
 const DANGEROUS_BASH_PATTERN = /rm -rf|knowledge\/[^ ]*[ ]*>/
+// 分身运行在用户业务数据目录内。禁止它通过 Bash 暂存、提交或推送任何业务文件；
+// 代码与配置的 Git 提交只能由开发环境的人工/自动化流程完成。
+const GIT_MUTATING_PATTERN = /\bgit\b[^|;&\n]*\b(add|commit|push|reset|checkout|restore|rm|mv)\b/
 
 export interface GuardResult {
   allowed: boolean
@@ -70,6 +73,12 @@ export function guardToolCall(
 
   if (toolName === 'Bash') {
     const command = typeof input.command === 'string' ? input.command : ''
+    if (GIT_MUTATING_PATTERN.test(command)) {
+      return {
+        allowed: false,
+        reason: '已拦截：App 分身不得提交、暂存或改写 Git；业务数据只保留在 input/、outputs/ 与 libraries/。'
+      }
+    }
     if (DANGEROUS_BASH_PATTERN.test(command)) {
       return {
         allowed: false,
