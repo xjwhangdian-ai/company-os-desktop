@@ -298,9 +298,9 @@ export interface CompanyOsApi {
     uploadSupplierDoc(sourcePath: string): Promise<SupplierDocPreview>
     /** 按表头识别结果把 xlsx/csv 机械导入产品库（不经过 AI） */
     importExcel(relativePath: string): Promise<{ added: number; updated: number; skipped: number; attachedImages?: number }>
-    /** 成员导入管理员交付的产品库 Excel，只写当前电脑的本地产品库。 */
+    /** 导入产品库 Excel，只写当前电脑的本地产品库。 */
     importMemberCatalog(sourcePath: string): Promise<{ added: number; updated: number; skipped: number; attachedImages?: number }>
-    /** 管理员导出可交付给成员的产品库 Excel（仅销售字段，内嵌可用图片）。 */
+    /** 导出可交付给其他电脑的产品库 Excel（仅销售字段，内嵌可用图片）。 */
     exportMemberCatalog(): Promise<{ outPath: string; count: number }>
     /** 把报价单产品的图片导出到 outputs 报价目录的 图片/ 子文件夹 */
     exportQuoteImages(productIds: string[], customerName: string): Promise<{ dir: string; exported: number; missing: string[] }>

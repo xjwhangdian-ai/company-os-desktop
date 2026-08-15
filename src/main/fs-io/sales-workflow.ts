@@ -582,8 +582,8 @@ function memberCatalogImageExt(path: string): 'jpeg' | 'png' | 'gif' | null {
 }
 
 /**
- * 管理员导出可交付给成员电脑的离线产品库 Excel。
- * 表内嵌入可用产品图片；成员在产品库点「导入产品库 Excel」后，图片会随行写入自己的本地库。
+ * 任一用户导出可交付给其他电脑的离线产品库 Excel。
+ * 表内嵌入可用产品图片；导入后，图片会随行写入目标电脑的本地库。
  */
 export async function exportMemberProductCatalog(dataDir: string): Promise<{ outPath: string; count: number }> {
   const db = readProductDb(dataDir)
@@ -625,7 +625,7 @@ export async function exportMemberProductCatalog(dataDir: string): Promise<{ out
   return { outPath, count: db.products.length }
 }
 
-/** 成员将管理员交付的 Excel 导入自己的本机产品库；不会访问网络或改变其他电脑的数据。 */
+/** 将产品库 Excel 导入自己的本机产品库；不会访问网络或改变其他电脑的数据。 */
 export async function importMemberProductCatalog(dataDir: string, sourcePath: string): Promise<MergeResult> {
   if (extname(sourcePath).toLowerCase() !== '.xlsx') throw new Error('请导入管理员导出的 .xlsx 产品库文件')
   const importDir = join(dataDir, '销售', '产品库', '成员导入')

@@ -21,7 +21,6 @@ import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 import { useConfigStore } from '../stores/useConfigStore'
-import { useIdentityStore } from '../stores/useIdentityStore'
 
 type SalesTab = '产品库' | '选型' | '报价单' | '客户'
 type UploadMode = 'supplier' | 'bid'
@@ -116,7 +115,7 @@ const EMPTY_PRODUCT_FORM: ProductFields = {
 }
 
 const SUPPLIER_DOC_FILTERS = [{ name: '供应商资料', extensions: ['xlsx', 'csv', 'pdf', 'docx', 'doc', 'txt', 'md'] }]
-const MEMBER_CATALOG_FILTERS = [{ name: '管理员产品库 Excel', extensions: ['xlsx'] }]
+const MEMBER_CATALOG_FILTERS = [{ name: '产品库 Excel', extensions: ['xlsx'] }]
 const TEMPLATE_FILTERS = [{ name: '报价模板', extensions: ['docx', 'pdf', 'md', 'txt', 'xlsx'] }]
 const IMAGE_FILTERS = [{ name: '产品图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'] }]
 
@@ -482,7 +481,6 @@ function matchExistingSuppliers(
 }
 
 export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
-  const isAdmin = useIdentityStore((state) => state.currentUser?.role === 'admin')
   const config = useConfigStore((s) => s.config)
   const dataDir = config?.companies.find((c) => c.id === config.activeCompanyId)?.dataDir ?? null
 
@@ -636,7 +634,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     setBusy(true)
     try {
       const result = await window.api.sales.importMemberCatalog(paths[0])
-      flash(`✅ 已导入成员产品库：新增 ${result.added} 条、更新 ${result.updated} 条${result.attachedImages ? `，导入图片 ${result.attachedImages} 张` : ''}`)
+      flash(`✅ 已导入产品库：新增 ${result.added} 条、更新 ${result.updated} 条${result.attachedImages ? `，导入图片 ${result.attachedImages} 张` : ''}`)
       await refreshProducts()
       await refreshCategoryDict()
     } catch (err) {
@@ -1072,41 +1070,35 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 <button
                   onClick={() => void handleImportMemberCatalog()}
                   disabled={busy}
-                  title="导入管理员交付的成员产品库 Excel，只写当前电脑的数据目录，不会联网同步"
+                  title="导入产品库 Excel，只写当前电脑的数据目录，不会联网同步"
                   className="rounded-lg border border-sky-300 px-3 py-1.5 text-sm text-jushi-accent hover:bg-sky-50 disabled:opacity-50"
                 >
                   📥 导入产品库 Excel
                 </button>
-                {isAdmin && (
-                  <button
-                    onClick={() => void handleExportMemberCatalog()}
-                    disabled={busy || products.length === 0}
-                    title="导出可交付给成员电脑的产品库 Excel（不含成本、供应商与联系人）"
-                    className="rounded-lg border border-emerald-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-                  >
-                    📤 导出成员产品库
-                  </button>
-                )}
-                {isAdmin && (
-                  <>
-                    <button
-                      onClick={() => handleUploadDocs('supplier')}
-                      disabled={busy}
-                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      📎 供应商资料
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAddForm((v) => !v)
-                        setEditingId(null)
-                      }}
-                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-                    >
-                      ＋ 手动添加
-                    </button>
-                  </>
-                )}
+                <button
+                  onClick={() => void handleExportMemberCatalog()}
+                  disabled={busy || products.length === 0}
+                  title="导出可交付给其他成员的产品库 Excel（不含成本、供应商与联系人）"
+                  className="rounded-lg border border-emerald-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                >
+                  📤 导出产品库 Excel
+                </button>
+                <button
+                  onClick={() => handleUploadDocs('supplier')}
+                  disabled={busy}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  📎 供应商资料
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddForm((v) => !v)
+                    setEditingId(null)
+                  }}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  ＋ 手动添加
+                </button>
                 <button
                   disabled={busy || sortedProducts.length === 0}
                   onClick={async () => {
@@ -1307,7 +1299,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                 </div>
               ))}
 
-              {isAdmin && (showAddForm || editingId) && (
+              {(showAddForm || editingId) && (
                 <ProductForm
                   initial={editingId ? (products.find((p) => p.id === editingId) ?? EMPTY_PRODUCT_FORM) : EMPTY_PRODUCT_FORM}
                   catDict={catDict}
@@ -1453,7 +1445,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                                 }}
                                 onDoubleClick={(e) => e.stopPropagation()}
                               />
-                            ) : isAdmin ? (
+                            ) : (
                               <button
                                 onClick={() => handleSetImage(p.id)}
                                 title="上传产品图片"
@@ -1461,8 +1453,6 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                               >
                                 +图
                               </button>
-                            ) : (
-                              <span className="text-slate-300">—</span>
                             )}
                           </td>
                           <td className="truncate px-2 py-0.5 text-slate-500" title={p.品牌}>
@@ -1511,34 +1501,30 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                             >
                               更多{expandedId === p.id ? '▴' : '▾'}
                             </button>
-                            {isAdmin && (
-                              <button
-                                onClick={() => {
-                                  setEditingId(p.id)
-                                  setShowAddForm(false)
-                                }}
-                                className="mr-1.5 text-slate-400 hover:text-slate-600"
-                              >
-                                编辑
-                              </button>
-                            )}
-                            {isAdmin && (
-                              <button
-                                onClick={async () => {
-                                  if (!window.confirm(`确认删除产品「${p.产品名称}」吗？此操作会同时移除该产品关联的图片。`)) return
-                                  try {
-                                    await window.api.sales.removeProduct(p.id)
-                                    await refreshProducts()
-                                    flash(`已删除「${p.产品名称}」`)
-                                  } catch (err) {
-                                    flash(err instanceof Error ? err.message : String(err))
-                                  }
-                                }}
-                                className="text-slate-300 hover:text-red-500"
-                              >
-                                删除
-                              </button>
-                            )}
+                            <button
+                              onClick={() => {
+                                setEditingId(p.id)
+                                setShowAddForm(false)
+                              }}
+                              className="mr-1.5 text-slate-400 hover:text-slate-600"
+                            >
+                              编辑
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm(`确认删除产品「${p.产品名称}」吗？此操作会同时移除该产品关联的图片。`)) return
+                                try {
+                                  await window.api.sales.removeProduct(p.id)
+                                  await refreshProducts()
+                                  flash(`已删除「${p.产品名称}」`)
+                                } catch (err) {
+                                  flash(err instanceof Error ? err.message : String(err))
+                                }
+                              }}
+                              className="text-slate-300 hover:text-red-500"
+                            >
+                              删除
+                            </button>
                           </td>
                         </tr>
                         {expandedId === p.id && (
@@ -1586,7 +1572,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
                     {filteredProducts.length === 0 && (
                       <tr>
                         <td colSpan={PROD_COLS.length} className="px-2 py-6 text-center text-slate-400">
-                          {products.length === 0 ? '产品库为空——请导入管理员提供的产品库 Excel' : '没有匹配的产品'}
+                          {products.length === 0 ? '产品库为空——请导入产品库 Excel、上传供应商资料或手动添加' : '没有匹配的产品'}
                         </td>
                       </tr>
                     )}

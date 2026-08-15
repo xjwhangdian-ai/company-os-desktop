@@ -110,16 +110,6 @@ export function getCurrentUserName(): string {
   return currentUserName
 }
 
-/** 产品库的新增、编辑、删除会影响当前电脑的报价与选型，因此仅管理员可执行。 */
-function requireCurrentAdmin(): void {
-  const member = listTeamMembers().find((item) => item.name === currentUserName)
-  if (member?.role !== 'admin') throw new Error('产品库仅允许管理员维护；成员可导入管理员交付的产品库 Excel')
-}
-
-function isCurrentAdmin(): boolean {
-  return listTeamMembers().some((item) => item.name === currentUserName && item.role === 'admin')
-}
-
 /** 只有一个入口注册全部 IPC handler，避免重启热重载时重复 registerHandler 报错 */
 export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC.configGet, (): AppConfig => getConfig())
@@ -380,19 +370,12 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
 
   // ============ 销售工作台 ============
-  ipcMain.handle(IPC.salesListProducts, () => listProducts(getDataDir(), isCurrentAdmin()))
+  ipcMain.handle(IPC.salesListProducts, () => listProducts(getDataDir()))
   ipcMain.handle(IPC.salesListCategoryDict, () => listCategoryDict(getDataDir()))
-  ipcMain.handle(IPC.salesSaveProduct, (_e, fields: ProductFields, id?: string) => {
-    requireCurrentAdmin()
-    return saveProduct(getDataDir(), fields, id)
-  })
-  ipcMain.handle(IPC.salesRemoveProduct, (_e, id: string) => {
-    requireCurrentAdmin()
-    removeProduct(getDataDir(), id)
-  })
+  ipcMain.handle(IPC.salesSaveProduct, (_e, fields: ProductFields, id?: string) => saveProduct(getDataDir(), fields, id))
+  ipcMain.handle(IPC.salesRemoveProduct, (_e, id: string) => removeProduct(getDataDir(), id))
 
   ipcMain.handle(IPC.salesUploadSupplierDoc, async (_e, sourcePath: string): Promise<SupplierDocPreview> => {
-    requireCurrentAdmin()
     const dataDir = getDataDir()
     const { absPath, relativePath } = uploadToSalesRawDoc(dataDir, sourcePath)
     const preview: SupplierDocPreview = { relativePath, fileName: basename(absPath) }
@@ -416,15 +399,9 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return preview
   })
 
-  ipcMain.handle(IPC.salesImportExcel, (_e, relativePath: string) => {
-    requireCurrentAdmin()
-    return importExcelByHeader(getDataDir(), relativePath)
-  })
+  ipcMain.handle(IPC.salesImportExcel, (_e, relativePath: string) => importExcelByHeader(getDataDir(), relativePath))
   ipcMain.handle(IPC.salesImportMemberCatalog, (_e, sourcePath: string) => importMemberProductCatalog(getDataDir(), sourcePath))
-  ipcMain.handle(IPC.salesExportMemberCatalog, () => {
-    requireCurrentAdmin()
-    return exportMemberProductCatalog(getDataDir())
-  })
+  ipcMain.handle(IPC.salesExportMemberCatalog, () => exportMemberProductCatalog(getDataDir()))
 
   ipcMain.handle(IPC.salesListTemplates, () => listQuotationTemplates(getDataDir()))
   ipcMain.handle(IPC.salesUploadTemplate, async (_e, sourcePath: string) => {
@@ -436,10 +413,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return listQuotationTemplates(dataDir).find((t) => t.fileName === fileName)
   })
 
-  ipcMain.handle(IPC.salesSetProductImage, (_e, id: string, sourcePath: string) => {
-    requireCurrentAdmin()
-    return setProductImage(getDataDir(), id, sourcePath)
-  })
+  ipcMain.handle(IPC.salesSetProductImage, (_e, id: string, sourcePath: string) => setProductImage(getDataDir(), id, sourcePath))
   ipcMain.handle(IPC.salesExportQuoteImages, (_e, productIds: string[], customerName: string) =>
     exportQuoteImages(getDataDir(), productIds, customerName)
   )
