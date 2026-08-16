@@ -44,6 +44,18 @@ if not OCR_BACKEND:
 
 # 我方主体关键词：销售方含之=销项(开出)，购买方含之=进项(收到)
 OUR_KEYWORDS = ["瑾智", "谨智", "炬视", "宏朗"]
+# 我方主体统一社会信用代码：宏朗商贸 2025-08-21 工商变更更名为 瑾智安防(同一主体,代码不变)。
+# 名称 OCR 可能误读(如「瑾智安防」→「瑶韶安纺」),凭信用代码可稳妥判定方向。
+OUR_CREDIT_CODES = ["91331002MAD559NN1C"]
+
+
+def _credit_code(text):
+    """从区域/全文文本提取统一社会信用代码(18 位);找不到返回空串。"""
+    m = re.search(
+        r"(?:統?一(?:社会|社會)信用代?[码碼]|納?税(?:人|務)識?别号)[^0-9A-Z]{0,8}([0-9A-Z]{15,20})",
+        text or "",
+    )
+    return m.group(1) if m else ""
 
 
 def clean_name(s):
@@ -162,8 +174,12 @@ def parse_one(path):
     date_text = _crop_text(image, 0.60, 0.12, 0.99, 0.26)
     date_match = re.search(r"开票(?:日期|日[期B])?[：:]?(20\d{2})[^0-9]{0,5}(\d{1,2})[^0-9]{0,5}(\d{1,2})", date_text)
     d = _valid_date(date_match)
-    buyer = _name_from_region(_crop_text(image, 0.08, 0.27, 0.50, 0.40))
-    seller = _name_from_region(_crop_text(image, 0.50, 0.27, 0.99, 0.40))
+    buyer_region = _crop_text(image, 0.08, 0.27, 0.50, 0.40)
+    seller_region = _crop_text(image, 0.50, 0.27, 0.99, 0.40)
+    buyer = _name_from_region(buyer_region)
+    seller = _name_from_region(seller_region)
+    buyer_code = _credit_code(buyer_region)
+    seller_code = _credit_code(seller_region)
     # 区域若抓到货物行(项目名称/规格/型号/数量/单价/*)不算名称，视为缺失
     def _is_name_like(s):
         return bool(s) and not any(x in s for x in ("*", "项目", "规格", "型号", "数量", "单价"))
@@ -174,12 +190,16 @@ def parse_one(path):
     # 全文本兜底：区域未取到购销方时，用「名称:XXX 信用代码」配对补全
     # （成品油等异版式发票购销方块不在固定裁剪区）；按我方关键词自动区分购销方。
     if not buyer or not seller:
-        for nm, _code in _names_from_full_text(full):
-            if any(k in nm for k in OUR_KEYWORDS):
+        for nm, code in _names_from_full_text(full):
+            if any(k in nm for k in OUR_KEYWORDS) or code in OUR_CREDIT_CODES:
                 if not buyer:
                     buyer = nm
+                    if not buyer_code:
+                        buyer_code = code
             elif not seller:
                 seller = nm
+                if not seller_code:
+                    seller_code = code
     amt = _pick_amount(full)
     missing = []
     if not num_value:
@@ -196,10 +216,17 @@ def parse_one(path):
     # and amounts wholesale.
     compact = d.replace("-", "") if d else "00000000"
     direction = "待确认"
-    if any(k in seller for k in OUR_KEYWORDS):
+    # 名称含我方关键词，或统一社会信用代码为我方(宏朗=瑾智,2025-08-21 更名,代码不变)→ 判定方向
+    if any(k in seller for k in OUR_KEYWORDS) or seller_code in OUR_CREDIT_CODES:
         direction = "销项"
-    elif any(k in buyer for k in OUR_KEYWORDS):
+    elif any(k in buyer for k in OUR_KEYWORDS) or buyer_code in OUR_CREDIT_CODES:
         direction = "进项"
+    # 信用代码确认是我司但名称被 OCR 误读(如「瑾智安防」→「瑶韶安纺」)时，归一为正式名。
+    # 2025-08-21 前旧名「宏朗商贸」的发票名称含关键词，保留原名不归一(历史口径)。
+    if buyer_code in OUR_CREDIT_CODES and not any(k in buyer for k in OUR_KEYWORDS):
+        buyer = "台州市瑾智安防设备有限公司"
+    if seller_code in OUR_CREDIT_CODES and not any(k in seller for k in OUR_KEYWORDS):
+        seller = "台州市瑾智安防设备有限公司"
     ext = os.path.splitext(path)[1].lower()
     amt_name = ("红冲" + amt[1:]) if amt.startswith("-") else (amt or "待确认")
     # 重命名规则(2026-08-15 起):进项按「日期-销售方-金额」、销项按「日期-购买方-金额」、
