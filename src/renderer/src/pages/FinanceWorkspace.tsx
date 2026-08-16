@@ -10,6 +10,18 @@ import { HELP_CONTENT } from '../lib/help-content'
 type FinanceTab = '财税日历' | '记账报税' | '工资社保'
 type FinanceJob = 'bookkeeping' | 'tax'
 
+/** 发票识别入台账执行结果（与主进程 finance-invoice.ts 返回结构一致） */
+interface InvoiceProcessResult {
+  ok: boolean
+  成功: number
+  重复: number
+  失败: { 原文件: string; 原因: string }[]
+  销项合计: number
+  进项合计: number
+  台账路径: string
+  说明: string
+}
+
 const FINANCE_JOB_META: Record<FinanceJob, { label: string; outputDir: (ym: string) => string }> = {
   bookkeeping: { label: 'AI 记账', outputDir: (ym) => `outputs/08_财务_finance/${ym}_记账/` },
   tax: { label: '报税底稿', outputDir: (ym) => `outputs/08_财务_finance/${ym}_报税/` }
@@ -136,7 +148,8 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   }
 
   const [invoiceBusy, setInvoiceBusy] = useState(false)
-  /** 发票识别入台账：选图片→OCR提取五要素→按 日期-购买方-金额 归档→追加累计台账（号码去重） */
+  const [invoiceResult, setInvoiceResult] = useState<InvoiceProcessResult | null>(null)
+  /** 发票识别入台账：选图片→OCR提取五要素→方向化重命名（进项按销售方、销项按购买方）→追加累计台账（号码去重），结果反馈到页面 */
   async function handleProcessInvoices(): Promise<void> {
     const paths = await window.api.dialog.pickFiles([
       { name: '发票图片', extensions: ['png', 'jpg', 'jpeg'] }
@@ -146,11 +159,13 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
       flash('主进程还是旧版本——请完全退出（Cmd+Q）后重新打开再试')
       return
     }
+    setInvoiceResult(null)
     setInvoiceBusy(true)
     flash(`正在识别 ${paths.length} 张发票（本机离线OCR，约每张1-2秒）…`)
     try {
       const r = await window.api.finance.processInvoices(paths)
-      flash(r.说明 + '——输出文件夹已打开定位')
+      setInvoiceResult(r)
+      flash(r.说明)
       await window.api.shell.showItemInFolder(r.台账路径)
       if (r.失败.length > 0) {
         setTimeout(() => flash(`识别失败明细：${r.失败.map((f) => `${f.原文件}(${f.原因})`).join('；').slice(0, 160)}`), 6500)
@@ -291,7 +306,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                 <button
                   disabled={invoiceBusy}
                   onClick={handleProcessInvoices}
-                  title="选发票图片（可多选）：本机OCR提取 发票号码/日期/购销双方/价税合计（红字负数），按「日期-购买方-金额」重命名；重命名发票与累计《发票台账.xlsx》统一输出到 outputs/08_财务_finance/发票台账/。仅 macOS。"
+                  title="选发票图片（可多选、支持整批）：本机离线OCR提取 发票号码/日期/购销双方/价税合计（红字负数），自动判定销项/进项——进项按「日期-销售方-金额」、销项按「日期-购买方-金额」重命名；重命名发票与累计《发票台账.xlsx》统一输出到 outputs/08_财务_finance/发票台账/。macOS 系统离线OCR；Windows 需 Tesseract。"
                   className="rounded-md border border-jushi-accent px-3 py-1.5 text-xs font-medium text-jushi-accent hover:bg-jushi-accent/5 disabled:opacity-50"
                 >
                   {invoiceBusy ? '识别中…' : '🧾 发票识别入台账'}
@@ -309,6 +324,70 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
                   🧾 生成报税底稿
                 </button>
               </div>
+
+              {/* 发票识别入台账——执行结果反馈面板 */}
+              {invoiceResult && (
+                <div className="mb-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-slate-700">
+                      {invoiceResult.失败.length > 0
+                        ? '⚠️ 发票识别入台账（部分失败，详见下方失败清单）'
+                        : '✅ 发票识别入台账完成'}
+                    </h4>
+                    <button onClick={() => setInvoiceResult(null)} className="text-xs text-slate-400 hover:text-slate-600">
+                      ✕ 关闭
+                    </button>
+                  </div>
+                  <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
+                      成功 {invoiceResult.成功} 张
+                    </span>
+                    {invoiceResult.重复 > 0 && (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                        重复跳过 {invoiceResult.重复} 张
+                      </span>
+                    )}
+                    {invoiceResult.失败.length > 0 && (
+                      <span className="rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-600">
+                        失败 {invoiceResult.失败.length} 张
+                      </span>
+                    )}
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
+                      销项 ¥{invoiceResult.销项合计.toFixed(2)}
+                    </span>
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
+                      进项 ¥{invoiceResult.进项合计.toFixed(2)}
+                    </span>
+                  </div>
+                  {invoiceResult.失败.length > 0 && (
+                    <ul className="mb-3 max-h-28 space-y-1 overflow-auto rounded-lg bg-red-50/60 p-2 text-xs text-red-700">
+                      {invoiceResult.失败.map((f, i) => (
+                        <li key={i} className="truncate">
+                          {f.原文件}：{f.原因}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="min-w-0 truncate">台账：{invoiceResult.台账路径}</span>
+                    <button
+                      onClick={() => window.api.shell.showItemInFolder(invoiceResult.台账路径)}
+                      className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 hover:bg-slate-50"
+                    >
+                      定位
+                    </button>
+                    <button
+                      onClick={() => window.api.shell.openPath(invoiceResult.台账路径)}
+                      className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 hover:bg-slate-50"
+                    >
+                      打开台账
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-amber-600">
+                    台账中标黄行为红字/方向待确认，入账前请逐条人工核对；失败件已放 发票台账/待人工/，输入侧票据月份目录保留副本。
+                  </p>
+                </div>
+              )}
               <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-500">
                 流程：票据传上来 → AI 编制记账凭证与报表底稿 → 人工复核 → 按「报税底稿」去电子税务局申报。
                 <b className="text-slate-600">App 与分身只做底稿与提醒，正式申报由人在电子税务局完成，口径以税务机关为准。</b>
