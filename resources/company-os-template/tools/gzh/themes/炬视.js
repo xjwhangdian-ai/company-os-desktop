@@ -2,6 +2,12 @@
  * 炬视科技 · 公众号固定视觉主题（单一样式来源）
  * 改公众号风格只改这个文件。所有样式内联（微信编辑器会剥离 <style> 和 class）。
  * 品牌色：墨蓝 #142E4C / 火炬橙 #F39A0E / 科技青 #149AAE / 浅青 #7FD3DC
+ *
+ * 2026-08-17 微信兼容性修复：
+ *  - 移除全部 display:flex（微信粘贴会剥离 flex 导致序号/圆点与文字分行错乱）
+ *  - 空背景 span（竖条/圆点/方块）改文本字形 ▍•■（微信会丢弃空元素）
+ *  - font-family 下沉到每个文本块（微信不继承外层 section 的字体）
+ *  - 小数号字号改为整数
  */
 const NAVY='#142E4C', ORANGE='#F39A0E', TEAL='#149AAE', LTEAL='#7FD3DC';
 const TEXT='#3f3f3f', SUB='#8a94a0', LINE='#ececec';
@@ -23,21 +29,21 @@ const T = {
            `font-size:16px;line-height:1.5;letter-spacing:.4px;text-align:left;`,
 
   // H1 文章主标题（居中，墨蓝，橙色下划线）
-  h1: `margin:18px 0 4px;font-size:23px;line-height:1.45;font-weight:bold;color:${NAVY};text-align:center;letter-spacing:.5px;`,
-  h1rule: `<section style="text-align:center;margin:6px 0 24px;"><span style="display:inline-block;width:44px;height:4px;border-radius:2px;background:${ORANGE};"></span></section>`,
+  h1: `margin:18px 0 4px;font-size:23px;line-height:1.45;font-weight:bold;color:${NAVY};text-align:center;letter-spacing:.5px;font-family:${FONT};`,
+  h1rule: `<div style="width:44px;height:4px;border-radius:2px;background:${ORANGE};margin:6px auto 24px;"></div>`,
 
-  // H2 章节标题（橙色竖条 + 圆角序号牌 + 墨蓝粗体）
-  h2: (txt,no)=>`<section style="margin:34px 0 16px;display:flex;align-items:center;">`+
-      `<span style="display:inline-block;width:5px;height:22px;border-radius:3px;background:${ORANGE};margin-right:10px;"></span>`+
-      `<span style="display:inline-block;min-width:24px;height:24px;line-height:24px;text-align:center;background:${NAVY};color:#fff;border-radius:6px;font-size:14px;font-weight:bold;margin-right:9px;padding:0 5px;">${no}</span>`+
-      `<span style="font-size:19px;font-weight:bold;color:${NAVY};letter-spacing:.5px;">${txt}</span></section>`,
+  // H2 章节标题（橙色文本竖条 + 圆角序号牌 + 墨蓝粗体；无 flex，微信安全）
+  h2: (txt,no)=>`<section style="margin:34px 0 16px;">`+
+      `<span style="color:${ORANGE};font-size:22px;font-weight:bold;line-height:1;margin-right:9px;vertical-align:middle;">▍</span>`+
+      `<span style="display:inline-block;min-width:24px;height:24px;line-height:24px;text-align:center;background:${NAVY};color:#fff;border-radius:6px;font-size:14px;font-weight:bold;margin-right:9px;padding:0 5px;vertical-align:middle;font-family:${FONT};">${no}</span>`+
+      `<span style="font-size:19px;font-weight:bold;color:${NAVY};letter-spacing:.5px;vertical-align:middle;font-family:${FONT};">${txt}</span></section>`,
 
-  // H3 小节标题（科技青小方块 + 墨蓝粗体）
-  h3: `margin:22px 0 10px;font-size:16.5px;font-weight:bold;color:${NAVY};`,
-  h3mark: `display:inline-block;width:9px;height:9px;border-radius:2px;background:${TEAL};margin-right:8px;vertical-align:middle;`,
+  // H3 小节标题（科技青文本方块 + 墨蓝粗体）
+  h3: `margin:22px 0 10px;font-size:17px;font-weight:bold;color:${NAVY};font-family:${FONT};`,
+  h3mark: `color:${TEAL};font-size:13px;margin-right:6px;`,
 
   // 正文段落
-  p: `margin:14px 0;font-size:16px;line-height:1.9;color:${TEXT};letter-spacing:.4px;text-align:justify;`,
+  p: `margin:14px 0;font-size:16px;line-height:1.9;color:${TEXT};letter-spacing:.4px;text-align:justify;font-family:${FONT};`,
 
   // 行内
   strong: `font-weight:bold;color:${NAVY};`,
@@ -46,19 +52,19 @@ const T = {
 
   // 引用卡片（科技青左条 + 浅青底）
   quote: `margin:18px 0;padding:14px 18px;background:#eef7f8;border-left:4px solid ${TEAL};border-radius:0 8px 8px 0;`+
-         `font-size:15.5px;line-height:1.85;color:${NAVY};letter-spacing:.4px;`,
+         `font-size:16px;line-height:1.85;color:${NAVY};letter-spacing:.4px;font-family:${FONT};`,
 
-  // 列表
+  // 列表（文本字形圆点/序号，无 flex，微信安全）
   listWrap: `margin:14px 0;`,
-  uliItem: `margin:9px 0;font-size:16px;line-height:1.85;color:${TEXT};display:flex;align-items:flex-start;`,
-  uliDot:  `display:inline-block;width:7px;height:7px;border-radius:2px;background:${ORANGE};margin:9px 11px 0 2px;flex-shrink:0;`,
-  oliItem: `margin:9px 0;font-size:16px;line-height:1.85;color:${TEXT};display:flex;align-items:flex-start;`,
+  uliItem: `margin:9px 0;font-size:16px;line-height:1.85;color:${TEXT};font-family:${FONT};`,
+  uliDot:  `color:${ORANGE};font-weight:bold;margin-right:8px;`,
+  oliItem: `margin:9px 0;font-size:16px;line-height:1.85;color:${TEXT};font-family:${FONT};`,
   olNum:   `display:inline-block;min-width:21px;height:21px;line-height:21px;text-align:center;background:${TEAL};color:#fff;`+
-           `border-radius:50%;font-size:13px;font-weight:bold;margin:2px 10px 0 0;flex-shrink:0;`,
+           `border-radius:50%;font-size:13px;font-weight:bold;margin:2px 10px 0 0;vertical-align:middle;font-family:${FONT};`,
 
   // 表格
   tableWrap: `margin:18px 0;overflow-x:auto;`,
-  table: `width:100%;border-collapse:collapse;font-size:14.5px;`,
+  table: `width:100%;border-collapse:collapse;font-size:15px;font-family:${FONT};`,
   th: `background:${NAVY};color:#fff;font-weight:bold;padding:10px 12px;text-align:left;border:1px solid ${NAVY};`,
   trBase: `background:#fff;`,
   trAlt:  `background:#f3f6f8;`,
@@ -66,27 +72,25 @@ const T = {
 
   // 配图位占位（走心文用：发布时在公众号编辑器插入真图）
   photoSlot: `margin:24px 0;padding:30px 18px;border:2px dashed #B9C4CE;border-radius:10px;background:#F5F8FA;text-align:center;`,
-  photoSlotLabel: `margin:0;font-size:15px;font-weight:bold;color:${NAVY};letter-spacing:.3px;`,
-  photoSlotHint: `margin:7px 0 0;font-size:12.5px;color:#9aa4ae;`,
-  photoCaption: `margin:9px 0 2px;font-size:13px;color:${SUB};text-align:center;letter-spacing:.3px;`,
+  photoSlotLabel: `margin:0;font-size:15px;font-weight:bold;color:${NAVY};letter-spacing:.3px;font-family:${FONT};`,
+  photoSlotHint: `margin:7px 0 0;font-size:13px;color:#9aa4ae;`,
+  photoCaption: `margin:9px 0 2px;font-size:13px;color:${SUB};text-align:center;letter-spacing:.3px;font-family:${FONT};`,
 
   // 图片
   figWrap: `margin:22px 0;text-align:center;`,
   img: `max-width:100%;border-radius:8px;box-shadow:0 2px 14px rgba(20,46,76,.12);`,
-  caption: `margin:8px 0 0;font-size:13px;color:${SUB};text-align:center;letter-spacing:.3px;`,
+  caption: `margin:8px 0 0;font-size:13px;color:${SUB};text-align:center;letter-spacing:.3px;font-family:${FONT};`,
 
-  // 分隔线（中间三点呼应 logo 节点）
-  divider: `<section style="text-align:center;margin:30px 0;">`+
-    `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ORANGE};margin:0 6px;vertical-align:middle;"></span>`+
-    `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${TEAL};margin:0 6px;vertical-align:middle;"></span>`+
-    `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ORANGE};margin:0 6px;vertical-align:middle;"></span></section>`,
+  // 分隔线（文本三点呼应 logo 节点）
+  divider: `<p style="text-align:center;margin:30px 0;letter-spacing:10px;">`+
+    `<span style="color:${ORANGE};">●</span><span style="color:${TEAL};">●</span><span style="color:${ORANGE};">●</span></p>`,
 
   // 代码块
   codeblock: `margin:16px 0;padding:14px 16px;background:#0f2740;color:#cfe6ea;border-radius:8px;`+
-    `font-family:Menlo,Consolas,monospace;font-size:13.5px;line-height:1.7;overflow-x:auto;`,
+    `font-family:Menlo,Consolas,monospace;font-size:14px;line-height:1.7;overflow-x:auto;`,
 
   // 文末品牌签名卡
-  footer: `<section style="margin:38px 0 10px;padding:28px 20px 24px;background:${NAVY};border-radius:12px;text-align:center;">`+
+  footer: `<section style="margin:38px 0 10px;padding:28px 20px 24px;background:${NAVY};border-radius:12px;text-align:center;font-family:${FONT};">`+
     (LOGO ? `<img src="${LOGO}" style="height:42px;width:auto;display:block;margin:0 auto 14px;" alt="炬视科技 JUSIGHT"/>` : '')+
     `<p style="margin:0 0 14px;font-size:14px;color:${LTEAL};letter-spacing:1.5px;">为人类点亮科技之光</p>`+
     `<div style="width:44px;height:2px;background:${ORANGE};border-radius:1px;margin:0 auto 14px;opacity:.85;"></div>`+

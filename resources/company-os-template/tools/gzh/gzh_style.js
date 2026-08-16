@@ -153,7 +153,7 @@ while(i<lines.length){
   // 标题
   if((m = t.match(/^#\s+(.*)/))){ out.push(`<h1 style="${T.h1}">${inline(m[1])}</h1>${T.h1rule}`); i++; continue; }
   if((m = t.match(/^##\s+(.*)/))){ h2no++; out.push(T.h2(inline(m[1]), h2no)); i++; continue; }
-  if((m = t.match(/^###\s+(.*)/))){ out.push(`<h3 style="${T.h3}"><span style="${T.h3mark}"></span>${inline(m[1])}</h3>`); i++; continue; }
+  if((m = t.match(/^###\s+(.*)/))){ out.push(`<h3 style="${T.h3}"><span style="${T.h3mark}">■</span>${inline(m[1])}</h3>`); i++; continue; }
 
   // 引用块（卡片）
   if((m = t.match(/^>\s?(.*)/))){
@@ -176,7 +176,7 @@ while(i<lines.length){
     const items=[];
     while(i<lines.length && /^[-*]\s+/.test(lines[i].trim())){ items.push(lines[i].trim().replace(/^[-*]\s+/,'')); i++; }
     let html = `<section style="${T.listWrap}">`;
-    items.forEach(it=> html += `<p style="${T.uliItem}"><span style="${T.uliDot}"></span><span>${inline(it)}</span></p>`);
+    items.forEach(it=> html += `<p style="${T.uliItem}"><span style="${T.uliDot}">•</span><span>${inline(it)}</span></p>`);
     out.push(html + `</section>`); continue;
   }
 
