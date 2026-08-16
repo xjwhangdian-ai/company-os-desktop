@@ -14,6 +14,12 @@ import sys
 
 from PIL import Image, ImageEnhance
 
+# Windows 控制台默认 GBK,JSON 中文输出前统一为 UTF-8,避免 UnicodeEncodeError
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 try:
     import pytesseract
 except ImportError:
@@ -111,13 +117,38 @@ def _crop_text(image, left, top, right, bottom):
 
 
 def _name_from_region(text):
-    # Tesseract occasionally drops the first character in “名称”; retain the
-    # delimiter and stop at the following credit-code label.
-    match = re.search(r"(?:名称|称)[：:,=]?(.+?)(?:信\|?统一社会信用代码|统一社会信用代码|纳税人识别号|$)", text)
+    # 提取「名称：XXX 统一社会信用代码/纳税人识别号」中的 XXX。
+    # 边界标签兼容 OCR 繁体变体(統一/社會/納税/識别/代碼)与「名称」误读(名你/名杯/名祢)；
+    # 不要求名称含「公司/单位」——个体工商户(商行/服装厂/餐饮店/加工厂等)也是合法主体。
+    match = re.search(
+        r"(?:名[称你杯祢]|称)[：:,=]?(.+?)"
+        r"(?:統?一(?:社会|社會)信用代?[码碼]|納?税(?:人|務)識?别号|信用代码|$)",
+        text,
+    )
     if not match:
         return ""
-    name = match.group(1).strip("：:|，,。.")
-    return name if "公司" in name or "单位" in name else ""
+    name = match.group(1).strip("：:|，,。.（）() \t")
+    # 去掉 OCR 把「销售方信息/购买方信息」误并入名称开头的残留
+    name = re.sub(r"^(销售方信息|销售方信|购买方信息|购买方信|销售方|购买方)", "", name)
+    return name if 2 <= len(name) <= 40 else ""
+
+
+def _names_from_full_text(full):
+    """全文本兜底：提取「名称：XXX …信用代码」配对(成品油等异版式发票购销方不在固定裁剪区)。
+
+    名称不允许含 `*`(挡掉「项目名称*汽油*…」行)与 `：`/`,`；返回 [(名称, 信用代码), ...]，
+    名称尾部可能粘连信用代码首段数字，调用方按需清洗。
+    """
+    pairs = re.findall(
+        r"名[称你杯祢][：:,=]([^：:,*]{2,40}?)(?:統?一(?:社会|社會)信用代?[码碼]|納?税(?:人|務)識?别号)[^0-9A-Z]{0,8}([0-9A-Z]{15,20})",
+        full,
+    )
+    out = []
+    for nm, code in pairs:
+        nm = re.sub(r"\d{6,}$", "", nm).strip("（）() \t")
+        if 2 <= len(nm) <= 40 and not any(k in nm for k in ("项目", "规格", "型号")):
+            out.append((nm, code))
+    return out
 
 
 def parse_one(path):
@@ -133,6 +164,22 @@ def parse_one(path):
     d = _valid_date(date_match)
     buyer = _name_from_region(_crop_text(image, 0.08, 0.27, 0.50, 0.40))
     seller = _name_from_region(_crop_text(image, 0.50, 0.27, 0.99, 0.40))
+    # 区域若抓到货物行(项目名称/规格/型号/数量/单价/*)不算名称，视为缺失
+    def _is_name_like(s):
+        return bool(s) and not any(x in s for x in ("*", "项目", "规格", "型号", "数量", "单价"))
+    if not _is_name_like(buyer):
+        buyer = ""
+    if not _is_name_like(seller):
+        seller = ""
+    # 全文本兜底：区域未取到购销方时，用「名称:XXX 信用代码」配对补全
+    # （成品油等异版式发票购销方块不在固定裁剪区）；按我方关键词自动区分购销方。
+    if not buyer or not seller:
+        for nm, _code in _names_from_full_text(full):
+            if any(k in nm for k in OUR_KEYWORDS):
+                if not buyer:
+                    buyer = nm
+            elif not seller:
+                seller = nm
     amt = _pick_amount(full)
     missing = []
     if not num_value:
@@ -155,7 +202,10 @@ def parse_one(path):
         direction = "进项"
     ext = os.path.splitext(path)[1].lower()
     amt_name = ("红冲" + amt[1:]) if amt.startswith("-") else (amt or "待确认")
-    suggest = f"{compact}-{clean_name(buyer) or '待确认'}-{amt_name}{ext}"
+    # 重命名规则(2026-08-15 起):进项按「日期-销售方-金额」、销项按「日期-购买方-金额」、
+    # 方向待确认按「日期-购买方-金额」(与桌面端默认一致)。clean_name 保证跨平台文件名合法。
+    name_key = seller if direction == "进项" else buyer
+    suggest = f"{compact}-{clean_name(name_key) or '待确认'}-{amt_name}{ext}"
     return {
         "原文件": os.path.basename(path),
         "原路径": path,
