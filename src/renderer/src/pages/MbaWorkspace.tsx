@@ -3,6 +3,8 @@ import type { AgentDisplayMeta } from '@shared/agent-types'
 import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../components/PaneDivider'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 // ============ MBA 学习工作台（论文为主 + 课程学习） ============
 // 论文材料归 input/10_MBA学习_mba/_论文/{分类}/；课程材料归 {课程}/{分类}/。
@@ -66,15 +68,14 @@ export function MbaWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.
   const [courses, setCourses] = useState<CourseInfo[]>([])
   const [selected, setSelected] = useState<string>('')
   const [newCourse, setNewCourse] = useState('')
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
   const [showChat, setShowChat] = useState(true)
   const [showA1, setShowA1] = useState(false)
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [chatW, setChatW] = usePersistedSize(CHAT_PANE_KEY, CHAT_PANE.def, CHAT_PANE.min, CHAT_PANE.max)
 
-  function flash(t: string): void {
-    setNotice(t)
-    setTimeout(() => setNotice(null), 8000)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   async function refresh(): Promise<void> {
@@ -187,7 +188,7 @@ export function MbaWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.
               )}
             </div>
           </div>
-          {notice && <p className="mt-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">{notice}</p>}
+          {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
         </div>
 
         {tab === '论文' ? (

@@ -5,6 +5,8 @@ import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 type MatterStatus = '未开始' | '进行中' | '待人工' | '已完成'
 interface Matter {
@@ -40,11 +42,10 @@ export function BrandWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(true)
   const [chatW, setChatW] = usePersistedSize(CHAT_PANE_KEY, CHAT_PANE.def, CHAT_PANE.min, CHAT_PANE.max)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
 
-  function flash(t: string): void {
-    setNotice(t)
-    setTimeout(() => setNotice(null), 6000)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   async function refresh(): Promise<void> {
@@ -92,7 +93,7 @@ export function BrandWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
               ⏰ 还有 {pending.length} 项品牌事项未完成：{pending.map((m) => m.名称).join('、')}——别让品牌建设停在半路。
             </p>
           )}
-          {notice && <p className="mt-1 text-xs text-emerald-700">{notice}</p>}
+          {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
         </div>
 
         <div className="grid flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 lg:grid-cols-2">

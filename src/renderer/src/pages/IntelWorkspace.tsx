@@ -4,6 +4,8 @@ import { AgentChat } from '../components/AgentChat'
 import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { OutputsPanel } from '../components/OutputsPanel'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 type IntelTab = '行业趋势' | '政策文件'
 const TABS: IntelTab[] = ['行业趋势', '政策文件']
@@ -418,15 +420,14 @@ function ReportsPanel({ type, reloadKey, onNotice }: { type: IntelReportType; re
  */
 export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const [tab, setTab] = useState<IntelTab>('行业趋势')
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
   const [showOutputs, setShowOutputs] = useState(false)
   const [showChat, setShowChat] = useState(true)
   const [leftW, setLeftW] = usePersistedSize("intelLeftWidth", 384, 300, 900)
   const [reloadKey, setReloadKey] = useState(0)
 
-  function flash(text: string): void {
-    setNotice(text)
-    setTimeout(() => setNotice(null), 6000)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   // 打开情报分身：清理超过三天的旧机读数据。招投标信息的抓取与确认已整合进「招投标」工作台。
@@ -461,11 +462,7 @@ export function IntelWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
         {tab === '行业趋势' && <ReportsPanel type="行业趋势" reloadKey={reloadKey} onNotice={flash} />}
         {tab === '政策文件' && <ReportsPanel type="政策文件" reloadKey={reloadKey} onNotice={flash} />}
 
-        {notice && (
-          <div className="border-t border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] leading-snug text-emerald-700">
-            {notice}
-          </div>
-        )}
+        {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
       </div>
 
       {showChat && <VDragHandle size={leftW} onSize={setLeftW} sign={1} min={260} max={900} />}

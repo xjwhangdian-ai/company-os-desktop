@@ -6,6 +6,8 @@ import { ChatCollapseRail } from '../components/ChatCollapseRail'
 import { VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 const STATE_STYLE: Record<OpsDocState, string> = {
   未审核: 'bg-slate-100 text-slate-500',
@@ -42,7 +44,7 @@ function buildDraftPrompt(): string {
 export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JSX.Element {
   const [docs, setDocs] = useState<OpsPolicyDoc[]>([])
   const [governance, setGovernance] = useState<OpsGovernanceDoc[]>([])
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(true)
   const [leftW, setLeftW] = usePersistedSize("opsLeftWidth", 440, 300, 900)
@@ -51,9 +53,8 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
     if (pendingPrompt) setShowChat(true)
   }, [pendingPrompt])
 
-  function flash(text: string): void {
-    setNotice(text)
-    setTimeout(() => setNotice(null), 5000)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   async function refresh(): Promise<void> {
@@ -235,9 +236,7 @@ export function OpsPolicyWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
           })}
         </div>
 
-        {notice && (
-          <div className="border-t border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] leading-snug text-emerald-700">{notice}</div>
-        )}
+        {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
       </div>
 
       {/* 右：分身对话（可收起） */}

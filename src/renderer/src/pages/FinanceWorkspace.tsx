@@ -6,6 +6,8 @@ import { CHAT_PANE, CHAT_PANE_KEY, VDragHandle, usePersistedSize } from '../comp
 import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 type FinanceTab = '财税日历' | '记账报税' | '工资社保'
 type FinanceJob = 'bookkeeping' | 'tax'
@@ -106,7 +108,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [showOutputs, setShowOutputs] = useState(false)
   const [showChat, setShowChat] = useState(true)
   const [chatW, setChatW] = usePersistedSize(CHAT_PANE_KEY, CHAT_PANE.def, CHAT_PANE.min, CHAT_PANE.max)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
   const [queuedFinanceJob, setQueuedFinanceJob] = useState<FinanceJob | null>(null)
   const [runningFinanceJob, setRunningFinanceJob] = useState<FinanceJob | null>(null)
   const [pendingAutoSend, setPendingAutoSend] = useState(false)
@@ -115,9 +117,8 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     if (pendingPrompt) setShowChat(true)
   }, [pendingPrompt])
 
-  function flash(text: string): void {
-    setNotice(text)
-    setTimeout(() => setNotice(null), 5000)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   async function refresh(): Promise<void> {
@@ -214,6 +215,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   async function handleSaveEmployees(): Promise<void> {
     await window.api.finance.saveEmployees(employees, payday)
     setSavedAt(Date.now())
+    flash('员工配置已保存')
     await refresh()
   }
 
@@ -507,7 +509,7 @@ export function FinanceWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
           )}
         </div>
 
-        {notice && <div className="border-t border-slate-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</div>}
+        {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
       </div>
 
       {/* 中：分身对话（财税咨询，可收起） */}

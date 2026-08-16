@@ -21,6 +21,8 @@ import { OutputsPanel } from '../components/OutputsPanel'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
 import { useConfigStore } from '../stores/useConfigStore'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 type SalesTab = '产品库' | '选型' | '报价单' | '客户'
 type UploadMode = 'supplier' | 'bid'
@@ -503,7 +505,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [catalogFlow, setCatalogFlow] = useState<Record<string, CatalogFlowState>>({})
   const [pendingAutoSend, setPendingAutoSend] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
 
   const [cart, setCart] = useState<CartLine[]>([])
   const [templates, setTemplates] = useState<QuotationTemplate[]>([])
@@ -563,9 +565,8 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
     if (pendingPrompt) setShowChat(true)
   }, [pendingPrompt])
 
-  function flash(text: string): void {
-    setNotice(text)
-    setTimeout(() => setNotice(null), 4500)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   /** 画册抠图：把某个 PDF 的分步状态写入常驻状态条 */
@@ -2170,9 +2171,7 @@ export function SalesWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
           )}
         </div>
 
-        {notice && (
-          <div className="border-t border-slate-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">{notice}</div>
-        )}
+        {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
       </div>
 
       {/* 中：分身对话（可收起——查产品/出报价都是机械操作，不占对话就把它折起来；派 AI 任务时自动展开） */}

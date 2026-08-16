@@ -8,6 +8,8 @@ import { OutputsPanel } from '../components/OutputsPanel'
 import { GzhStyleButton } from '../components/GzhStyleButton'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 type Platform = '小红书' | '微信公众号' | '抖音' | '微信视频号' | '数字人短视频'
 type VideoGenerator = 'Seedance 2.5' | 'Kling 3.0' | '两者都导出'
@@ -110,7 +112,7 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   const [showChat, setShowChat] = useState(true)
   const [chatH, setChatH] = usePersistedSize('operationChatHeight', 340, 200, 800)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
   const [templates, setTemplates] = useState<TemplateEntry[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [recent, setRecent] = useState<RecentArticle[]>([])
@@ -121,9 +123,8 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
   const [digitalCta, setDigitalCta] = useState('私信领取场景配置清单')
   const [videoGenerator, setVideoGenerator] = useState<VideoGenerator>('两者都导出')
 
-  function flash(t: string): void {
-    setNotice(t)
-    setTimeout(() => setNotice(null), 6000)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   /** 当前平台的最近生成（产出文件夹带平台词的归对应平台；没带平台词的通用旧记录各平台都显示） */
@@ -243,6 +244,7 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
       setInjectedAttachments(mediaAttachments)
       setMediaAttachments([])
     }
+    flash('内容已注入生成框：确认无误后发送，产出会显示在右侧对话区')
   }
 
   return (
@@ -298,7 +300,7 @@ export function OperationWorkspace({ agent }: { agent: AgentDisplayMeta }): Reac
               </span>
             ))}
           </div>
-          {notice && <p className="mb-1 text-xs text-emerald-700">{notice}</p>}
+          {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
 
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-xs text-slate-400">风格模板：</span>

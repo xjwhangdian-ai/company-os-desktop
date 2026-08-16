@@ -7,6 +7,8 @@ import { VDragHandle, usePersistedSize } from '../components/PaneDivider'
 import { FileDropzone } from '../components/FileDropzone'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 /** 意见书的产出目录：outputs/04_法务_legal/{日期_合同名}/（统一"产出按项目建文件夹"约定） */
 function reviewOutputDir(fileName: string): string {
@@ -54,12 +56,11 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
   const [leftW, setLeftW] = usePersistedSize("legalLeftWidth", 320, 260, 900)
   const [uploadCategory, setUploadCategory] = useState<ContractCategory>('销售合同')
   const [showTemplates, setShowTemplates] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
   const [redlining, setRedlining] = useState<string | null>(null)
 
-  function flash(text: string): void {
-    setNotice(text)
-    setTimeout(() => setNotice(null), 8000)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   async function handleRedline(doc: LegalDoc): Promise<void> {
@@ -224,11 +225,7 @@ export function LegalWorkspace({ agent }: { agent: AgentDisplayMeta }): React.JS
             </div>
           </>
         )}
-        {notice && (
-          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] leading-snug text-emerald-700">
-            {notice}
-          </div>
-        )}
+        {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
       </div>
 
       {showChat && <VDragHandle size={leftW} onSize={setLeftW} sign={1} min={260} max={900} />}

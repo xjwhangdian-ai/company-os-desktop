@@ -4,6 +4,8 @@ import { useIdentityStore } from '../stores/useIdentityStore'
 import type { ModelMapping, ProviderId, VideoModelConfig } from '@shared/agent-types'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'openai', 'deepseek', 'kimi', 'minimax-cn', 'qwen', 'zhipu', 'custom']
 
@@ -39,7 +41,7 @@ export function Settings(): React.JSX.Element {
   const [seedanceKeyInput, setSeedanceKeyInput] = useState('')
   const [klingAccessKeyInput, setKlingAccessKeyInput] = useState('')
   const [klingSecretKeyInput, setKlingSecretKeyInput] = useState('')
-  const [savedHint, setSavedHint] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
 
   useEffect(() => {
     // activeProviderId 可能指向本端不认识的供应商（如已下线的 minimax-intl、或主进程还没重启）
@@ -64,9 +66,8 @@ export function Settings(): React.JSX.Element {
     setKlingSecretKeyInput('')
   }, [config?.videoModels])
 
-  function flashSaved(text: string): void {
-    setSavedHint(text)
-    setTimeout(() => setSavedHint(null), 2000)
+  function flashSaved(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   async function handleSelectProvider(id: ProviderId): Promise<void> {
@@ -137,7 +138,7 @@ export function Settings(): React.JSX.Element {
             <p className="mt-1 text-sm text-slate-400">可直接检查并修复这台电脑的运行依赖；公司目录、模型和成员权限仍由管理员统一管理。</p>
           </div>
           <EnvSection onFlash={flashSaved} />
-          {savedHint && <div className="fixed bottom-6 right-6 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">{savedHint}</div>}
+          {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
         </div>
       </div>
     )
@@ -316,11 +317,7 @@ export function Settings(): React.JSX.Element {
 
       <AboutSection onFlash={flashSaved} />
 
-      {savedHint && (
-        <div className="fixed bottom-6 right-6 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">
-          {savedHint}
-        </div>
-      )}
+{notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
       </div>
     </div>
   )

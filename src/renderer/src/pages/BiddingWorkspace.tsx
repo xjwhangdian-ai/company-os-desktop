@@ -7,6 +7,8 @@ import { IntelBiddingFeed } from '../components/IntelBiddingFeed'
 import { MaterialChecklist } from '../components/MaterialChecklist'
 import { HelpButton } from '../components/HelpPanel'
 import { HELP_CONTENT } from '../lib/help-content'
+import { ResultNotice, noticeKindOf } from '../components/ResultNotice'
+import type { NoticeKind, NoticeState } from '../components/ResultNotice'
 
 function Badge({ active, label }: { active: boolean; label: string }): React.JSX.Element {
   return (
@@ -272,7 +274,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<NoticeState | null>(null)
   /** 右侧（项目详情+分身对话）整体显隐：三角收起后左栏铺满（与销售支持分身同款交互） */
   const [showRightPane, setShowRightPane] = useState(true)
   /** 左栏宽度（px），左右分隔条拖动调节并记住 */
@@ -335,9 +337,8 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
     其他: true
   })
 
-  function flash(text: string): void {
-    setNotice(text)
-    setTimeout(() => setNotice(null), 6000)
+  function flash(text: string, kind?: NoticeKind): void {
+    setNotice({ text, kind: kind ?? noticeKindOf(text) })
   }
 
   /** 人工下载招标文件后导入项目：招标网站需登录验证，自动下载已改为"打开公告页自己下 + 这里导入" */
@@ -421,6 +422,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         backfillInstruction(r.outputsDirRelative)
       ].join('\n')
     )
+    flash(`已创建项目「${r.projectFolder}」并提交解析任务，结果将显示在右侧对话区`)
   }
 
   async function handleExportLedger(): Promise<void> {
@@ -727,7 +729,7 @@ export function BiddingWorkspace({ agent }: { agent: AgentDisplayMeta }): React.
         </div>
         </>
         )}
-        {notice && <div className="border-t border-slate-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">{notice}</div>}
+        {notice && <ResultNotice notice={notice} onClose={() => setNotice(null)} />}
       </div>
 
       {/* 左右分隔拖拉条：按住左右拖动调节左栏宽度（松手记住） */}
