@@ -332,8 +332,11 @@ async function rescueIntentsByDemand(
 ): Promise<{ checked: number; rescued: number }> {
   const keptSet = new Set(kept)
   const intents = all.filter((e) => e.类型 === '采购意向' && e.平台 === '浙江政采') as (FeedEntry & { _articleId?: string })[]
-  // 未被标题命中的排前面（它们才是可能被漏掉的），已命中的只为补概况摘要
-  const targets = [...intents.filter((e) => !keptSet.has(e)), ...intents.filter((e) => keptSet.has(e))].slice(0, 25)
+  // 已命中意向优先补概况（它们是要展示给用户的，概况必须尽量齐）；
+  // 未命中意向用于复筛捞回（防漏，受请求量限制最多 25 条）——避免一天意向多时已命中条目被截断成"无概况"。
+  const toEnrich = intents.filter((e) => keptSet.has(e))
+  const toRescue = intents.filter((e) => !keptSet.has(e)).slice(0, 25)
+  const targets = [...toEnrich, ...toRescue]
   let checked = 0
   let rescued = 0
   for (const e of targets) {
@@ -550,11 +553,12 @@ function mergeIntoFeeds(dataDir: string, entries: FeedEntry[]): { added: number;
     if (!name) continue
     const key = ntKey(e.类型, name)
     if (seenAll.has(key)) {
-      // 已存在的结果公告也要回填详情页新解析到的采购人/供应商/成交价格，不能因去重永久停在“待确认”。
+      // 已存在的条目也要回填本次详情页新解析到的字段，不能因去重永久停在“待确认/无概况”：
+      // 采购单位/中标单位/中标金额（结果公告）、征询截止（意见征询）、需求概况（采购意向）
       const existing = existingByKey.get(key)
       if (existing) {
         let changed = false
-        for (const field of ['采购单位', '中标单位', '中标金额'] as const) {
+        for (const field of ['采购单位', '中标单位', '中标金额', '征询截止', '需求概况'] as const) {
           const value = e[field]
           if (value && String(existing[field] ?? '') !== value) {
             existing[field] = value
@@ -598,6 +602,34 @@ function readFetchState(dataDir: string): { lastFetchAt?: number } {
   } catch {
     return {}
   }
+}
+
+/** 人工已处理状态（候选项目处理状态.json，App 托管）：已忽略的项目名 + 已确认过的 名称|类型 集合。
+ *  抓取层据此过滤，避免人工审核过的项目被政府网站重复挂载后再次抓进信息流/台账。 */
+function readReviewedState(dataDir: string): { ignoredNames: Set<string>; confirmedKeys: Set<string> } {
+  const p = join(dataDir, TRACK_DIR_REL, '候选项目处理状态.json')
+  const ignoredNames = new Set<string>()
+  const confirmedKeys = new Set<string>()
+  if (!existsSync(p)) return { ignoredNames, confirmedKeys }
+  try {
+    const state = JSON.parse(readFileSync(p, 'utf-8')) as Record<
+      string,
+      { 动作?: '已确认' | '已忽略'; 类型?: string }
+    >
+    for (const [key, st] of Object.entries(state)) {
+      const name = key.slice(key.indexOf('|') + 1).trim()
+      if (!name) continue
+      if (st?.动作 === '已忽略') {
+        ignoredNames.add(name)
+      } else if (st?.动作 === '已确认') {
+        // 已确认：该 名称|类型 不再重复抓取；但后续升级为「采购公告」的新公告仍保留抓取机会
+        if (st.类型) confirmedKeys.add(`${st.类型}|${name}`)
+      }
+    }
+  } catch {
+    // 状态文件损坏/被占用时按无状态处理，不阻断抓取
+  }
+  return { ignoredNames, confirmedKeys }
 }
 
 function writeFetchState(dataDir: string): void {
@@ -650,8 +682,19 @@ export async function fetchIntelNow(dataDir: string, force = false): Promise<Int
   // 关键词筛选（词库可在工作台增删改）：只保留 项目名称/采购单位/区县 命中任一关键词的公告
   const kws = getIntelKeywords(dataDir)
   const beforeFilter = all.length
-  const kept = all.filter((e) => e.台州公安 || matchIntelKeyword(`${e.项目名称}${e.采购单位}${e.区县}`, kws) !== null)
-  if (beforeFilter > kept.length) 平台结果.push(`关键词筛除 ${beforeFilter - kept.length} 条`)
+  const keptByKw = all.filter((e) => e.台州公安 || matchIntelKeyword(`${e.项目名称}${e.采购单位}${e.区县}`, kws) !== null)
+  if (beforeFilter > keptByKw.length) 平台结果.push(`关键词筛除 ${beforeFilter - keptByKw.length} 条`)
+
+  // 人工已审核过滤：已忽略的项目名、已确认过的 名称|类型 不再重复抓取
+  // （已确认项目升级为「采购公告」的新公告保留——intel-candidates 展示层会置顶提醒一次）
+  const { ignoredNames, confirmedKeys } = readReviewedState(dataDir)
+  const kept = keptByKw.filter((e) => {
+    const name = e.项目名称.trim()
+    if (ignoredNames.has(name)) return false
+    if (confirmedKeys.has(`${e.类型}|${name}`)) return false
+    return true
+  })
+  if (keptByKw.length > kept.length) 平台结果.push(`人工已审核筛除 ${keptByKw.length - kept.length} 条`)
 
   // 采购意向复筛：标题没命中的意向补抓详情页，用「采购需求概况」正文再匹配一轮（命中捞回）
   const demand = await rescueIntentsByDemand(all, kept, kws)
